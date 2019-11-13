@@ -179,6 +179,8 @@ foldp lookup promote interp (Timeline timeline) =
                             cursor
 
                         else if Time.thisAfterThat timeline.now targetTime || Time.equal timeline.now targetTime then
+                            -- happened in the past,
+                            -- capture a snapshot of what happens directly on that event
                             let
                                 lookAheadAnchor =
                                     List.head remaining
@@ -187,8 +189,6 @@ foldp lookup promote interp (Timeline timeline) =
                                 currentAnchor =
                                     lookup target
                             in
-                            -- happened in the past,
-                            -- capture a snapshot of what happens directly on that event
                             { state = promote cursor.previousAnchor currentAnchor targetTime lookAheadAnchor
                             , events = remaining
                             , previousEventTime = targetTime
@@ -197,7 +197,8 @@ foldp lookup promote interp (Timeline timeline) =
                             }
 
                         else if Time.thisBeforeThat timeline.now targetTime then
-                            -- interpolate to this exact time and flag as done.
+                            -- This transition is happenind right now.
+                            -- Tnterpolate to this exact time and flag as done.
                             let
                                 lookAheadAnchor =
                                     List.head remaining
