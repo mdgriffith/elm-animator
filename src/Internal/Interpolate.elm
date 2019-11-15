@@ -2,7 +2,8 @@ module Internal.Interpolate exposing
     ( point, toPoint
     , color, linear
     , Motion, motion, toMotion
-    , Movement(..)
+    , Movement(..), movement, toMovement
+    , MotionMovement
     )
 
 {-|
@@ -13,7 +14,7 @@ module Internal.Interpolate exposing
 
 @docs Motion, motion, point, toMotion, toPoint
 
-@docs Movement
+@docs Movement, movement, toMovement
 
 -}
 
@@ -117,7 +118,7 @@ toMotion maybePrev current targetTime maybeLookAhead =
                 Just ( ahead, aheadTime ) ->
                     { position = current
                     , velocity =
-                        1000 * ((ahead - current) / Time.durationToMs (Time.duration aheadTime targetTime))
+                        1000 * ((ahead - current) / Duration.inMilliseconds (Time.duration aheadTime targetTime))
                     , between = Nothing
                     }
 
@@ -140,10 +141,10 @@ type alias MotionMovement =
 wrapUnitAfter dur total =
     let
         duration =
-            round (Time.durationToMs dur)
+            round (Duration.inMilliseconds dur)
 
         totalDuration =
-            round (Time.durationToMs total)
+            round (Duration.inMilliseconds total)
     in
     if duration == 0 || totalDuration == 0 then
         0
@@ -262,7 +263,7 @@ toMovement maybePrev current targetTime maybeLookAhead =
                     in
                     { position = anchorPosition
                     , velocity =
-                        1000 * ((aheadPosition - anchorPosition) / Time.durationToMs (Time.duration aheadTime targetTime))
+                        1000 * ((aheadPosition - anchorPosition) / Duration.inMilliseconds (Time.duration aheadTime targetTime))
                     , movement = current
                     , time = targetTime
                     }

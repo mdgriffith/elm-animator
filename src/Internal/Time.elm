@@ -1,16 +1,16 @@
 module Internal.Time exposing
     ( thisBeforeThat, thisAfterThat, equal
-    , Absolute, Duration, absolute, duration, progress
+    , Absolute, AbsoluteTime(..), Duration, absolute, duration, progress
     , inMilliseconds
     , latest, earliest
-    , AbsoluteTime(..), advanceBy, durationInMs, durationToMs
+    , advanceBy
     )
 
 {-|
 
 @docs thisBeforeThat, thisAfterThat, equal
 
-@docs Absolute, AbsoluteTime(..), Duration, absolute, duration, progress
+@docs Absolute, AbsoluteTime, Duration, absolute, duration, progress
 
 @docs inMilliseconds
 
@@ -41,8 +41,8 @@ absolute posix =
 
 
 advanceBy : Duration -> Absolute -> Absolute
-advanceBy (Quantity.Quantity dur) (Quantity.Quantity time) =
-    Quantity.Quantity (time + dur)
+advanceBy dur time =
+    Quantity.plus time (Quantity.Quantity (Duration.inMilliseconds dur))
 
 
 inMilliseconds : Absolute -> Float
@@ -50,19 +50,9 @@ inMilliseconds (Quantity.Quantity ms) =
     ms
 
 
-durationInMs : Float -> Duration
-durationInMs =
-    Quantity.Quantity
-
-
-durationToMs : Duration -> Float
-durationToMs (Quantity.Quantity ms) =
-    ms
-
-
 duration : Absolute -> Absolute -> Duration
-duration (Quantity.Quantity one) (Quantity.Quantity two) =
-    Quantity.Quantity (abs (two - one))
+duration one two =
+    Duration.milliseconds (abs (inMilliseconds two - inMilliseconds one))
 
 
 progress : Absolute -> Absolute -> Absolute -> Float

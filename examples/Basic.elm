@@ -54,21 +54,46 @@ toPx x =
 toHousePosition event =
     case event of
         Hufflepuff ->
-            100
+            Animator.to 100
 
         Griffyndor ->
-            400
+            Animator.to 400
 
         Slytherin ->
-            700
+            Animator.to 700
 
         Ravenclaw ->
-            1000
+            Animator.to 1000
+
+
+toHousePositionWithOrbit event =
+    case event of
+        Hufflepuff ->
+            Animator.to 100
+
+        Griffyndor ->
+            Animator.orbit
+                { point = 400
+                , duration = Animator.millis 100
+                , toPosition =
+                    \u ->
+                        20 * sin (u * (2 * pi))
+                }
+
+        Slytherin ->
+            Animator.to 700
+
+        Ravenclaw ->
+            Animator.to 1000
 
 
 view model =
     { title = "Elm - Select Harry Potter House"
     , body =
+        let
+            toPos =
+                toHousePositionWithOrbit
+        in
         [ Html.div
             []
             [ Html.button [ Events.onClick QueueThree ] [ Html.text "Queue Three" ]
@@ -104,7 +129,7 @@ view model =
                 , Events.onClick NextHouse
                 , Attr.style "transform"
                     (toPx
-                        (Animator.float model.timeline toHousePosition)
+                        (Animator.move model.timeline toPos)
                     )
                 , Attr.style "background-color"
                     (Color.toCssString
@@ -125,12 +150,13 @@ view model =
                         )
                     )
                 ]
-                [ case Animator.motion model.timeline toHousePosition of
-                    { position, velocity, between } ->
+                [ case Animator.moveMotion model.timeline toPos of
+                    { position, velocity } ->
                         Html.div []
                             [ Html.div [] [ Html.text "pos: ", Html.text (String.fromFloat position) ]
                             , Html.div [] [ Html.text "vel: ", Html.text (String.fromFloat velocity) ]
-                            , Html.div [] [ Html.text "between: ", Html.text (Debug.toString between) ]
+
+                            -- , Html.div [] [ Html.text "between: ", Html.text (Debug.toString between) ]
                             ]
                 ]
             ]
@@ -163,7 +189,11 @@ update msg model =
         QueueThree ->
             let
                 addToQueue _ ( q, house ) =
-                    ( ( 1000, next house ) :: q, next house )
+                    ( Animator.wait (Animator.seconds 0.5)
+                        :: Animator.event (Animator.seconds 1) (next house)
+                        :: q
+                    , next house
+                    )
 
                 ( forQueue, newHouse ) =
                     List.foldl addToQueue ( [], model.house ) (List.range 1 3)
@@ -183,7 +213,7 @@ update msg model =
             in
             ( { model
                 | timeline =
-                    Animator.queue [ ( 1000, newHouse ) ] model.timeline
+                    Animator.queue [ Animator.event (Animator.seconds 1) newHouse ] model.timeline
                 , house = newHouse
               }
             , Cmd.none

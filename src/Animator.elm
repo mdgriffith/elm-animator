@@ -1,9 +1,12 @@
 module Animator exposing
     ( Schedule, Event
     , Timeline, init, subscription, rewrite
-    , queue
+    , queue, update
     , float, motion, color
-    , update
+    , move, to, orbit
+    , moveMotion
+    , wait, event
+    , Duration, millis, seconds, minutes
     )
 
 {-|
@@ -12,14 +15,22 @@ module Animator exposing
 
 @docs Timeline, init, subscription, rewrite
 
-@docs queue
+@docs queue, update
 
 @docs float, motion, color
+
+@docs move, to, orbit
+@docs moveMotion
+
+@docs Step, wait, event
+
+@docs Duration, millis, seconds, minutes
 
 -}
 
 import Browser.Events
 import Color exposing (Color)
+import Duration
 import Internal.Interpolate as Interpolate
 import Internal.Time as Time
 import Internal.Timeline as Timeline
@@ -48,23 +59,86 @@ init first =
         }
 
 
-queue : List ( Float, event ) -> Timeline event -> Timeline event
-queue events (Timeline.Timeline tl) =
+{-| -}
+type alias Duration =
+    Time.Duration
+
+
+{-| -}
+millis : Float -> Duration
+millis =
+    Duration.milliseconds
+
+
+{-| -}
+seconds : Float -> Duration
+seconds =
+    Duration.seconds
+
+
+{-| -}
+minutes : Float -> Duration
+minutes =
+    Duration.minutes
+
+
+type Step event
+    = Wait Duration
+    | TransitionTo Duration event
+
+
+{-| -}
+event : Duration -> event -> Step event
+event =
+    TransitionTo
+
+
+{-| -}
+wait : Duration -> Step event
+wait =
+    Wait
+
+
+stepsToEvents step ( waiting, events ) =
+    case events of
+        [] ->
+            case step of
+                Wait dur ->
+                    ( Quantity.plus waiting dur
+                    , events
+                    )
+
+                TransitionTo dur checkpoint ->
+                    ( millis 0
+                    , [ Timeline.Event (Quantity.plus waiting dur) checkpoint ]
+                    )
+
+        (Timeline.Event durationTo recentEvent) :: remaining ->
+            case step of
+                Wait dur ->
+                    ( millis 0
+                    , Timeline.Event (Quantity.plus waiting dur) recentEvent :: events
+                    )
+
+                TransitionTo dur checkpoint ->
+                    ( millis 0
+                    , Timeline.Event (Quantity.plus waiting dur) checkpoint :: events
+                    )
+
+
+queue : List (Step event) -> Timeline event -> Timeline event
+queue steps (Timeline.Timeline tl) =
+    let
+        events =
+            List.foldl stepsToEvents ( millis 0, [] ) steps
+                |> Tuple.second
+                |> List.reverse
+    in
     Timeline.Timeline
         { tl
             | queued =
-                Just (toSchedule events)
+                Just (Timeline.Schedule events)
         }
-
-
-toSchedule events =
-    Timeline.Schedule
-        (List.map
-            (\( time, ev ) ->
-                Timeline.Event (Time.durationInMs time) ev
-            )
-            events
-        )
 
 
 {-| -}
@@ -130,14 +204,35 @@ position timeline lookup =
             timeline
 
 
-type Movement
-    = Oscillate Time.Duration (Float -> { x : Float, y : Float })
-    | Position { x : Float, y : Float }
+type alias Movement =
+    Interpolate.Movement
 
 
-move : Timeline event -> (event -> Movement) -> { x : Float, y : Float }
+move : Timeline event -> (event -> Movement) -> Float
 move timeline lookup =
-    { x = 0, y = 0 }
+    .position <|
+        Timeline.foldp lookup
+            Interpolate.toMovement
+            Interpolate.movement
+            timeline
+
+
+moveMotion : Timeline event -> (event -> Movement) -> Interpolate.MotionMovement
+moveMotion timeline lookup =
+    Timeline.foldp lookup
+        Interpolate.toMovement
+        Interpolate.movement
+        timeline
+
+
+to : Float -> Movement
+to =
+    Interpolate.Position
+
+
+orbit : { duration : Duration, point : Float, toPosition : Float -> Float } -> Movement
+orbit config =
+    Interpolate.Oscillate config.point config.duration config.toPosition
 
 
 
