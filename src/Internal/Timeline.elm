@@ -77,12 +77,14 @@ rewrite newStart (Timeline tl) newLookup =
         }
 
 
+{-| -}
 needsUpdate : Timeline event -> Bool
 needsUpdate (Timeline timeline) =
     (timeline.queued /= Nothing)
         || timeline.running
 
 
+{-| -}
 update : Time.Posix -> Timeline event -> Timeline event
 update now (Timeline timeline) =
     Timeline
@@ -138,6 +140,7 @@ enqueue timeline now (Schedule queued) =
                 timeline.events ++ newEvents
 
 
+toOccurring : Event event -> ( Time.Absolute, List (Occurring event) ) -> ( Time.Absolute, List (Occurring event) )
 toOccurring (Event duration event) ( now, events ) =
     let
         occursAt =

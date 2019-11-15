@@ -3,6 +3,7 @@ module Basic exposing (main, subscriptions, update, view)
 import Animator
 import Browser
 import Color
+import Help.Plot
 import Html
 import Html.Attributes as Attr
 import Html.Events as Events
@@ -18,6 +19,7 @@ main =
                         Animator.init Hufflepuff
                     , time = Time.millisToPosix 0
                     , house = Hufflepuff
+                    , chart = Help.Plot.init
                     }
 
         -- , Cmd.none
@@ -30,6 +32,9 @@ main =
 
 type alias Model =
     { timeline : Animator.Timeline House
+    , time : Time.Posix
+    , house : House
+    , chart : Help.Plot.Model
     }
 
 
@@ -38,6 +43,7 @@ type Msg
     | NextHouse
     | QueueThree
     | NewTime Time.Posix
+    | ChartMsg Help.Plot.Msg
 
 
 type House
@@ -47,46 +53,7 @@ type House
     | Ravenclaw
 
 
-toPx x =
-    "translate(" ++ String.fromFloat x ++ "px, 0)"
-
-
-toHousePosition event =
-    case event of
-        Hufflepuff ->
-            Animator.to 100
-
-        Griffyndor ->
-            Animator.to 400
-
-        Slytherin ->
-            Animator.to 700
-
-        Ravenclaw ->
-            Animator.to 1000
-
-
-toHousePositionWithOrbit event =
-    case event of
-        Hufflepuff ->
-            Animator.to 100
-
-        Griffyndor ->
-            Animator.orbit
-                { point = 400
-                , duration = Animator.millis 100
-                , toPosition =
-                    \u ->
-                        20 * sin (u * (2 * pi))
-                }
-
-        Slytherin ->
-            Animator.to 700
-
-        Ravenclaw ->
-            Animator.to 1000
-
-
+view : Model -> Browser.Document Msg
 view model =
     { title = "Elm - Select Harry Potter House"
     , body =
@@ -119,7 +86,7 @@ view model =
         , Html.div
             [ Attr.style "display" "flex"
             , Attr.style "width" "100%"
-            , Attr.style "height" "800px"
+            , Attr.style "height" "400px"
             ]
             [ Html.div
                 [ Attr.style "width" "200px"
@@ -160,8 +127,27 @@ view model =
                             ]
                 ]
             ]
+        , Html.map ChartMsg (Help.Plot.view model.chart (renderPoints Animator.moveMotion model.timeline toPos))
         ]
     }
+
+
+renderPoints move timeline toPos =
+    List.foldl
+        (\i rendered ->
+            let
+                currentTime =
+                    Time.millisToPosix (i * 100)
+            in
+            case move (Animator.update currentTime timeline) toPos of
+                current ->
+                    { time = toFloat i * 100
+                    , position = current.position
+                    }
+                        :: rendered
+        )
+        []
+        (List.range 0 40)
 
 
 next house =
@@ -183,6 +169,11 @@ update msg model =
     case msg of
         Tick newTimeline ->
             ( { model | timeline = newTimeline }
+            , Cmd.none
+            )
+
+        ChartMsg chartMsg ->
+            ( { model | chart = Help.Plot.update chartMsg model.chart }
             , Cmd.none
             )
 
@@ -249,3 +240,43 @@ blue =
 
 yellow =
     Color.rgb 1 1 0
+
+
+toPx x =
+    "translate(" ++ String.fromFloat x ++ "px, 0)"
+
+
+toHousePosition event =
+    case event of
+        Hufflepuff ->
+            Animator.to 100
+
+        Griffyndor ->
+            Animator.to 400
+
+        Slytherin ->
+            Animator.to 700
+
+        Ravenclaw ->
+            Animator.to 1000
+
+
+toHousePositionWithOrbit event =
+    case event of
+        Hufflepuff ->
+            Animator.to 100
+
+        Griffyndor ->
+            Animator.orbit
+                { point = 400
+                , duration = Animator.millis 100
+                , toPosition =
+                    \u ->
+                        20 * sin (u * (2 * pi))
+                }
+
+        Slytherin ->
+            Animator.to 700
+
+        Ravenclaw ->
+            Animator.to 1000
