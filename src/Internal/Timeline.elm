@@ -1,7 +1,7 @@
 module Internal.Timeline exposing
     ( Timeline(..), Occurring(..)
     , Schedule(..), Event(..)
-    , Interpolator, Promoter, TimelineDetails, foldp, needsUpdate, rewrite, update
+    , Interpolator, Promoter, TimelineDetails, foldp, getEvents, needsUpdate, rewrite, update
     )
 
 {-|
@@ -82,6 +82,11 @@ needsUpdate : Timeline event -> Bool
 needsUpdate (Timeline timeline) =
     (timeline.queued /= Nothing)
         || timeline.running
+
+
+getEvents : Timeline event -> List ( Time.Posix, event )
+getEvents (Timeline timeline) =
+    List.map (\(Occurring evt time) -> ( Time.toPosix time, evt )) timeline.events
 
 
 {-| -}

@@ -2,7 +2,7 @@ module Internal.Time exposing
     ( thisBeforeThat, thisAfterThat, equal
     , Absolute, AbsoluteTime(..), Duration, absolute, duration, progress
     , inMilliseconds
-    , latest, earliest
+    , latest, earliest, toPosix
     , advanceBy
     )
 
@@ -14,7 +14,7 @@ module Internal.Time exposing
 
 @docs inMilliseconds
 
-@docs latest, earliest
+@docs latest, earliest, toPosix
 
 -}
 
@@ -33,6 +33,11 @@ type alias Absolute =
 
 type alias Duration =
     Duration.Duration
+
+
+toPosix : Absolute -> Time.Posix
+toPosix (Quantity.Quantity m) =
+    Time.millisToPosix (round m)
 
 
 absolute : Time.Posix -> Absolute

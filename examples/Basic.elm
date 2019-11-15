@@ -7,6 +7,7 @@ import Help.Plot
 import Html
 import Html.Attributes as Attr
 import Html.Events as Events
+import Internal.Timeline
 import Time
 
 
@@ -62,15 +63,19 @@ view model =
                 toHousePositionWithOrbit
         in
         [ Html.div
-            []
-            [ Html.button [ Events.onClick QueueThree ] [ Html.text "Queue Three" ]
-            , Html.button [ Events.onClick NextHouse ] [ Html.text "Next" ]
+            [ Attr.style "display" "flex"
+            , Attr.style "padding" "50px"
+            , Attr.style "width" "100%"
+            , Attr.style "flex-direction" "column"
+            , Attr.style "align-items" "center"
+            ]
+            [ Html.span [] [ Html.text "Scrub timeline" ]
             , Html.input
                 [ Attr.type_ "range"
                 , Attr.value (String.fromInt (Time.posixToMillis model.time))
                 , Attr.min "0"
                 , Attr.max "4000"
-                , Attr.style "width" "500px"
+                , Attr.style "width" "1000px"
                 , Events.onInput
                     (\newTime ->
                         case String.toInt newTime of
@@ -82,6 +87,12 @@ view model =
                     )
                 ]
                 []
+            , Html.div
+                [ Attr.style "display" "flex"
+                ]
+                [ Html.button [ Events.onClick QueueThree ] [ Html.text "Queue Three" ]
+                , Html.button [ Events.onClick NextHouse ] [ Html.text "Next" ]
+                ]
             ]
         , Html.div
             [ Attr.style "display" "flex"
@@ -127,9 +138,27 @@ view model =
                             ]
                 ]
             ]
-        , Html.map ChartMsg (Help.Plot.view model.chart (renderPoints Animator.moveMotion model.timeline toPos))
+        , Html.map ChartMsg
+            (Help.Plot.view
+                model.chart
+                (renderPoints Animator.moveMotion model.timeline toPos)
+                (renderEvents (Internal.Timeline.getEvents model.timeline))
+                { position = Animator.move model.timeline toPos
+                , time = toFloat (Time.posixToMillis model.time)
+                }
+            )
         ]
     }
+
+
+renderEvents events =
+    List.map
+        (\( time, ev ) ->
+            { time = toFloat (Time.posixToMillis time)
+            , position = 300
+            }
+        )
+        events
 
 
 renderPoints move timeline toPos =
@@ -137,17 +166,17 @@ renderPoints move timeline toPos =
         (\i rendered ->
             let
                 currentTime =
-                    Time.millisToPosix (i * 100)
+                    Time.millisToPosix (i * 50)
             in
             case move (Animator.update currentTime timeline) toPos of
                 current ->
-                    { time = toFloat i * 100
+                    { time = toFloat i * 50
                     , position = current.position
                     }
                         :: rendered
         )
         []
-        (List.range 0 40)
+        (List.range 0 100)
 
 
 next house =

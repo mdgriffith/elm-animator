@@ -145,15 +145,18 @@ wrapUnitAfter dur total =
 
         totalDuration =
             round (Duration.inMilliseconds total)
+
+        -- _ =
+        --     Debug.log "durations" ( duration, totalDuration, totalDuration |> modBy duration )
+        -- _ =
+        --     Debug.log "dres" (totalDuration |> modBy duration // duration)
     in
     if duration == 0 || totalDuration == 0 then
         0
 
     else
-        toFloat
-            ((totalDuration |> modBy duration)
-                // duration
-            )
+        toFloat (totalDuration |> modBy duration)
+            / toFloat duration
 
 
 {-| Move between events
@@ -167,6 +170,10 @@ movement one two t =
         p1 =
             case one.movement of
                 Oscillate center duration toX ->
+                    -- let
+                    --     _ =
+                    --         Debug.log "durations" ( duration, totalDuration )
+                    -- in
                     center + toX (wrapUnitAfter duration totalDuration)
 
                 Position x ->
