@@ -178,67 +178,132 @@ foldp lookup promote interp (Timeline timeline) =
     .state <|
         List.foldl
             (\_ cursor ->
-                case cursor.events of
-                    [] ->
-                        cursor
+                if cursor.done then
+                    cursor
 
-                    (Occurring target targetTime) :: remaining ->
-                        if cursor.done then
+                else
+                    case cursor.events of
+                        [] ->
                             cursor
 
-                        else if Time.thisAfterThat timeline.now targetTime || Time.equal timeline.now targetTime then
-                            -- happened in the past,
-                            -- capture a snapshot of what happens directly on that event
-                            let
-                                lookAheadAnchor =
-                                    List.head remaining
-                                        |> Maybe.map (applyLookup lookup)
+                        (Occurring target targetTime) :: [] ->
+                            --this is the last event, interpolate to the correct position
+                            if Time.thisAfterThat timeline.now targetTime then
+                                let
+                                    currentAnchor =
+                                        lookup target
 
-                                currentAnchor =
-                                    lookup target
-                            in
-                            { state = promote cursor.previousAnchor currentAnchor targetTime lookAheadAnchor
-                            , events = remaining
-                            , previousEventTime = targetTime
-                            , previousAnchor = Just ( currentAnchor, targetTime )
-                            , done = False
-                            }
+                                    promotedTarget =
+                                        promote (Just ( lookup cursor.previousEvent, cursor.previousEventTime ))
+                                            (lookup target)
+                                            targetTime
+                                            Nothing
 
-                        else if Time.thisBeforeThat timeline.now targetTime then
-                            -- This transition is happenind right now.
-                            -- Tnterpolate to this exact time and flag as done.
-                            let
-                                lookAheadAnchor =
-                                    List.head remaining
-                                        |> Maybe.map (applyLookup lookup)
+                                    progress =
+                                        Time.progress cursor.previousEventTime targetTime timeline.now
+                                in
+                                -- happened in the past,
+                                -- capture a snapshot of what happens directly on that event
+                                { state =
+                                    interp cursor.state
+                                        promotedTarget
+                                        { percent = progress
+                                        , eventsAreEqual = True
+                                        }
+                                , events = []
+                                , previousEventTime = timeline.now
+                                , previousEvent = target
+                                , done = True
+                                }
 
-                                currentAnchor =
-                                    lookup target
+                            else
+                                let
+                                    currentAnchor =
+                                        lookup target
 
-                                promotedTarget =
-                                    promote cursor.previousAnchor (lookup target) targetTime lookAheadAnchor
+                                    promotedTarget =
+                                        promote (Just ( lookup cursor.previousEvent, cursor.previousEventTime ))
+                                            (lookup target)
+                                            targetTime
+                                            Nothing
 
-                                progress =
-                                    Time.progress cursor.previousEventTime targetTime timeline.now
-                            in
-                            -- happened in the past,
-                            -- capture a snapshot of what happens directly on that event
-                            { state = interp cursor.state promotedTarget progress
-                            , events = remaining
-                            , previousEventTime = timeline.now
-                            , previousAnchor = Just ( currentAnchor, timeline.now )
-                            , done = True
-                            }
+                                    progress =
+                                        Time.progress cursor.previousEventTime targetTime timeline.now
+                                in
+                                -- happened in the past,
+                                -- capture a snapshot of what happens directly on that event
+                                { state =
+                                    interp cursor.state
+                                        promotedTarget
+                                        { percent = progress
+                                        , eventsAreEqual = True
+                                        }
+                                , events = []
+                                , previousEventTime = timeline.now
+                                , previousEvent = target
+                                , done = True
+                                }
 
-                        else
-                            -- shouldn't be reachable...
-                            -- Not sure how to guard against that though.
-                            cursor
+                        (Occurring target targetTime) :: (Occurring lookAhead lookAheadTime) :: remaining ->
+                            if Time.thisAfterThat timeline.now targetTime then
+                                -- happened in the past,
+                                -- capture a snapshot of what happens directly on that event
+                                let
+                                    lookAheadAnchor =
+                                        lookup lookAhead
+
+                                    currentAnchor =
+                                        lookup target
+                                in
+                                { state =
+                                    promote
+                                        (Just ( lookup cursor.previousEvent, cursor.previousEventTime ))
+                                        currentAnchor
+                                        targetTime
+                                        (Just ( lookAheadAnchor, lookAheadTime ))
+                                , events = Occurring lookAhead lookAheadTime :: remaining
+                                , previousEventTime = targetTime
+                                , previousEvent = target
+                                , done = False
+                                }
+
+                            else
+                                -- This transition is happening right now.
+                                -- Interpolate to this exact time and flag as done.
+                                let
+                                    lookAheadAnchor =
+                                        lookup lookAhead
+
+                                    currentAnchor =
+                                        lookup target
+
+                                    promotedTarget =
+                                        promote (Just ( lookup cursor.previousEvent, cursor.previousEventTime ))
+                                            currentAnchor
+                                            targetTime
+                                            (Just ( lookAheadAnchor, lookAheadTime ))
+
+                                    progress =
+                                        Time.progress cursor.previousEventTime targetTime timeline.now
+                                in
+                                -- happened in the past,
+                                -- capture a snapshot of what happens directly on that event
+                                { state =
+                                    interp cursor.state
+                                        promotedTarget
+                                        { percent = progress
+                                        , eventsAreEqual = target == cursor.previousEvent
+                                        }
+                                , events = Occurring lookAhead lookAheadTime :: remaining
+                                , previousEventTime = timeline.now
+                                , previousEvent = target
+                                , done = True
+                                }
             )
             { state = promote Nothing (lookup timeline.initial) timeline.start Nothing
             , events = timeline.events
             , previousEventTime = timeline.start
-            , previousAnchor = Nothing
+            , previousEvent = timeline.initial
             , done = List.isEmpty timeline.events
             }
             timeline.events
@@ -249,7 +314,9 @@ applyLookup lookup (Occurring event time) =
 
 
 type alias Progress =
-    Float
+    { percent : Float
+    , eventsAreEqual : Bool
+    }
 
 
 type alias Promoter value state =

@@ -76,8 +76,11 @@ toPoint maybePrev current now maybeLookAhead =
 
 
 motion : Timeline.Interpolator Motion
-motion p1 p2 t =
+motion p1 p2 progress =
     let
+        t =
+            progress.percent
+
         curve =
             CubicSpline2d.fromEndpoints
                 (Point2d.unitless 0 p1.position)
@@ -145,11 +148,6 @@ wrapUnitAfter dur total =
 
         totalDuration =
             round (Duration.inMilliseconds total)
-
-        -- _ =
-        --     Debug.log "durations" ( duration, totalDuration, totalDuration |> modBy duration )
-        -- _ =
-        --     Debug.log "dres" (totalDuration |> modBy duration // duration)
     in
     if duration == 0 || totalDuration == 0 then
         0
@@ -162,71 +160,101 @@ wrapUnitAfter dur total =
 {-| Move between events
 -}
 movement : Timeline.Interpolator MotionMovement
-movement one two t =
-    let
-        totalDuration =
-            Quantity.multiplyBy t (Time.duration one.time two.time)
+movement one two progress =
+    if progress.eventsAreEqual then
+        -- this means we're "resting" at event one
+        let
+            totalDuration =
+                Quantity.multiplyBy progress.percent (Time.duration one.time two.time)
 
-        p1 =
-            case one.movement of
-                Oscillate center duration toX ->
-                    -- let
-                    --     _ =
-                    --         Debug.log "durations" ( duration, totalDuration )
-                    -- in
-                    center + toX (wrapUnitAfter duration totalDuration)
+            pos =
+                case one.movement of
+                    Oscillate center duration toX ->
+                        center + toX (wrapUnitAfter duration totalDuration)
 
-                Position x ->
-                    x
+                    Position x ->
+                        x
 
-        p2 =
-            case two.movement of
-                Oscillate center duration toX ->
-                    center + toX (wrapUnitAfter duration totalDuration)
+            velocity =
+                case one.movement of
+                    Oscillate center duration toX ->
+                        one.velocity
 
-                Position x ->
-                    x
-
-        v1 =
-            case one.movement of
-                Oscillate center duration toX ->
-                    one.velocity
-
-                Position x ->
-                    one.velocity
-
-        v2 =
-            case two.movement of
-                Oscillate center duration toX ->
-                    one.velocity
-
-                Position x ->
-                    two.velocity
-    in
-    if p1 == p2 && v1 == v2 then
-        -- avoid some involved math when possible
-        { position = p1
-        , velocity = v1
+                    Position x ->
+                        one.velocity
+        in
+        { position = pos
+        , velocity = velocity
         , movement = one.movement
         , time = one.time
         }
 
     else
         let
-            curve =
-                CubicSpline2d.fromEndpoints
-                    (Point2d.unitless 0 p1)
-                    (Vector2d.unitless 1 v1)
-                    (Point2d.unitless 1 p2)
-                    (Vector2d.unitless 1 v2)
+            t =
+                progress.percent
+
+            totalDuration =
+                Quantity.multiplyBy t (Time.duration one.time two.time)
+
+            p1 =
+                case one.movement of
+                    Oscillate center duration toX ->
+                        center
+
+                    -- + toX (wrapUnitAfter duration totalDuration)
+                    Position x ->
+                        x
+
+            p2 =
+                case two.movement of
+                    Oscillate center duration toX ->
+                        center
+
+                    --+ toX (wrapUnitAfter duration totalDuration)
+                    Position x ->
+                        x
+
+            v1 =
+                case one.movement of
+                    Oscillate center duration toX ->
+                        one.velocity
+
+                    Position x ->
+                        one.velocity
+
+            v2 =
+                case two.movement of
+                    Oscillate center duration toX ->
+                        one.velocity
+
+                    Position x ->
+                        two.velocity
         in
-        { position =
-            unwrapQuantity (Point2d.yCoordinate (CubicSpline2d.pointOn curve t))
-        , velocity =
-            unwrapQuantity (Vector2d.yComponent (CubicSpline2d.firstDerivative curve t))
-        , movement = one.movement
-        , time = one.time
-        }
+        if p1 == p2 && v1 == v2 then
+            -- avoid some involved math when possible
+            { position = p1
+            , velocity = v1
+            , movement = one.movement
+            , time = one.time
+            }
+
+        else
+            let
+                curve =
+                    CubicSpline2d.fromEndpoints
+                        (Point2d.unitless 0 p1)
+                        (Vector2d.unitless 1 v1)
+                        (Point2d.unitless 1 p2)
+                        (Vector2d.unitless 1 v2)
+            in
+            { position =
+                unwrapQuantity (Point2d.yCoordinate (CubicSpline2d.pointOn curve t))
+            , velocity =
+                unwrapQuantity (Vector2d.yComponent (CubicSpline2d.firstDerivative curve t))
+            , movement = one.movement
+            , time = one.time
+            }
 
 
 toMovement : Timeline.Promoter Movement MotionMovement
@@ -287,6 +315,9 @@ linear maybePrev current now maybeLookAhead =
 color : Timeline.Interpolator Color.Color
 color colorOne colorTwo progress =
     let
+        t =
+            progress.percent
+
         one =
             Color.toRgba colorOne
 
@@ -294,10 +325,10 @@ color colorOne colorTwo progress =
             Color.toRgba colorTwo
     in
     Color.rgba
-        (average one.red two.red progress)
-        (average one.green two.green progress)
-        (average one.blue two.blue progress)
-        (average one.alpha two.alpha progress)
+        (average one.red two.red t)
+        (average one.green two.green t)
+        (average one.blue two.blue t)
+        (average one.alpha two.alpha t)
 
 
 average : Float -> Float -> Float -> Float
