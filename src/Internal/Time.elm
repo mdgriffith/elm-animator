@@ -70,7 +70,9 @@ progress (Quantity.Quantity start) (Quantity.Quantity end) (Quantity.Quantity cu
         0
 
     else
-        (current - start) / total
+        ((current - start) / total)
+            |> max 0
+            |> min 1
 
 
 latest : Absolute -> Absolute -> Absolute

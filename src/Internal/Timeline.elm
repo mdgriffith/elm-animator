@@ -1,14 +1,23 @@
 module Internal.Timeline exposing
-    ( Timeline(..), Occurring(..)
+    ( Timeline(..), TimelineDetails, Occurring(..), getEvents
+    , Interpolator, Promoter
     , Schedule(..), Event(..)
-    , Interpolator, Promoter, TimelineDetails, foldp, getEvents, needsUpdate, rewrite, update
+    , rewrite, after, between
+    , foldp, update, needsUpdate
+    , Phase(..), foldp2
     )
 
 {-|
 
-@docs Timeline, Occurring
+@docs Timeline, TimelineDetails, Occurring, getEvents
+
+@docs Interpolator, Promoter
 
 @docs Schedule, Event
+
+@docs rewrite, after, between
+
+@docs foldp, update, needsUpdate
 
 -}
 
@@ -20,12 +29,12 @@ import Time
 {-| A list of events that haven't been added to the schedule yet.
 -}
 type Schedule event
-    = Schedule (List (Event event))
+    = Schedule Time.Duration (List (Event event))
 
 
 {-| -}
 type Event event
-    = Event Time.Duration event
+    = Event Time.Duration event (Maybe Time.Duration)
 
 
 {-| -}
@@ -35,7 +44,6 @@ type Timeline event
 
 type alias TimelineDetails event =
     { initial : event
-    , start : Time.Absolute
     , now : Time.Absolute
     , events : List (Occurring event)
     , queued : Maybe (Schedule event)
@@ -49,18 +57,20 @@ type Timetable event
     = Timetable Time.Absolute (List (Occurring event))
 
 
-type Occurring event
-    = Occurring event Time.Absolute
+type
+    Occurring event
+    -- When the event occurs, and how long we're dwelling at this event (or no dwelling at all)
+    = Occurring event Time.Absolute (Maybe Time.Duration)
 
 
 filterMapOccurring : (event -> Maybe newEvent) -> Occurring event -> Maybe (Occurring newEvent)
-filterMapOccurring fn (Occurring ev time) =
+filterMapOccurring fn (Occurring ev time maybeDwell) =
     case fn ev of
         Nothing ->
             Nothing
 
         Just newEv ->
-            Just (Occurring newEv time)
+            Just (Occurring newEv time maybeDwell)
 
 
 {-| -}
@@ -68,13 +78,85 @@ rewrite : newEvent -> Timeline event -> (event -> Maybe newEvent) -> Timeline ne
 rewrite newStart (Timeline tl) newLookup =
     Timeline
         { initial = newStart
-        , start = tl.start
         , now = tl.now
         , running = tl.running
         , events =
             List.filterMap (filterMapOccurring newLookup) tl.events
         , queued = Nothing
         }
+
+
+{-| -}
+between : event -> event -> Timeline event -> Timeline Bool
+between start end (Timeline tl) =
+    Timeline
+        { initial = start == tl.initial
+        , now = tl.now
+        , running = tl.running
+        , events =
+            List.foldl (betweenEvent start end) ( NotStarted, [] ) tl.events
+                |> Tuple.second
+                |> List.reverse
+        , queued = Nothing
+        }
+
+
+type Between
+    = NotStarted
+    | Started
+    | Done
+
+
+betweenEvent : event -> event -> Occurring event -> ( Between, List (Occurring Bool) ) -> ( Between, List (Occurring Bool) )
+betweenEvent startCheckpoint endCheckpoint (Occurring ev time maybeDwell) ( status, events ) =
+    case status of
+        NotStarted ->
+            if startCheckpoint == ev then
+                ( Started, Occurring True time maybeDwell :: events )
+
+            else
+                ( NotStarted, Occurring False time maybeDwell :: events )
+
+        Started ->
+            if startCheckpoint == ev then
+                ( Started, Occurring True time maybeDwell :: events )
+
+            else
+                ( NotStarted, Occurring False time maybeDwell :: events )
+
+        Done ->
+            ( status, Occurring False time maybeDwell :: events )
+
+
+{-| -}
+after : event -> Timeline event -> Timeline Bool
+after ev (Timeline tl) =
+    let
+        started =
+            tl.initial == ev
+    in
+    Timeline
+        { initial = started
+        , now = tl.now
+        , running = tl.running
+        , events =
+            List.foldl (afterEvent ev) ( started, [] ) tl.events
+                |> Tuple.second
+                |> List.reverse
+        , queued = Nothing
+        }
+
+
+afterEvent : event -> Occurring event -> ( Bool, List (Occurring Bool) ) -> ( Bool, List (Occurring Bool) )
+afterEvent checkpoint (Occurring ev time maybeDwell) ( isAfter, events ) =
+    if isAfter then
+        ( isAfter, Occurring isAfter time maybeDwell :: events )
+
+    else if checkpoint == ev then
+        ( True, Occurring True time maybeDwell :: events )
+
+    else
+        ( False, Occurring False time maybeDwell :: events )
 
 
 {-| -}
@@ -86,7 +168,7 @@ needsUpdate (Timeline timeline) =
 
 getEvents : Timeline event -> List ( Time.Posix, event )
 getEvents (Timeline timeline) =
-    List.map (\(Occurring evt time) -> ( Time.toPosix time, evt )) timeline.events
+    List.map (\(Occurring evt time maybeDwell) -> ( Time.toPosix time, evt )) timeline.events
 
 
 {-| -}
@@ -95,12 +177,6 @@ update now (Timeline timeline) =
     Timeline
         { timeline
             | now = Time.absolute now
-            , start =
-                if Quantity.Quantity 0 == timeline.start then
-                    Time.absolute now
-
-                else
-                    timeline.start
             , events =
                 case timeline.queued of
                     Nothing ->
@@ -112,46 +188,81 @@ update now (Timeline timeline) =
         }
 
 
-{-| -}
+{-| Returns the updated list of events
+as well as any additional dwell time that should be added to the `start` event.
+-}
 enqueue : TimelineDetails events -> Time.Absolute -> Schedule events -> List (Occurring events)
-enqueue timeline now (Schedule queued) =
+enqueue timeline now (Schedule delay reverseQueued) =
     let
-        finalEvent =
-            List.reverse timeline.events
-                |> List.head
-    in
-    case finalEvent of
-        Nothing ->
-            Occurring timeline.initial now
-                :: (List.foldl toOccurring ( now, [] ) queued
-                        |> Tuple.second
-                        |> List.reverse
-                   )
+        queued =
+            List.reverse reverseQueued
 
-        Just (Occurring lastEvent lastEventTime) ->
+        reversedEvents =
+            List.reverse timeline.events
+
+        start =
+            Time.advanceBy delay now
+    in
+    case reversedEvents of
+        [] ->
+            List.foldl toOccurring ( start, [] ) queued
+                |> Tuple.second
+                |> List.reverse
+
+        (Occurring lastEvent lastEventTime finalEventDwell) :: eventTail ->
             let
                 startNewEventsAt =
-                    Time.latest lastEventTime now
+                    Time.latest lastEventTime start
 
                 newEvents =
                     List.foldl toOccurring ( startNewEventsAt, [] ) queued
                         |> Tuple.second
                         |> List.reverse
             in
-            if Time.thisAfterThat now lastEventTime then
-                timeline.events ++ Occurring lastEvent now :: newEvents
+            if Time.thisAfterThat start lastEventTime then
+                -- if the start of the scheduled events is after the last event time,
+                -- then we need to increase the dwell time of the last event to match the start time.
+                let
+                    newLastEvent =
+                        Occurring lastEvent
+                            lastEventTime
+                            (Just (Time.duration start lastEventTime))
+                in
+                List.reverse (newLastEvent :: eventTail)
+                    ++ newEvents
 
             else
                 timeline.events ++ newEvents
 
 
+addToDwell duration maybeDwell =
+    case maybeDwell of
+        Nothing ->
+            Just duration
+
+        Just existing ->
+            Just (Quantity.plus duration existing)
+
+
 toOccurring : Event event -> ( Time.Absolute, List (Occurring event) ) -> ( Time.Absolute, List (Occurring event) )
-toOccurring (Event duration event) ( now, events ) =
+toOccurring (Event duration event maybeDwell) ( now, events ) =
     let
         occursAt =
             Time.advanceBy duration now
+
+        endsAt =
+            case maybeDwell of
+                Nothing ->
+                    occursAt
+
+                Just dwell ->
+                    Time.advanceBy dwell occursAt
     in
-    ( occursAt, Occurring event occursAt :: events )
+    ( endsAt, Occurring event occursAt maybeDwell :: events )
+
+
+getOccurringTime (Occurring _ t _) =
+    t
 
 
 {-| Ok, we have a few subtle concepts here.
@@ -173,8 +284,17 @@ And we have some type aliases to capture how to create each one of those values.
     `Interpolator` is a function that maps linearly between two `motions`.
 
 -}
-foldp : (event -> anchor) -> Promoter anchor motion -> Interpolator motion -> Timeline event -> motion
+foldp : (event -> anchor) -> Promoter event anchor motion -> Interpolator motion -> Timeline event -> motion
 foldp lookup promote interp (Timeline timeline) =
+    let
+        startingEvent =
+            case timeline.events of
+                [] ->
+                    Occurring timeline.initial timeline.now Nothing
+
+                recent :: _ ->
+                    Occurring timeline.initial timeline.now Nothing
+    in
     .state <|
         List.foldl
             (\_ cursor ->
@@ -186,84 +306,72 @@ foldp lookup promote interp (Timeline timeline) =
                         [] ->
                             cursor
 
-                        (Occurring target targetTime) :: [] ->
+                        target :: [] ->
+                            let
+                                targetTime =
+                                    getOccurringTime target
+                            in
                             --this is the last event, interpolate to the correct position
                             if Time.thisAfterThat timeline.now targetTime then
                                 let
-                                    currentAnchor =
-                                        lookup target
-
                                     promotedTarget =
-                                        promote (Just ( lookup cursor.previousEvent, cursor.previousEventTime ))
-                                            (lookup target)
-                                            targetTime
+                                        promote lookup
+                                            (Just cursor.previous)
+                                            target
                                             Nothing
 
                                     progress =
-                                        Time.progress cursor.previousEventTime targetTime timeline.now
+                                        Time.progress (getOccurringTime cursor.previous) targetTime timeline.now
                                 in
                                 -- happened in the past,
                                 -- capture a snapshot of what happens directly on that event
                                 { state =
                                     interp cursor.state
                                         promotedTarget
-                                        { percent = progress
-                                        , eventsAreEqual = True
-                                        }
+                                        progress
                                 , events = []
-                                , previousEventTime = timeline.now
-                                , previousEvent = target
+                                , previous = target
                                 , done = True
                                 }
 
                             else
                                 let
-                                    currentAnchor =
-                                        lookup target
-
                                     promotedTarget =
-                                        promote (Just ( lookup cursor.previousEvent, cursor.previousEventTime ))
-                                            (lookup target)
-                                            targetTime
+                                        promote lookup
+                                            (Just cursor.previous)
+                                            target
                                             Nothing
 
                                     progress =
-                                        Time.progress cursor.previousEventTime targetTime timeline.now
+                                        Time.progress (getOccurringTime cursor.previous) targetTime timeline.now
                                 in
                                 -- happened in the past,
                                 -- capture a snapshot of what happens directly on that event
                                 { state =
                                     interp cursor.state
                                         promotedTarget
-                                        { percent = progress
-                                        , eventsAreEqual = True
-                                        }
+                                        progress
                                 , events = []
-                                , previousEventTime = timeline.now
-                                , previousEvent = target
+                                , previous = target
                                 , done = True
                                 }
 
-                        (Occurring target targetTime) :: (Occurring lookAhead lookAheadTime) :: remaining ->
+                        target :: lookAhead :: remaining ->
+                            let
+                                targetTime =
+                                    getOccurringTime target
+                            in
                             if Time.thisAfterThat timeline.now targetTime then
                                 -- happened in the past,
                                 -- capture a snapshot of what happens directly on that event
-                                let
-                                    lookAheadAnchor =
-                                        lookup lookAhead
-
-                                    currentAnchor =
-                                        lookup target
-                                in
                                 { state =
                                     promote
-                                        (Just ( lookup cursor.previousEvent, cursor.previousEventTime ))
-                                        currentAnchor
-                                        targetTime
-                                        (Just ( lookAheadAnchor, lookAheadTime ))
-                                , events = Occurring lookAhead lookAheadTime :: remaining
-                                , previousEventTime = targetTime
-                                , previousEvent = target
+                                        lookup
+                                        (Just cursor.previous)
+                                        target
+                                        (Just lookAhead)
+                                , events = lookAhead :: remaining
+                                , previous = target
                                 , done = False
                                 }
 
@@ -271,57 +379,147 @@ foldp lookup promote interp (Timeline timeline) =
                                 -- This transition is happening right now.
                                 -- Interpolate to this exact time and flag as done.
                                 let
-                                    lookAheadAnchor =
-                                        lookup lookAhead
-
-                                    currentAnchor =
-                                        lookup target
-
                                     promotedTarget =
-                                        promote (Just ( lookup cursor.previousEvent, cursor.previousEventTime ))
-                                            currentAnchor
-                                            targetTime
-                                            (Just ( lookAheadAnchor, lookAheadTime ))
+                                        promote lookup
+                                            (Just cursor.previous)
+                                            target
+                                            (Just lookAhead)
 
                                     progress =
-                                        Time.progress cursor.previousEventTime targetTime timeline.now
+                                        Time.progress (getOccurringTime cursor.previous) targetTime timeline.now
                                 in
                                 -- happened in the past,
                                 -- capture a snapshot of what happens directly on that event
                                 { state =
                                     interp cursor.state
                                         promotedTarget
-                                        { percent = progress
-                                        , eventsAreEqual = target == cursor.previousEvent
-                                        }
-                                , events = Occurring lookAhead lookAheadTime :: remaining
-                                , previousEventTime = timeline.now
-                                , previousEvent = target
+                                        progress
+                                , events = lookAhead :: remaining
+                                , previous = target
                                 , done = True
                                 }
             )
-            { state = promote Nothing (lookup timeline.initial) timeline.start Nothing
+            { state = promote lookup Nothing startingEvent Nothing
             , events = timeline.events
-            , previousEventTime = timeline.start
-            , previousEvent = timeline.initial
+            , previous = startingEvent
             , done = List.isEmpty timeline.events
             }
             timeline.events
 
 
-applyLookup lookup (Occurring event time) =
-    ( lookup event, time )
+getPhase (Occurring prev prevTime maybePrevDwell) (Occurring event eventTime maybeDwell) now state =
+    let
+        eventEndTime =
+            case maybeDwell of
+                Nothing ->
+                    eventTime
+
+                Just dwell ->
+                    Time.advanceBy dwell eventTime
+    in
+    if Time.thisAfterThat now eventEndTime then
+        ( NotDone, After state )
+
+    else if Time.thisAfterThat now eventTime then
+        let
+            dwellDuration =
+                Time.duration eventTime now
+        in
+        ( Finished, Resting dwellDuration state )
+
+    else
+        let
+            prevEventEndTime =
+                case maybePrevDwell of
+                    Nothing ->
+                        prevTime
+
+                    Just dwell ->
+                        Time.advanceBy dwell prevTime
+
+            progressToNewEvent =
+                Time.progress
+                    prevEventEndTime
+                    eventTime
+                    now
+        in
+        ( Finished, TransitioningTo progressToNewEvent state )
+
+
+type Phase state
+    = Start
+      -- give me the state after the target event is finished
+    | After state
+      -- give me the state while transiting to the target event
+    | TransitioningTo Progress state
+      -- give me the state while the current event is ongoing
+    | Resting Time.Duration state
+
+
+type DoneOr
+    = Finished
+    | NotDone
+
+
+{-| -}
+foldp2 : (event -> anchor) -> Mobilizer event anchor motion -> Timeline event -> motion
+foldp2 lookup mobilize (Timeline timeline) =
+    case timeline.events of
+        [] ->
+            -- Generally, this shouldn't be reachable because we require an event on initialization
+            -- likely we'll want to change events to `(start, [remaining])` at some point in the future
+            mobilize lookup (Occurring timeline.initial timeline.now Nothing) Nothing Start
+
+        startingEvent :: _ ->
+            .state <|
+                List.foldl
+                    (\_ cursor ->
+                        if cursor.done then
+                            cursor
+
+                        else
+                            case cursor.events of
+                                [] ->
+                                    cursor
+
+                                target :: remaining ->
+                                    case getPhase cursor.previous target timeline.now cursor.state of
+                                        ( finished, phase ) ->
+                                            -- let
+                                            --     _ =
+                                            --         Debug.log "target" target
+                                            -- in
+                                            -- Debug.log "rsult" <|
+                                            { state =
+                                                mobilize lookup target (List.head remaining) phase
+                                            , events = remaining
+                                            , previous = target
+                                            , done = finished == Finished
+                                            }
+                    )
+                    { state = mobilize lookup startingEvent (List.head (List.drop 1 timeline.events)) Start
+                    , events = timeline.events
+                    , previous = startingEvent
+                    , done = List.isEmpty timeline.events
+                    }
+                    timeline.events
+
+
+type alias Mobilizer event anchor state =
+    (event -> anchor)
+    -> Occurring event
+    -> Maybe (Occurring event)
+    -> Phase state
+    -> state
 
 
 type alias Progress =
-    { percent : Float
-    , eventsAreEqual : Bool
-    }
+    Float
 
 
-type alias Promoter value state =
-    Maybe ( value, Time.Absolute ) -> value -> Time.Absolute -> Maybe ( value, Time.Absolute ) -> state
+type alias Promoter event anchor state =
+    (event -> anchor) -> Maybe (Occurring event) -> Occurring event -> Maybe (Occurring event) -> state
 
 
-type alias Interpolator entity =
-    entity -> entity -> Progress -> entity
+type alias Interpolator state =
+    state -> state -> Progress -> state

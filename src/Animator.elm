@@ -1,30 +1,37 @@
 module Animator exposing
-    ( Schedule, Event
-    , Timeline, init, subscription, rewrite
-    , queue, update
-    , float, motion, color
-    , move, to, orbit
-    , moveMotion
+    ( Timeline, init, subscription
+    , Schedule, Event
     , wait, event
     , Duration, millis, seconds, minutes
+    , after, between, rewrite
+    , queue, update
+    , float, color
+    , move, to, orbit
     )
 
 {-|
 
+@docs Timeline, init, subscription
+
 @docs Schedule, Event
-
-@docs Timeline, init, subscription, rewrite
-
-@docs queue, update
-
-@docs float, motion, color
-
-@docs move, to, orbit
-@docs moveMotion
 
 @docs Step, wait, event
 
 @docs Duration, millis, seconds, minutes
+
+
+# Focusing on Events
+
+@docs after, between, rewrite
+
+@docs queue, update
+
+
+# Animating
+
+@docs float, color
+
+@docs move, to, orbit
 
 -}
 
@@ -35,6 +42,7 @@ import Internal.Interpolate as Interpolate
 import Internal.Time as Time
 import Internal.Timeline as Timeline
 import Quantity
+import Time
 
 
 {-| -}
@@ -47,13 +55,12 @@ update =
     Timeline.update
 
 
-init : event -> Timeline event
-init first =
+init : Time.Posix -> event -> Timeline event
+init start first =
     Timeline.Timeline
         { initial = first
-        , start = Quantity.Quantity 0
-        , now = Quantity.Quantity 0
-        , events = []
+        , now = Time.absolute start
+        , events = [ Timeline.Occurring first (Time.absolute start) Nothing ]
         , queued = Nothing
         , running = True
         }
@@ -99,45 +106,55 @@ wait =
     Wait
 
 
-stepsToEvents step ( waiting, events ) =
+stepsToEvents : Step event -> Timeline.Schedule event -> Timeline.Schedule event
+stepsToEvents step (Timeline.Schedule delay events) =
     case events of
         [] ->
             case step of
-                Wait dur ->
-                    ( Quantity.plus waiting dur
-                    , events
-                    )
+                Wait waiting ->
+                    Timeline.Schedule
+                        (Quantity.plus delay waiting)
+                        events
 
                 TransitionTo dur checkpoint ->
-                    ( millis 0
-                    , [ Timeline.Event (Quantity.plus waiting dur) checkpoint ]
-                    )
+                    Timeline.Schedule
+                        delay
+                        [ Timeline.Event dur checkpoint Nothing ]
 
-        (Timeline.Event durationTo recentEvent) :: remaining ->
+        (Timeline.Event durationTo recentEvent maybeDwell) :: remaining ->
             case step of
                 Wait dur ->
-                    ( millis 0
-                    , Timeline.Event (Quantity.plus waiting dur) recentEvent :: events
-                    )
+                    Timeline.Schedule
+                        delay
+                        (Timeline.Event durationTo recentEvent (addToDwell dur maybeDwell) :: remaining)
 
                 TransitionTo dur checkpoint ->
-                    ( millis 0
-                    , Timeline.Event (Quantity.plus waiting dur) checkpoint :: events
-                    )
+                    if checkpoint == recentEvent then
+                        Timeline.Schedule
+                            delay
+                            (Timeline.Event durationTo recentEvent (addToDwell dur maybeDwell) :: remaining)
+
+                    else
+                        Timeline.Schedule
+                            delay
+                            (Timeline.Event dur checkpoint Nothing :: events)
+
+
+addToDwell duration maybeDwell =
+    case maybeDwell of
+        Nothing ->
+            Just duration
+
+        Just existing ->
+            Just (Quantity.plus duration existing)
 
 
 queue : List (Step event) -> Timeline event -> Timeline event
 queue steps (Timeline.Timeline tl) =
-    let
-        events =
-            List.foldl stepsToEvents ( millis 0, [] ) steps
-                |> Tuple.second
-                |> List.reverse
-    in
     Timeline.Timeline
         { tl
             | queued =
-                Just (Timeline.Schedule events)
+                Just (List.foldl stepsToEvents (Timeline.Schedule (millis 0) []) steps)
         }
 
 
@@ -157,6 +174,34 @@ rewrite newStart timeline newLookup =
     Timeline.rewrite newStart timeline newLookup
 
 
+{-| _NOTE_ this might need a rename, it's really "during this even, and after"
+
+So, a timline of `One`, `Two`, `Three`
+
+that calls `Animator.after Two`
+
+would create `False`, `True`, `True`.
+
+-}
+after : event -> Timeline event -> Timeline Bool
+after ev timeline =
+    Timeline.after ev timeline
+
+
+{-| _NOTE_ this might need a rename, it's really "during this even, and after"
+
+So, a timline of `One`, `Two`, `Three`
+
+that calls `Animator.after Two`
+
+would create `False`, `True`, `True`.
+
+-}
+between : event -> event -> Timeline event -> Timeline Bool
+between =
+    Timeline.between
+
+
 
 {- Interpolations -}
 
@@ -165,64 +210,65 @@ rewrite newStart timeline newLookup =
 float : Timeline event -> (event -> Float) -> Float
 float timeline lookup =
     .position <|
-        Timeline.foldp lookup
-            Interpolate.toMotion
-            Interpolate.motion
-            timeline
+        move timeline (\ev -> to (lookup ev))
 
 
 {-| -}
 color : Timeline event -> (event -> Color) -> Color
 color timeline lookup =
-    Timeline.foldp lookup
-        Interpolate.linear
+    Timeline.foldp2 lookup
         Interpolate.color
         timeline
 
 
-{-| -}
-motion : Timeline event -> (event -> Float) -> Interpolate.Motion
-motion timeline lookup =
-    Timeline.foldp lookup
-        Interpolate.toMotion
-        Interpolate.motion
+
+-- {-| -}
+-- motion : Timeline event -> (event -> Float) -> Interpolate.Motion
+-- motion timeline lookup =
+--     Timeline.foldp lookup
+--         Interpolate.toMotion
+--         Interpolate.motion
+--         timeline
+-- {-| -}
+-- position : Timeline event -> (event -> { x : Float, y : Float }) -> { x : Float, y : Float }
+-- position timeline lookup =
+--     (\{ x, y } ->
+--         { x = x.position
+--         , y = y.position
+--         }
+--     )
+--     <|
+--         Timeline.foldp lookup
+--             Interpolate.toPoint
+--             Interpolate.point
+--             timeline
+
+
+move : Timeline event -> (event -> Movement) -> { position : Float, velocity : Float }
+move timeline lookup =
+    Timeline.foldp2 lookup
+        Interpolate.mobilize
         timeline
-
-
-{-| -}
-position : Timeline event -> (event -> { x : Float, y : Float }) -> { x : Float, y : Float }
-position timeline lookup =
-    (\{ x, y } ->
-        { x = x.position
-        , y = y.position
-        }
-    )
-    <|
-        Timeline.foldp lookup
-            Interpolate.toPoint
-            Interpolate.point
-            timeline
 
 
 type alias Movement =
     Interpolate.Movement
 
 
-move : Timeline event -> (event -> Movement) -> Float
-move timeline lookup =
-    .position <|
-        Timeline.foldp lookup
-            Interpolate.toMovement
-            Interpolate.movement
-            timeline
 
-
-moveMotion : Timeline event -> (event -> Movement) -> Interpolate.MotionMovement
-moveMotion timeline lookup =
-    Timeline.foldp lookup
-        Interpolate.toMovement
-        Interpolate.movement
-        timeline
+-- move : Timeline event -> (event -> Movement) -> Float
+-- move timeline lookup =
+--     .position <|
+--         Timeline.foldp lookup
+--             Interpolate.toMovement
+--             Interpolate.movement
+--             timeline
+-- moveMotion : Timeline event -> (event -> Movement) -> Interpolate.MotionMovement
+-- moveMotion timeline lookup =
+--     Timeline.foldp lookup
+--         Interpolate.toMovement
+--         Interpolate.movement
+--         timeline
 
 
 to : Float -> Movement

@@ -17,7 +17,7 @@ main =
             \() ->
                 update QueueThree
                     { timeline =
-                        Animator.init Hufflepuff
+                        Animator.init (Time.millisToPosix 0) Hufflepuff
                     , time = Time.millisToPosix 0
                     , house = Hufflepuff
                     , chart = Help.Plot.init
@@ -107,28 +107,26 @@ view model =
                 , Events.onClick NextHouse
                 , Attr.style "transform"
                     (toPx
-                        (Animator.move model.timeline toPos)
+                        (.position (Animator.move model.timeline toPos))
                     )
-                , Attr.style "background-color"
-                    (Color.toCssString
-                        (Animator.color model.timeline <|
-                            \event ->
-                                case event of
-                                    Hufflepuff ->
-                                        yellow
+                , Attr.style "background-color" "red"
 
-                                    Griffyndor ->
-                                        red
-
-                                    Slytherin ->
-                                        green
-
-                                    Ravenclaw ->
-                                        blue
-                        )
-                    )
+                -- (Color.toCssString
+                --     (Animator.color model.timeline <|
+                --         \event ->
+                --             case event of
+                --                 Hufflepuff ->
+                --                     yellow
+                --                 Griffyndor ->
+                --                     red
+                --                 Slytherin ->
+                --                     green
+                --                 Ravenclaw ->
+                --                     blue
+                --     )
+                -- )
                 ]
-                [ case Animator.moveMotion model.timeline toPos of
+                [ case Animator.move model.timeline toPos of
                     { position, velocity } ->
                         Html.div []
                             [ Html.div [] [ Html.text "pos: ", Html.text (String.fromFloat position) ]
@@ -141,9 +139,9 @@ view model =
         , Html.map ChartMsg
             (Help.Plot.view
                 model.chart
-                (renderPoints Animator.moveMotion model.timeline toPos)
+                (renderPoints Animator.move model.timeline toPos)
                 (renderEvents (Internal.Timeline.getEvents model.timeline))
-                { position = Animator.move model.timeline toPos
+                { position = .position (Animator.move model.timeline toPos)
                 , time = toFloat (Time.posixToMillis model.time)
                 }
             )
@@ -209,7 +207,7 @@ update msg model =
         QueueThree ->
             let
                 addToQueue _ ( q, house ) =
-                    ( Animator.wait (Animator.seconds 0.5)
+                    ( Animator.wait (Animator.seconds 1)
                         :: Animator.event (Animator.seconds 1) (next house)
                         :: q
                     , next house
@@ -220,8 +218,7 @@ update msg model =
             in
             ( { model
                 | timeline =
-                    Animator.queue (List.reverse forQueue) model.timeline
-                , house = newHouse
+                    Animator.queue (Animator.wait (Animator.seconds 0.5) :: List.reverse forQueue) model.timeline
               }
             , Cmd.none
             )
@@ -298,10 +295,10 @@ toHousePositionWithOrbit event =
         Griffyndor ->
             Animator.orbit
                 { point = 400
-                , duration = Animator.millis 100
+                , duration = Animator.millis 200
                 , toPosition =
                     \u ->
-                        20 * sin (u * (2 * pi))
+                        100 * sin (u * (2 * pi))
                 }
 
         Slytherin ->
