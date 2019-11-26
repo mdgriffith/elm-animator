@@ -1,19 +1,16 @@
 module Internal.Interpolate exposing
     ( color
-    , Motion, motion, toMotion
-    , Movement(..), movement, toMovement
-    , MotionMovement, derivativeOfEasing, mobilize
+    , Movement(..), move
+    , derivativeOfEasing
     )
 
 {-|
 
-@docs point, toPoint
+@docs color
 
-@docs color, linear
+@docs Movement, move
 
-@docs Motion, motion, toMotion
-
-@docs Movement, movement, toMovement
+@docs derivativeOfEasing
 
 -}
 
@@ -69,76 +66,13 @@ type alias PointMotion =
 --     { x = toMotion (mapEventPair .x maybePrev) current.x now (mapEventPair .x maybeLookAhead)
 --     , y = toMotion (mapEventPair .y maybePrev) current.y now (mapEventPair .y maybeLookAhead)
 --     }
+-- oscillate around a point
+-- or go to a specific position
 
 
-motion : Timeline.Interpolator Motion
-motion p1 p2 progress =
-    let
-        t =
-            progress
-
-        curve =
-            CubicSpline2d.fromEndpoints
-                (Point2d.unitless 0 p1.position)
-                (Vector2d.unitless 1 p1.velocity)
-                (Point2d.unitless 1 p2.position)
-                (Vector2d.unitless 1 p2.velocity)
-    in
-    { position =
-        unwrapQuantity (Point2d.yCoordinate (CubicSpline2d.pointOn curve t))
-    , velocity =
-        unwrapQuantity (Vector2d.yComponent (CubicSpline2d.firstDerivative curve t))
-    , between =
-        Just
-            ( { position = p1.position, velocity = p1.velocity }
-            , { position = p2.position, velocity = p2.velocity }
-            )
-    }
-
-
-toMotion : Timeline.Promoter event Float Motion
-toMotion lookup maybePrev (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead =
-    let
-        currentPos =
-            lookup target
-    in
-    case maybePrev of
-        Nothing ->
-            -- maybePrev is Nothing when we're at the very first element.
-            { position = currentPos
-            , velocity = 0
-            , between = Nothing
-            }
-
-        Just _ ->
-            case maybeLookAhead of
-                Nothing ->
-                    { position = currentPos
-                    , velocity = 0
-                    , between = Nothing
-                    }
-
-                Just (Timeline.Occurring ahead aheadTime ahedDwell) ->
-                    { position = currentPos
-                    , velocity =
-                        1000 * ((lookup ahead - currentPos) / Duration.inMilliseconds (Time.duration aheadTime targetTime))
-                    , between = Nothing
-                    }
-
-
-type
-    Movement
-    -- oscillate around a point
+type Movement
     = Oscillate Float Time.Duration (Float -> Float)
     | Position Float
-
-
-type alias MotionMovement =
-    { movement : Movement
-    , position : Float
-    , velocity : Float
-    , time : Time.Absolute
-    }
 
 
 wrapUnitAfter dur total =
@@ -155,147 +89,6 @@ wrapUnitAfter dur total =
     else
         toFloat (totalDuration |> modBy duration)
             / toFloat duration
-
-
-{-| Move between events
--}
-movement : Timeline.Interpolator MotionMovement
-movement one two progress =
-    -- if progress.eventsAreEqual then
-    --     -- this means we're "resting" at event one
-    --     let
-    --         totalDuration =
-    --             Quantity.multiplyBy progress.percent (Time.duration one.time two.time)
-    --         pos =
-    --             case one.movement of
-    --                 Oscillate center duration toX ->
-    --                     center + toX (wrapUnitAfter duration totalDuration)
-    --                 Position x ->
-    --                     x
-    --         velocity =
-    --             case one.movement of
-    --                 Oscillate center duration toX ->
-    --                     one.velocity
-    --                 Position x ->
-    --                     one.velocity
-    --     in
-    --     { position = pos
-    --     , velocity = velocity
-    --     , movement = one.movement
-    --     , time = one.time
-    --     }
-    -- else
-    let
-        t =
-            progress
-
-        totalDuration =
-            Quantity.multiplyBy t (Time.duration one.time two.time)
-
-        p1 =
-            case one.movement of
-                Oscillate center duration toX ->
-                    center
-
-                -- + toX (wrapUnitAfter duration totalDuration)
-                Position x ->
-                    x
-
-        p2 =
-            case two.movement of
-                Oscillate center duration toX ->
-                    center
-
-                --+ toX (wrapUnitAfter duration totalDuration)
-                Position x ->
-                    x
-
-        v1 =
-            case one.movement of
-                Oscillate center duration toX ->
-                    one.velocity
-
-                Position x ->
-                    one.velocity
-
-        v2 =
-            case two.movement of
-                Oscillate center duration toX ->
-                    one.velocity
-
-                Position x ->
-                    two.velocity
-    in
-    if p1 == p2 && v1 == v2 then
-        -- avoid some involved math when possible
-        { position = p1
-        , velocity = v1
-        , movement = one.movement
-        , time = one.time
-        }
-
-    else
-        let
-            curve =
-                CubicSpline2d.fromEndpoints
-                    (Point2d.unitless 0 p1)
-                    (Vector2d.unitless 1 v1)
-                    (Point2d.unitless 1 p2)
-                    (Vector2d.unitless 1 v2)
-        in
-        { position =
-            unwrapQuantity (Point2d.yCoordinate (CubicSpline2d.pointOn curve t))
-        , velocity =
-            unwrapQuantity (Vector2d.yComponent (CubicSpline2d.firstDerivative curve t))
-        , movement = one.movement
-        , time = one.time
-        }
-
-
-toMovement : Timeline.Promoter event Movement MotionMovement
-toMovement lookup maybePrev (Timeline.Occurring target targetTime targetDwell) maybeLookAhead =
-    let
-        anchorPosition =
-            case lookup target of
-                Oscillate center _ toX ->
-                    center + toX 0
-
-                Position x ->
-                    x
-    in
-    -- case maybePrev of
-    --     Nothing ->
-    --         -- maybePrev is Nothing when we're at the very first element.
-    --         { position = anchorPosition
-    --         , velocity = 0
-    --         , movement = lookup target
-    --         , time = targetTime
-    --         }
-    --     Just ( prev, prevTime ) ->
-    case maybeLookAhead of
-        Nothing ->
-            { position = anchorPosition
-            , velocity = 0
-            , movement = lookup target
-            , time = targetTime
-            }
-
-        Just (Timeline.Occurring ahead aheadTime aheadDwell) ->
-            let
-                aheadPosition =
-                    case lookup ahead of
-                        Oscillate center _ toX ->
-                            center + toX 0
-
-                        Position x ->
-                            x
-            in
-            { position = anchorPosition
-            , velocity =
-                1000 * ((aheadPosition - anchorPosition) / Duration.inMilliseconds (Time.duration aheadTime targetTime))
-            , movement = lookup target
-            , time = targetTime
-            }
 
 
 type alias Progress =
@@ -315,10 +108,10 @@ type alias State =
         - or while the target event has been active
 
 -}
-mobilize : (event -> Movement) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase State -> State
-mobilize lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead phase =
+move : (event -> Movement) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase State -> State
+move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead phase =
     let
-        anchorPosition =
+        targetPosition =
             case lookup target of
                 Oscillate center _ toX ->
                     center + toX 0
@@ -328,7 +121,7 @@ mobilize lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead
     in
     case phase of
         Timeline.Start ->
-            { position = anchorPosition
+            { position = targetPosition
             , velocity = 0
             }
 
@@ -360,45 +153,24 @@ mobilize lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead
                                     Oscillate center freq toX ->
                                         -- calc forward velocity?
                                         1000
-                                            * ((center - anchorPosition)
+                                            * ((center - targetPosition)
                                                 / Duration.inMilliseconds (Time.duration aheadTime targetTime)
                                               )
 
                                     Position aheadPosition ->
                                         -- we're not dwelling here, and we're moving on to `ahead
-                                        -- 1000
-                                        --     * ((aheadPosition - anchorPosition)
-                                        --         / Duration.inMilliseconds (Time.duration aheadTime targetTime)
-                                        --       )
-                                        0
+                                        1000
+                                            * ((aheadPosition - targetPosition)
+                                                / Duration.inMilliseconds (Time.duration aheadTime targetTime)
+                                              )
 
                     Just dwell ->
                         case lookup target of
                             Oscillate center period toX ->
-                                -- TODO, calc velocity
                                 derivativeOfEasing toX period (wrapUnitAfter period dwell)
 
                             Position aheadPosition ->
                                 0
-
-            -- case maybeLookAhead of
-            --     Nothing ->
-            --         -- we are dwelling here
-            --         -- oscillator would have a velocity
-            --         case lookup target of
-            --             Oscillate center period toX ->
-            --                 -- derivativeOfEasing toX period (wrapUnitAfter period dwell)
-            --                 0
-            --             Position aheadPosition ->
-            --                 0
-            --     Just (Timeline.Occurring lookAhead aheadTime maybeLookAheadDwell) ->
-            --         case lookup lookAhead of
-            --             Oscillate center period toX ->
-            --                 -- TODO, calc velocity
-            --                 -- derivativeOfEasing toX period 0
-            --                 0
-            --             Position aheadPosition ->
-            --                 0
             }
 
         Timeline.TransitioningTo progress state ->
@@ -418,7 +190,7 @@ mobilize lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead
 
                                 Position aheadPosition ->
                                     1000
-                                        * ((aheadPosition - anchorPosition)
+                                        * ((aheadPosition - targetPosition)
                                             / Duration.inMilliseconds (Time.duration aheadTime targetTime)
                                           )
 
@@ -426,7 +198,7 @@ mobilize lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead
                     CubicSpline2d.fromEndpoints
                         (Point2d.unitless 0 state.position)
                         (Vector2d.unitless 1 state.velocity)
-                        (Point2d.unitless 1 anchorPosition)
+                        (Point2d.unitless 1 targetPosition)
                         (Vector2d.unitless 1 velocityAtEndOfTransition)
             in
             { position =
@@ -478,21 +250,9 @@ derivativeOfEasing ease period target =
                 16 / Duration.inMilliseconds period
 
             dx =
-                if target + (2 * deltaSample) > 1 then
-                    -- target is too close to end, calculate from behind
-                    approaching
-                        (ease (target - deltaSample) - ease target)
-                        (ease (target - (2 * deltaSample)) - ease (target - deltaSample))
-
-                else if target - (2 * deltaSample) < 0 then
-                    -- target is too close to beginning
-                    approaching
-                        (ease (target + deltaSample) - ease target)
-                        (ease (target + (2 * deltaSample)) - ease (target + deltaSample))
-
-                else
-                    -- or take the average of one sample before and one after
-                    0
+                avg
+                    (ease target - ease (target - deltaSample))
+                    (ease (target + deltaSample) - ease target)
         in
         dx / deltaSample
 

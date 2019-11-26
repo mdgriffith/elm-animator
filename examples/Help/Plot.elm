@@ -60,20 +60,27 @@ update msg model =
 -- VIEW
 
 
-view : Model -> List { position : Float, time : Float } -> List { position : Float, time : Float } -> { position : Float, time : Float } -> Svg Msg
-view model points events current =
+view :
+    Model
+    -> List { position : Float, time : Float }
+    -> List { position : Float, time : Float }
+    -> List { position : Float, time : Float }
+    -> { position : Float, time : Float }
+    -> Svg Msg
+view model points velocities events current =
     Html.div
         [ class "container" ]
-        [ chart model points events current ]
+        [ chart model points velocities events current ]
 
 
 chart :
     Model
     -> List { position : Float, time : Float }
     -> List { position : Float, time : Float }
+    -> List { position : Float, time : Float }
     -> { position : Float, time : Float }
     -> Html.Html Msg
-chart model points events current =
+chart model points velocities events current =
     LineChart.viewCustom
         { y = Axis.default 450 "Value" .position
         , x = Axis.default 1800 "Time" .time
@@ -92,7 +99,8 @@ chart model points events current =
         , line = Line.hoverOne model.hovering
         , dots = Dots.hoverOne model.hovering
         }
-        [ LineChart.line Color.purple Dots.triangle "Position" points
+        [ LineChart.line Color.purple Dots.none "Position" points
+        , LineChart.line Color.blue Dots.none "Velocity" velocities
         , LineChart.line Color.green Dots.circle "Currently" [ current ]
-        , LineChart.line Color.yellow Dots.plus "Events" events
+        , LineChart.line Color.green Dots.plus "Events" events
         ]

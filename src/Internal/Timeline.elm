@@ -4,7 +4,7 @@ module Internal.Timeline exposing
     , Schedule(..), Event(..)
     , rewrite, after, between
     , foldp, update, needsUpdate
-    , Phase(..), foldp2
+    , Phase(..)
     )
 
 {-|
@@ -57,9 +57,9 @@ type Timetable event
     = Timetable Time.Absolute (List (Occurring event))
 
 
-type
-    Occurring event
-    -- When the event occurs, and how long we're dwelling at this event (or no dwelling at all)
+{-| When the event occurs, and how long we're dwelling at this event (or no dwelling at all)
+-}
+type Occurring event
     = Occurring event Time.Absolute (Maybe Time.Duration)
 
 
@@ -284,129 +284,50 @@ And we have some type aliases to capture how to create each one of those values.
     `Interpolator` is a function that maps linearly between two `motions`.
 
 -}
-foldp : (event -> anchor) -> Promoter event anchor motion -> Interpolator motion -> Timeline event -> motion
-foldp lookup promote interp (Timeline timeline) =
-    let
-        startingEvent =
-            case timeline.events of
-                [] ->
-                    Occurring timeline.initial timeline.now Nothing
+foldp : (event -> anchor) -> Interpolator event anchor motion -> Timeline event -> motion
+foldp lookup mobilize (Timeline timeline) =
+    case timeline.events of
+        [] ->
+            -- Generally, this shouldn't be reachable because we require an event on initialization
+            -- likely we'll want to change events to `(start, [remaining])` at some point in the future
+            mobilize lookup (Occurring timeline.initial timeline.now Nothing) Nothing Start
 
-                recent :: _ ->
-                    Occurring timeline.initial timeline.now Nothing
-    in
-    .state <|
-        List.foldl
-            (\_ cursor ->
-                if cursor.done then
-                    cursor
-
-                else
-                    case cursor.events of
-                        [] ->
+        startingEvent :: _ ->
+            .state <|
+                List.foldl
+                    (\_ cursor ->
+                        if cursor.done then
                             cursor
 
-                        target :: [] ->
-                            let
-                                targetTime =
-                                    getOccurringTime target
-                            in
-                            --this is the last event, interpolate to the correct position
-                            if Time.thisAfterThat timeline.now targetTime then
-                                let
-                                    promotedTarget =
-                                        promote lookup
-                                            (Just cursor.previous)
-                                            target
-                                            Nothing
+                        else
+                            case cursor.events of
+                                [] ->
+                                    cursor
 
-                                    progress =
-                                        Time.progress (getOccurringTime cursor.previous) targetTime timeline.now
-                                in
-                                -- happened in the past,
-                                -- capture a snapshot of what happens directly on that event
-                                { state =
-                                    interp cursor.state
-                                        promotedTarget
-                                        progress
-                                , events = []
-                                , previous = target
-                                , done = True
-                                }
-
-                            else
-                                let
-                                    promotedTarget =
-                                        promote lookup
-                                            (Just cursor.previous)
-                                            target
-                                            Nothing
-
-                                    progress =
-                                        Time.progress (getOccurringTime cursor.previous) targetTime timeline.now
-                                in
-                                -- happened in the past,
-                                -- capture a snapshot of what happens directly on that event
-                                { state =
-                                    interp cursor.state
-                                        promotedTarget
-                                        progress
-                                , events = []
-                                , previous = target
-                                , done = True
-                                }
-
-                        target :: lookAhead :: remaining ->
-                            let
-                                targetTime =
-                                    getOccurringTime target
-                            in
-                            if Time.thisAfterThat timeline.now targetTime then
-                                -- happened in the past,
-                                -- capture a snapshot of what happens directly on that event
-                                { state =
-                                    promote
-                                        lookup
-                                        (Just cursor.previous)
-                                        target
-                                        (Just lookAhead)
-                                , events = lookAhead :: remaining
-                                , previous = target
-                                , done = False
-                                }
-
-                            else
-                                -- This transition is happening right now.
-                                -- Interpolate to this exact time and flag as done.
-                                let
-                                    promotedTarget =
-                                        promote lookup
-                                            (Just cursor.previous)
-                                            target
-                                            (Just lookAhead)
-
-                                    progress =
-                                        Time.progress (getOccurringTime cursor.previous) targetTime timeline.now
-                                in
-                                -- happened in the past,
-                                -- capture a snapshot of what happens directly on that event
-                                { state =
-                                    interp cursor.state
-                                        promotedTarget
-                                        progress
-                                , events = lookAhead :: remaining
-                                , previous = target
-                                , done = True
-                                }
-            )
-            { state = promote lookup Nothing startingEvent Nothing
-            , events = timeline.events
-            , previous = startingEvent
-            , done = List.isEmpty timeline.events
-            }
-            timeline.events
+                                target :: remaining ->
+                                    case getPhase cursor.previous target timeline.now cursor.state of
+                                        ( finished, phase ) ->
+                                            -- let
+                                            --     _ =
+                                            --         Debug.log "target" target
+                                            -- in
+                                            -- Debug.log "rsult" <|
+                                            { state =
+                                                mobilize lookup target (List.head remaining) phase
+                                            , events = remaining
+                                            , previous = target
+                                            , done = finished == Finished
+                                            }
+                    )
+                    { state = mobilize lookup startingEvent (List.head (List.drop 1 timeline.events)) Start
+                    , events = timeline.events
+                    , previous = startingEvent
+                    , done = List.isEmpty timeline.events
+                    }
+                    timeline.events
 
 
+getPhase : Occurring event -> Occurring event -> Time.Absolute -> state -> ( DoneOr, Phase state )
 getPhase (Occurring prev prevTime maybePrevDwell) (Occurring event eventTime maybeDwell) now state =
     let
         eventEndTime =
@@ -461,51 +382,7 @@ type DoneOr
     | NotDone
 
 
-{-| -}
-foldp2 : (event -> anchor) -> Mobilizer event anchor motion -> Timeline event -> motion
-foldp2 lookup mobilize (Timeline timeline) =
-    case timeline.events of
-        [] ->
-            -- Generally, this shouldn't be reachable because we require an event on initialization
-            -- likely we'll want to change events to `(start, [remaining])` at some point in the future
-            mobilize lookup (Occurring timeline.initial timeline.now Nothing) Nothing Start
-
-        startingEvent :: _ ->
-            .state <|
-                List.foldl
-                    (\_ cursor ->
-                        if cursor.done then
-                            cursor
-
-                        else
-                            case cursor.events of
-                                [] ->
-                                    cursor
-
-                                target :: remaining ->
-                                    case getPhase cursor.previous target timeline.now cursor.state of
-                                        ( finished, phase ) ->
-                                            -- let
-                                            --     _ =
-                                            --         Debug.log "target" target
-                                            -- in
-                                            -- Debug.log "rsult" <|
-                                            { state =
-                                                mobilize lookup target (List.head remaining) phase
-                                            , events = remaining
-                                            , previous = target
-                                            , done = finished == Finished
-                                            }
-                    )
-                    { state = mobilize lookup startingEvent (List.head (List.drop 1 timeline.events)) Start
-                    , events = timeline.events
-                    , previous = startingEvent
-                    , done = List.isEmpty timeline.events
-                    }
-                    timeline.events
-
-
-type alias Mobilizer event anchor state =
+type alias Interpolator event anchor state =
     (event -> anchor)
     -> Occurring event
     -> Maybe (Occurring event)
@@ -515,11 +392,3 @@ type alias Mobilizer event anchor state =
 
 type alias Progress =
     Float
-
-
-type alias Promoter event anchor state =
-    (event -> anchor) -> Maybe (Occurring event) -> Occurring event -> Maybe (Occurring event) -> state
-
-
-type alias Interpolator state =
-    state -> state -> Progress -> state

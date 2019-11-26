@@ -140,6 +140,7 @@ view model =
             (Help.Plot.view
                 model.chart
                 (renderPoints Animator.move model.timeline toPos)
+                (renderVelocities Animator.move model.timeline toPos)
                 (renderEvents (Internal.Timeline.getEvents model.timeline))
                 { position = .position (Animator.move model.timeline toPos)
                 , time = toFloat (Time.posixToMillis model.time)
@@ -164,17 +165,35 @@ renderPoints move timeline toPos =
         (\i rendered ->
             let
                 currentTime =
-                    Time.millisToPosix (i * 50)
+                    Time.millisToPosix (i * 16)
             in
             case move (Animator.update currentTime timeline) toPos of
                 current ->
-                    { time = toFloat i * 50
+                    { time = toFloat i * 16
                     , position = current.position
                     }
                         :: rendered
         )
         []
-        (List.range 0 100)
+        (List.range 0 400)
+
+
+renderVelocities move timeline toPos =
+    List.foldl
+        (\i rendered ->
+            let
+                currentTime =
+                    Time.millisToPosix (i * 16)
+            in
+            case move (Animator.update currentTime timeline) toPos of
+                current ->
+                    { time = toFloat i * 16
+                    , position = current.velocity
+                    }
+                        :: rendered
+        )
+        []
+        (List.range 0 400)
 
 
 next house =

@@ -216,19 +216,12 @@ float timeline lookup =
 {-| -}
 color : Timeline event -> (event -> Color) -> Color
 color timeline lookup =
-    Timeline.foldp2 lookup
+    Timeline.foldp lookup
         Interpolate.color
         timeline
 
 
 
--- {-| -}
--- motion : Timeline event -> (event -> Float) -> Interpolate.Motion
--- motion timeline lookup =
---     Timeline.foldp lookup
---         Interpolate.toMotion
---         Interpolate.motion
---         timeline
 -- {-| -}
 -- position : Timeline event -> (event -> { x : Float, y : Float }) -> { x : Float, y : Float }
 -- position timeline lookup =
@@ -246,29 +239,13 @@ color timeline lookup =
 
 move : Timeline event -> (event -> Movement) -> { position : Float, velocity : Float }
 move timeline lookup =
-    Timeline.foldp2 lookup
-        Interpolate.mobilize
+    Timeline.foldp lookup
+        Interpolate.move
         timeline
 
 
 type alias Movement =
     Interpolate.Movement
-
-
-
--- move : Timeline event -> (event -> Movement) -> Float
--- move timeline lookup =
---     .position <|
---         Timeline.foldp lookup
---             Interpolate.toMovement
---             Interpolate.movement
---             timeline
--- moveMotion : Timeline event -> (event -> Movement) -> Interpolate.MotionMovement
--- moveMotion timeline lookup =
---     Timeline.foldp lookup
---         Interpolate.toMovement
---         Interpolate.movement
---         timeline
 
 
 to : Float -> Movement
