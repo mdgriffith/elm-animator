@@ -1,10 +1,12 @@
-module Interpolation exposing (..)
+module Interpolation exposing (easingDerivatives, timeline)
 
+import Animator
 import Duration
 import Expect exposing (Expectation, FloatingPointTolerance(..))
 import Fuzz exposing (Fuzzer, float, int, list, string)
 import Internal.Interpolate as Interpolate
 import Test exposing (..)
+import Time
 
 
 oneSecond =
@@ -19,8 +21,8 @@ cosInterpolation x =
     cos (2 * pi * x)
 
 
-suite : Test
-suite =
+easingDerivatives : Test
+easingDerivatives =
     describe "Calc Derivative of Easing Fn"
         [ test "deriv of sin(0) == cos(0)" <|
             \_ ->
@@ -28,8 +30,6 @@ suite =
                     dx =
                         Interpolate.derivativeOfEasing sinInterpolation oneSecond 0
                 in
-                -- Expect.equal dx
-                --     (cos 0)
                 Expect.within
                     (Absolute 0.01)
                     -- we divide by 2pi here because we're squishing our sin function into an easing 0-1 range.
@@ -51,3 +51,98 @@ suite =
                     (dx / (2 * pi))
                     (cos x)
         ]
+
+
+pointsOnTimeline =
+    Fuzz.map Time.millisToPosix
+        (Fuzz.intRange -160 6500)
+
+
+harryPotterHouseTimeline =
+    Animator.init (Time.millisToPosix 0) Hufflepuff
+        |> Animator.queue
+            [ Animator.wait (Animator.seconds 0.5)
+            , Animator.event (Animator.seconds 1) Griffyndor
+            , Animator.wait (Animator.seconds 1.0)
+            , Animator.event (Animator.seconds 1) Slytherin
+            , Animator.wait (Animator.seconds 1.0)
+            , Animator.event (Animator.seconds 1) Ravenclaw
+            , Animator.wait (Animator.seconds 1.0)
+            ]
+        |> Animator.update (Time.millisToPosix 0)
+
+
+mapTime fn time =
+    Time.millisToPosix (fn (Time.posixToMillis time))
+
+
+timeline : Test
+timeline =
+    describe "Timeline"
+        [ fuzz pointsOnTimeline "All points report the correct velocity" <|
+            \time ->
+                let
+                    before =
+                        mapTime (\t -> t - 16) time
+
+                    after =
+                        mapTime (\t -> t + 16) time
+
+                    zero =
+                        Animator.move (Animator.update before harryPotterHouseTimeline) toPosition
+
+                    one =
+                        Animator.move (Animator.update time harryPotterHouseTimeline) toPosition
+
+                    two =
+                        Animator.move (Animator.update after harryPotterHouseTimeline) toPosition
+
+                    first =
+                        (one.position - zero.position) / 16
+
+                    second =
+                        (two.position - one.position) / 16
+
+                    expected =
+                        1000 * avg first second
+
+                    _ =
+                        Debug.log "deriv" ( time, expected, one.velocity )
+                in
+                Expect.within
+                    (Absolute 0.1)
+                    one.velocity
+                    (1000 * second)
+        ]
+
+
+avg one two =
+    (one + two) / 2
+
+
+type House
+    = Hufflepuff
+    | Griffyndor
+    | Slytherin
+    | Ravenclaw
+
+
+toPosition event =
+    case event of
+        Hufflepuff ->
+            Animator.to 100
+
+        Griffyndor ->
+            Animator.orbit
+                { point = 400
+                , duration = Animator.millis 200
+                , toPosition =
+                    \u ->
+                        100 * sin (u * (2 * pi))
+                }
+
+        Slytherin ->
+            Animator.to 700
+
+        Ravenclaw ->
+            Animator.to 1000
