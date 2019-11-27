@@ -1,6 +1,6 @@
 module Internal.Timeline exposing
     ( Timeline(..), TimelineDetails, Occurring(..), getEvents
-    , Interpolator, Promoter
+    , Interpolator
     , Schedule(..), Event(..)
     , rewrite, after, between
     , foldp, update, needsUpdate
@@ -11,7 +11,7 @@ module Internal.Timeline exposing
 
 @docs Timeline, TimelineDetails, Occurring, getEvents
 
-@docs Interpolator, Promoter
+@docs Interpolator
 
 @docs Schedule, Event
 
