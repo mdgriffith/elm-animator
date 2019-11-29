@@ -239,9 +239,23 @@ color timeline lookup =
 
 move : Timeline event -> (event -> Movement) -> { position : Float, velocity : Float }
 move timeline lookup =
-    Timeline.foldp lookup
-        Interpolate.move
-        timeline
+    unwrapUnits
+        (Timeline.foldp lookup
+            Interpolate.move
+            timeline
+        )
+
+
+unwrapUnits { position, velocity } =
+    { position =
+        case position of
+            Quantity.Quantity val ->
+                val
+    , velocity =
+        case velocity of
+            Quantity.Quantity val ->
+                val
+    }
 
 
 type alias Movement =

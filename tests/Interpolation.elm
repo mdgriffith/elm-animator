@@ -5,6 +5,8 @@ import Duration
 import Expect exposing (Expectation, FloatingPointTolerance(..))
 import Fuzz exposing (Fuzzer, float, int, list, string)
 import Internal.Interpolate as Interpolate
+import Pixels
+import Quantity
 import Test exposing (..)
 import Time
 
@@ -29,6 +31,7 @@ easingDerivatives =
                 let
                     dx =
                         Interpolate.derivativeOfEasing sinInterpolation oneSecond 0
+                            |> Pixels.inPixelsPerSecond
                 in
                 Expect.within
                     (Absolute 0.01)
@@ -42,6 +45,7 @@ easingDerivatives =
                 let
                     dx =
                         Interpolate.derivativeOfEasing sinInterpolation oneSecond x
+                            |> Pixels.inPixelsPerSecond
                 in
                 Expect.within
                     (Absolute 0.001)
@@ -82,11 +86,14 @@ timeline =
         [ fuzz pointsOnTimeline "All points report the correct velocity" <|
             \time ->
                 let
+                    resolution =
+                        1
+
                     before =
-                        mapTime (\t -> t - 16) time
+                        mapTime (\t -> t - resolution) time
 
                     after =
-                        mapTime (\t -> t + 16) time
+                        mapTime (\t -> t + resolution) time
 
                     zero =
                         Animator.move (Animator.update before harryPotterHouseTimeline) toPosition
@@ -98,21 +105,21 @@ timeline =
                         Animator.move (Animator.update after harryPotterHouseTimeline) toPosition
 
                     first =
-                        (one.position - zero.position) / 16
+                        (one.position - zero.position) / resolution
 
                     second =
-                        (two.position - one.position) / 16
+                        (two.position - one.position) / resolution
 
                     expected =
                         1000 * avg first second
 
-                    _ =
-                        Debug.log "deriv" ( time, expected, one.velocity )
+                    -- _ =
+                    --     Debug.log "deriv" ( time, expected, one.velocity )
                 in
                 Expect.within
-                    (Absolute 0.1)
+                    (Absolute 1)
                     one.velocity
-                    (1000 * second)
+                    expected
         ]
 
 

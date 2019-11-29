@@ -364,7 +364,13 @@ getPhase (Occurring prev prevTime maybePrevDwell) (Occurring event eventTime may
                     eventTime
                     now
         in
-        ( Finished, TransitioningTo progressToNewEvent state )
+        ( Finished
+        , TransitioningTo
+            { percent = progressToNewEvent
+            , previousTime = prevEventEndTime
+            }
+            state
+        )
 
 
 type Phase state
@@ -391,4 +397,6 @@ type alias Interpolator event anchor state =
 
 
 type alias Progress =
-    Float
+    { percent : Float
+    , previousTime : Time.Absolute
+    }

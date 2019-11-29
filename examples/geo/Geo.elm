@@ -35,6 +35,14 @@ update (NewValue newValue) _ =
     { x0 = newValue }
 
 
+current =
+    { current = { position = 246.6777623838098, velocity = 420.1534464839 }
+    , end = { position = 400, velocity = 602.1920926271441 }
+    , progress = 0.7
+    , start = { position = 100, velocity = 0 }
+    }
+
+
 view : Model -> Html Msg
 view { x0 } =
     let
@@ -50,12 +58,30 @@ view { x0 } =
             1000
 
         spline =
+            -- CubicSpline2d.fromEndpoints
+            --     (Point2d.pixels 100 100)
+            --     (Vector2d.pixels 100 0)
+            --     (Point2d.pixels 300 300)
+            --     (Vector2d.pixels 0 -300)
             CubicSpline2d.fromEndpoints
-                (Point2d.pixels 100 100)
-                (Vector2d.pixels 100 0)
-                (Point2d.pixels 300 300)
-                (Vector2d.pixels 0 -300)
+                (Point2d.pixels 100 current.start.position)
+                (Vector2d.pixels 100 current.start.velocity)
+                (Point2d.pixels 400 current.end.position)
+                (Vector2d.pixels 400 (-1 * current.end.velocity))
 
+        -- point on: Point2d { x = 212.5, y = 325.274011578393 }
+        -- point on: Point2d { x = 175, y = 325.274011578393 }
+        _ =
+            Debug.log "point on" (CubicSpline2d.pointOn spline 0.5)
+
+        _ =
+            Debug.log "deriv"
+                (CubicSpline2d.firstDerivative spline 0.5)
+
+        -- point on: Point2d { x = 175, y = 325.274011578393 } index.html:523:10
+        -- deriv: Vector2d { x = 200, y = 600.548023156786 }
+        -- point on: Point2d { x = 212.5, y = 325.274011578393 } index.html:523:10
+        -- deriv: Vector2d { x = 325, y = 600.548023156786 }
         svg =
             Svg.g []
                 [ Svg.cubicSpline2d

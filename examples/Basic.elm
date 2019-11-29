@@ -317,7 +317,7 @@ toHousePositionWithOrbit event =
                 , duration = Animator.millis 200
                 , toPosition =
                     \u ->
-                        100 * sin (u * (2 * pi))
+                        10 * sin (u * (2 * pi))
                 }
 
         Slytherin ->
