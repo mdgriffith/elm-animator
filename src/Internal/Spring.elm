@@ -1,4 +1,4 @@
-module Internal.Spring exposing (..)
+module Internal.Spring exposing (settlesAt, step)
 
 {-| Whew, math. Exciting isn't it?
 
@@ -35,7 +35,14 @@ we can calculate the settling time.
 
     z = c / c*
 
+    c* = 2 * sqrt (k * m)
+
     z = c / sqrt (m * k)
+
+Expanding our ts equation:
+
+    ts =
+        4 / ((c / sqrt (m * k)) * sqrt (k / m))
 
 
 # Our Usecase!
@@ -47,7 +54,31 @@ When interpolating a timeline and heading towards a resting state, we want to us
 -}
 
 
-spring dtms { stiffness, damping } motion =
+tolerance =
+    0.1
+
+
+vTolerance =
+    0.01
+
+
+step :
+    Float
+    ->
+        { stiffness : Float
+        , damping : Float
+        }
+    ->
+        { target : Float
+        , velocity : Float
+        , position : Float
+        }
+    ->
+        { target : Float
+        , velocity : Float
+        , position : Float
+        }
+step dtms { stiffness, damping } motion =
     let
         dt =
             dtms / 1000
@@ -81,6 +112,72 @@ spring dtms { stiffness, damping } motion =
             | position = newPos
             , velocity = newVelocity
         }
+
+
+{-|
+
+    We can detect when a spring will settle if it is underdamped (meaning it oscillates before resting)
+    <https://en.wikipedia.org/wiki/Settling_time>
+
+    However for critcally and overdamped systems it gets a lot more complicated.
+    Fortunately, I'm not sure that that's an issue as I don't think we want to model overdamped spring systems for animation.
+    https://electronics.stackexchange.com/questions/296567/over-and-critically-damped-systems-settling-time
+
+-}
+settlesAt : { stiffness : Float, damping : Float } -> Float
+settlesAt { stiffness, damping } =
+    let
+        k =
+            stiffness
+
+        c =
+            damping
+
+        cCritical =
+            2 * sqrt (k * m)
+
+        m =
+            1
+
+        springAspect =
+            sqrt (k / m)
+    in
+    if round c == round cCritical then
+        --critically damped
+        -- less tolerant
+        -- 1000 * (5.8335 / springAspect)
+        -- more tolerant
+        1000 * (8.5 / springAspect)
+
+    else if c > cCritical then
+        -- overdamped
+        -- *NOTE* this branch is definitely not correct.
+        -- this equation only applies to underdamped springs
+        -- However, I'm not sure how useful overdamped springs are in animation
+        -- so we can prevent this branch by constraining the API.
+        let
+            dampingAspect =
+                -- c / sqrt (m * k)
+                c / cCritical
+
+            toleranceForEquation =
+                -- this is about 4 for 2%
+                -1 * logBase e 0.005
+        in
+        1000 * (toleranceForEquation / (dampingAspect * springAspect))
+
+    else
+        -- underdamped
+        let
+            dampingAspect =
+                -- c / sqrt (m * k)
+                c / cCritical
+
+            toleranceForEquation =
+                -- this is about 4 for 2%
+                -1 * logBase e 0.005
+        in
+        1000 * (toleranceForEquation / (dampingAspect * springAspect))
 
 
 

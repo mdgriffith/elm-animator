@@ -122,13 +122,6 @@ velocityBetween one oneTime two twoTime =
     distance |> Quantity.per duration
 
 
-
---  1000
---         * ((center - targetPosition)
---             / Duration.inMilliseconds (Time.duration aheadTime targetTime)
---             )
-
-
 {-|
 
     `phase` captures if we are looking for the state:
@@ -327,3 +320,7 @@ color lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead ph
 average : Float -> Float -> Float -> Float
 average x y progress =
     sqrt ((x ^ 2) * (1 - progress) + (y ^ 2) * progress)
+
+
+
+-- f(t) = -1/2 e^(-6 t) (-2 e^(6 t) + sin(12 t) + 2 cos(12 t))

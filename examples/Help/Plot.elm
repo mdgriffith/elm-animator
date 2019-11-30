@@ -1,4 +1,4 @@
-module Help.Plot exposing (Model, Msg, init, update, view)
+module Help.Plot exposing (Model, Msg, init, spring, update, view)
 
 {-| -}
 
@@ -6,6 +6,7 @@ import Browser
 import Color
 import Html exposing (Html, div, h1, node, p, text)
 import Html.Attributes exposing (class)
+import Internal.Spring
 import LineChart as LineChart
 import LineChart.Area as Area
 import LineChart.Axis as Axis
@@ -103,4 +104,74 @@ chart model points velocities events current =
         , LineChart.line Color.blue Dots.none "Velocity" velocities
         , LineChart.line Color.green Dots.circle "Currently" [ current ]
         , LineChart.line Color.green Dots.plus "Events" events
+        ]
+
+
+spring :
+    { initialPosition : Float
+    , initialVelocity : Float
+    , stiffness : Float
+    , damping : Float
+    }
+    -> Html.Html msg
+spring cfg =
+    let
+        estimatedSettling =
+            Debug.log "settled"
+                { time =
+                    Internal.Spring.settlesAt
+                        { stiffness = cfg.stiffness
+                        , damping = cfg.damping
+                        }
+                , position = 1
+                , target = 1
+                , velocity = 0
+                }
+
+        springStart =
+            { target = 1
+            , position = cfg.initialPosition
+            , velocity = cfg.initialVelocity
+            , time = 0
+            }
+
+        points =
+            List.foldl
+                (\i ( motion, steps ) ->
+                    let
+                        new =
+                            Internal.Spring.step 16
+                                { stiffness = cfg.stiffness
+                                , damping = cfg.damping
+                                }
+                                motion
+
+                        newWithTime =
+                            { new | time = new.time + 16 }
+                    in
+                    ( newWithTime, newWithTime :: steps )
+                )
+                ( springStart
+                , [ springStart ]
+                )
+                (List.range 0 100)
+                |> Tuple.second
+    in
+    LineChart.viewCustom
+        { y = Axis.default 300 "Value" .position
+        , x = Axis.default 500 "Time" .time
+        , container = Container.styled "line-chart-1" [ ( "font-family", "monospace" ) ]
+        , interpolation = Interpolation.default
+        , intersection = Intersection.default
+        , legends = Legends.default
+        , events =
+            Events.default
+        , junk = Junk.default
+        , grid = Grid.default
+        , area = Area.default
+        , line = Line.default
+        , dots = Dots.default
+        }
+        [ LineChart.line Color.purple Dots.none "Position" points
+        , LineChart.line Color.green Dots.circle "Estimated Settle" [ estimatedSettling ]
         ]

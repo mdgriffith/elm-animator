@@ -74,7 +74,7 @@ view model =
                 [ Attr.type_ "range"
                 , Attr.value (String.fromInt (Time.posixToMillis model.time))
                 , Attr.min "0"
-                , Attr.max "4000"
+                , Attr.max "6500"
                 , Attr.style "width" "1000px"
                 , Events.onInput
                     (\newTime ->
@@ -146,6 +146,72 @@ view model =
                 , time = toFloat (Time.posixToMillis model.time)
                 }
             )
+
+        -- wobbly
+        , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
+            [ Help.Plot.spring
+                { stiffness = 180
+                , damping = 12
+                , initialPosition = 0
+                , initialVelocity = 0
+                }
+            , Help.Plot.spring
+                { stiffness = 180
+                , damping = 12
+                , initialPosition = -10
+                , initialVelocity = 0
+                }
+            , Help.Plot.spring
+                { stiffness = 180
+                , damping = 12
+                , initialPosition = 0
+                , initialVelocity = 500
+                }
+            ]
+
+        -- noWobble
+        , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
+            [ Help.Plot.spring
+                { stiffness = 170
+                , damping = 26
+                , initialPosition = 0
+                , initialVelocity = 0
+                }
+            , Help.Plot.spring
+                { stiffness = 170
+                , damping = 26
+                , initialPosition = -10
+                , initialVelocity = 0
+                }
+            , Help.Plot.spring
+                { stiffness = 170
+                , damping = 26
+                , initialPosition = 0
+                , initialVelocity = 500
+                }
+            ]
+
+        -- stiff
+        -- , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
+        --     [ Help.Plot.spring
+        --         { stiffness = 210
+        --         , damping = 20
+        --         , initialPosition = 0
+        --         , initialVelocity = 0
+        --         }
+        --     , Help.Plot.spring
+        --         { stiffness = 210
+        --         , damping = 20
+        --         , initialPosition = -10
+        --         , initialVelocity = 0
+        --         }
+        --     , Help.Plot.spring
+        --         { stiffness = 210
+        --         , damping = 20
+        --         , initialPosition = 0
+        --         , initialVelocity = 500
+        --         }
+        --     ]
         ]
     }
 
