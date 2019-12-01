@@ -1,6 +1,6 @@
 module Internal.Interpolate exposing
     ( color
-    , Movement(..), move
+    , Movement(..), move, xy, xyz
     , derivativeOfEasing
     )
 
@@ -8,7 +8,7 @@ module Internal.Interpolate exposing
 
 @docs color
 
-@docs Movement, move
+@docs Movement, move, xy, xyz
 
 @docs derivativeOfEasing
 
@@ -17,6 +17,7 @@ module Internal.Interpolate exposing
 import Color
 import CubicSpline2d
 import Duration
+import Internal.Spring as Spring
 import Internal.Time as Time
 import Internal.Timeline as Timeline
 import Pixels
@@ -25,52 +26,17 @@ import Quantity
 import Vector2d
 
 
-type alias Motion =
-    { position : Float
-    , velocity : Float
-    , between : Maybe ( P, P )
-    }
-
-
-type alias P =
-    { position : Float
-    , velocity : Float
-    }
-
-
 unwrapQuantity (Quantity.Quantity value) =
     value
 
 
-type alias Point =
-    { x : Float
-    , y : Float
-    }
+{-|
 
+    oscillate around a point
 
-type alias PointMotion =
-    { x : Motion
-    , y : Motion
-    }
+    or go to a specific position
 
-
-
--- point : Timeline.Interpolator PointMotion
--- point one two progress =
---     { x = motion one.x two.x progress
---     , y = motion one.y two.y progress
---     }
--- mapEventPair fn maybe =
---     Maybe.map (Tuple.mapFirst fn) maybe
--- toPoint : Timeline.Promoter event Point PointMotion
--- toPoint lookup maybePrev current now maybeLookAhead =
---     { x = toMotion (mapEventPair .x maybePrev) current.x now (mapEventPair .x maybeLookAhead)
---     , y = toMotion (mapEventPair .y maybePrev) current.y now (mapEventPair .y maybeLookAhead)
---     }
--- oscillate around a point
--- or go to a specific position
-
-
+-}
 type Movement
     = Oscillate Float Time.Duration (Float -> Float)
     | Position Float
@@ -102,24 +68,32 @@ type alias State =
     }
 
 
-type alias Pixels =
-    Quantity.Quantity Float Pixels.Pixels
+type alias XY thing =
+    { x : thing
+    , y : thing
+    }
 
 
-type alias PixelsPerSecond =
-    Quantity.Quantity Float Pixels.PixelsPerSecond
+xy : (event -> XY Movement) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase (XY State) -> XY State
+xy lookup current maybeLookAhead phase =
+    { x = move (lookup >> .x) current maybeLookAhead (Timeline.mapPhase .x phase)
+    , y = move (lookup >> .y) current maybeLookAhead (Timeline.mapPhase .y phase)
+    }
 
 
-velocityBetween : Pixels -> Time.Absolute -> Pixels -> Time.Absolute -> PixelsPerSecond
-velocityBetween one oneTime two twoTime =
-    let
-        distance =
-            one |> Quantity.minus two
+type alias XYZ thing =
+    { x : thing
+    , y : thing
+    , z : thing
+    }
 
-        duration =
-            Time.duration oneTime twoTime
-    in
-    distance |> Quantity.per duration
+
+xyz : (event -> XYZ Movement) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase (XYZ State) -> XYZ State
+xyz lookup current maybeLookAhead phase =
+    { x = move (lookup >> .x) current maybeLookAhead (Timeline.mapPhase .x phase)
+    , y = move (lookup >> .y) current maybeLookAhead (Timeline.mapPhase .y phase)
+    , z = move (lookup >> .z) current maybeLookAhead (Timeline.mapPhase .z phase)
+    }
 
 
 {-|
@@ -290,6 +264,26 @@ derivativeOfEasing ease period target =
         dx |> Quantity.per (Duration.milliseconds sampleSize)
 
 
+type alias Pixels =
+    Quantity.Quantity Float Pixels.Pixels
+
+
+type alias PixelsPerSecond =
+    Quantity.Quantity Float Pixels.PixelsPerSecond
+
+
+velocityBetween : Pixels -> Time.Absolute -> Pixels -> Time.Absolute -> PixelsPerSecond
+velocityBetween one oneTime two twoTime =
+    let
+        distance =
+            one |> Quantity.minus two
+
+        duration =
+            Time.duration oneTime twoTime
+    in
+    distance |> Quantity.per duration
+
+
 color : (event -> Color.Color) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase Color.Color -> Color.Color
 color lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead phase =
     case phase of
@@ -319,8 +313,20 @@ color lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead ph
 
 average : Float -> Float -> Float -> Float
 average x y progress =
-    sqrt ((x ^ 2) * (1 - progress) + (y ^ 2) * progress)
+    sqrt ((x * x) * (1 - progress) + (y * y) * progress)
 
 
 
 -- f(t) = -1/2 e^(-6 t) (-2 e^(6 t) + sin(12 t) + 2 cos(12 t))
+-- mix two easing functions given a weight and a percent (what point on the easing are we at)
+
+
+mix fnA fnB weightB percent =
+    let
+        a =
+            fnA percent
+
+        b =
+            fnB percent
+    in
+    a + weightB (b - a)

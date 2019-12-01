@@ -31,7 +31,7 @@ module Animator exposing
 
 @docs float, color
 
-@docs move, to, orbit
+@docs move, xy, xyz, to, orbit
 
 -}
 
@@ -221,20 +221,33 @@ color timeline lookup =
         timeline
 
 
+{-| -}
+xy : Timeline event -> (event -> { x : Movement, y : Movement }) -> { x : Float, y : Float }
+xy timeline lookup =
+    (\{ x, y } ->
+        { x = unwrapUnits x |> .position
+        , y = unwrapUnits y |> .position
+        }
+    )
+    <|
+        Timeline.foldp lookup
+            Interpolate.xy
+            timeline
 
--- {-| -}
--- position : Timeline event -> (event -> { x : Float, y : Float }) -> { x : Float, y : Float }
--- position timeline lookup =
---     (\{ x, y } ->
---         { x = x.position
---         , y = y.position
---         }
---     )
---     <|
---         Timeline.foldp lookup
---             Interpolate.toPoint
---             Interpolate.point
---             timeline
+
+{-| -}
+xyz : Timeline event -> (event -> { x : Movement, y : Movement, z : Movement }) -> { x : Float, y : Float, z : Float }
+xyz timeline lookup =
+    (\{ x, y, z } ->
+        { x = unwrapUnits x |> .position
+        , y = unwrapUnits y |> .position
+        , z = unwrapUnits z |> .position
+        }
+    )
+    <|
+        Timeline.foldp lookup
+            Interpolate.xyz
+            timeline
 
 
 move : Timeline event -> (event -> Movement) -> { position : Float, velocity : Float }

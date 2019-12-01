@@ -4,7 +4,7 @@ module Internal.Timeline exposing
     , Schedule(..), Event(..)
     , rewrite, after, between
     , foldp, update, needsUpdate
-    , Phase(..)
+    , Phase(..), mapPhase
     )
 
 {-|
@@ -371,6 +371,22 @@ getPhase (Occurring prev prevTime maybePrevDwell) (Occurring event eventTime may
             }
             state
         )
+
+
+mapPhase : (a -> b) -> Phase a -> Phase b
+mapPhase fn phase =
+    case phase of
+        Start ->
+            Start
+
+        After a ->
+            After (fn a)
+
+        TransitioningTo progress a ->
+            TransitioningTo progress (fn a)
+
+        Resting dur a ->
+            Resting dur (fn a)
 
 
 type Phase state
