@@ -109,22 +109,24 @@ view model =
                     (toPx
                         (.position (Animator.move model.timeline toPos))
                     )
-                , Attr.style "background-color" "red"
+                , Attr.style "background-color"
+                    (Color.toCssString
+                        (Animator.color model.timeline <|
+                            \event ->
+                                case event of
+                                    Hufflepuff ->
+                                        yellow
 
-                -- (Color.toCssString
-                --     (Animator.color model.timeline <|
-                --         \event ->
-                --             case event of
-                --                 Hufflepuff ->
-                --                     yellow
-                --                 Griffyndor ->
-                --                     red
-                --                 Slytherin ->
-                --                     green
-                --                 Ravenclaw ->
-                --                     blue
-                --     )
-                -- )
+                                    Griffyndor ->
+                                        red
+
+                                    Slytherin ->
+                                        green
+
+                                    Ravenclaw ->
+                                        blue
+                        )
+                    )
                 ]
                 [ case Animator.move model.timeline toPos of
                     { position, velocity } ->
@@ -147,29 +149,8 @@ view model =
                 }
             )
 
-        -- wobbly
-        , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
-            [ Help.Plot.spring
-                { stiffness = 180
-                , damping = 12
-                , initialPosition = 0
-                , initialVelocity = 0
-                }
-            , Help.Plot.spring
-                { stiffness = 180
-                , damping = 12
-                , initialPosition = -10
-                , initialVelocity = 0
-                }
-            , Help.Plot.spring
-                { stiffness = 180
-                , damping = 12
-                , initialPosition = 0
-                , initialVelocity = 500
-                }
-            ]
-
         -- noWobble
+        , Html.span [] [ Html.text "noWobble" ]
         , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
             [ Help.Plot.spring
                 { stiffness = 170
@@ -192,26 +173,95 @@ view model =
             ]
 
         -- stiff
-        -- , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
-        --     [ Help.Plot.spring
-        --         { stiffness = 210
-        --         , damping = 20
-        --         , initialPosition = 0
-        --         , initialVelocity = 0
-        --         }
-        --     , Help.Plot.spring
-        --         { stiffness = 210
-        --         , damping = 20
-        --         , initialPosition = -10
-        --         , initialVelocity = 0
-        --         }
-        --     , Help.Plot.spring
-        --         { stiffness = 210
-        --         , damping = 20
-        --         , initialPosition = 0
-        --         , initialVelocity = 500
-        --         }
-        --     ]
+        , Html.span [] [ Html.text "stiff" ]
+        , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
+            [ Help.Plot.spring
+                { stiffness = 210
+                , damping = 20
+                , initialPosition = 0
+                , initialVelocity = 0
+                }
+            , Help.Plot.spring
+                { stiffness = 210
+                , damping = 20
+                , initialPosition = -10
+                , initialVelocity = 0
+                }
+            , Help.Plot.spring
+                { stiffness = 210
+                , damping = 20
+                , initialPosition = 0
+                , initialVelocity = 500
+                }
+            ]
+
+        -- gentle
+        , Html.span [] [ Html.text "gentle" ]
+        , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
+            [ Help.Plot.spring
+                { stiffness = 120
+                , damping = 14
+                , initialPosition = 0
+                , initialVelocity = 0
+                }
+            , Help.Plot.spring
+                { stiffness = 120
+                , damping = 14
+                , initialPosition = -10
+                , initialVelocity = 0
+                }
+            , Help.Plot.spring
+                { stiffness = 120
+                , damping = 14
+                , initialPosition = 0
+                , initialVelocity = 500
+                }
+            ]
+
+        -- wobbly
+        , Html.span [] [ Html.text "wobbly" ]
+        , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
+            [ Help.Plot.spring
+                { stiffness = 180
+                , damping = 12
+                , initialPosition = 0
+                , initialVelocity = 0
+                }
+            , Help.Plot.spring
+                { stiffness = 180
+                , damping = 12
+                , initialPosition = -10
+                , initialVelocity = 0
+                }
+            , Help.Plot.spring
+                { stiffness = 180
+                , damping = 12
+                , initialPosition = 0
+                , initialVelocity = 500
+                }
+            ]
+        , Html.span [] [ Html.text "Critical Damping vs K" ]
+        , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
+            [ Help.Plot.damping
+                { kMin = 10
+                , kMax = 300
+                }
+            ]
+        , Html.span [] [ Html.text "Wobles, K vs Settling Time" ]
+        , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
+            [ Help.Plot.settlingTime
+                { kMin = 10
+                , kMax = 600
+                , wobbles =
+                    [ 0
+                    , 0.1
+                    , 0.25
+                    , 0.5
+                    , 75
+                    , 1
+                    ]
+                }
+            ]
         ]
     }
 
