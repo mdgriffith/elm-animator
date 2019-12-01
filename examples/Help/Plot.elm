@@ -1,4 +1,4 @@
-module Help.Plot exposing (Model, Msg, init, spring, update, view)
+module Help.Plot exposing (Model, Msg, damping, init, settlingTime, spring, update, view)
 
 {-| -}
 
@@ -6,7 +6,7 @@ import Browser
 import Color
 import Html exposing (Html, div, h1, node, p, text)
 import Html.Attributes exposing (class)
-import Internal.Spring
+import Internal.Spring as Spring
 import LineChart as LineChart
 import LineChart.Area as Area
 import LineChart.Axis as Axis
@@ -117,16 +117,15 @@ spring :
 spring cfg =
     let
         estimatedSettling =
-            Debug.log "settled"
-                { time =
-                    Internal.Spring.settlesAt
-                        { stiffness = cfg.stiffness
-                        , damping = cfg.damping
-                        }
-                , position = 1
-                , target = 1
-                , velocity = 0
-                }
+            { time =
+                Spring.settlesAt
+                    { stiffness = cfg.stiffness
+                    , damping = cfg.damping
+                    }
+            , position = 1
+            , target = 1
+            , velocity = 0
+            }
 
         springStart =
             { target = 1
@@ -140,14 +139,21 @@ spring cfg =
                 (\i ( motion, steps ) ->
                     let
                         new =
-                            Internal.Spring.step 16
+                            Spring.step 16
                                 { stiffness = cfg.stiffness
                                 , damping = cfg.damping
                                 }
-                                motion
+                                { target = motion.target
+                                , velocity = motion.velocity
+                                , position = motion.position
+                                }
 
                         newWithTime =
-                            { new | time = new.time + 16 }
+                            { time = motion.time + 16
+                            , target = new.target
+                            , velocity = new.velocity
+                            , position = new.position
+                            }
                     in
                     ( newWithTime, newWithTime :: steps )
                 )
@@ -175,3 +181,163 @@ spring cfg =
         [ LineChart.line Color.purple Dots.none "Position" points
         , LineChart.line Color.green Dots.circle "Estimated Settle" [ estimatedSettling ]
         ]
+
+
+damping :
+    { kMin : Float
+    , kMax : Float
+    }
+    -> Html.Html msg
+damping { kMin, kMax } =
+    let
+        start =
+            { critical = Spring.criticalDamping kMin 1
+            , spring = kMin
+            }
+
+        stepCount =
+            100
+
+        kStep =
+            (kMax - kMin) / stepCount
+
+        points =
+            List.foldl
+                (\i ( kPrev, steps ) ->
+                    let
+                        k =
+                            kPrev + kStep
+
+                        new =
+                            { critical = Spring.criticalDamping k 1
+                            , spring = k
+                            }
+                    in
+                    ( k
+                    , new :: steps
+                    )
+                )
+                ( kMin
+                , [ start ]
+                )
+                (List.range 0 stepCount)
+                |> Tuple.second
+    in
+    LineChart.viewCustom
+        { y = Axis.default 300 "Critical Damping" .critical
+        , x = Axis.default 1200 "Spring" .spring
+        , container = Container.styled "line-chart-1" [ ( "font-family", "monospace" ) ]
+        , interpolation = Interpolation.default
+        , intersection = Intersection.default
+        , legends = Legends.default
+        , events =
+            Events.default
+        , junk = Junk.default
+        , grid = Grid.default
+        , area = Area.default
+        , line = Line.default
+        , dots = Dots.default
+        }
+        [ LineChart.line Color.purple Dots.none "Constants" points
+        ]
+
+
+settlingTime :
+    { kMin : Float
+    , kMax : Float
+    , wobbles : List Float
+    }
+    -> Html.Html msg
+settlingTime { kMin, kMax, wobbles } =
+    let
+        stepCount =
+            100
+
+        kStep =
+            (kMax - kMin) / stepCount
+
+        points =
+            wobbles
+                |> List.indexedMap
+                    (\i wobb ->
+                        let
+                            start =
+                                { stiffness = kMin
+                                , settling =
+                                    Spring.settlesAt
+                                        { stiffness = kMin
+                                        , damping = Spring.wobble2Damping wobb kMin 1
+                                        }
+                                }
+                        in
+                        List.foldl
+                            (\_ ( kPrev, steps ) ->
+                                let
+                                    k =
+                                        kPrev + kStep
+
+                                    new =
+                                        { stiffness = k
+                                        , settling =
+                                            Spring.settlesAt
+                                                { stiffness = k
+                                                , damping = Spring.wobble2Damping wobb k 1
+                                                }
+                                        }
+                                in
+                                ( k
+                                , new :: steps
+                                )
+                            )
+                            ( kMin
+                            , [ start ]
+                            )
+                            (List.range 0 stepCount)
+                            |> Tuple.second
+                            |> LineChart.line
+                                (if i == 0 then
+                                    Color.blue
+
+                                 else if i == 1 then
+                                    Color.red
+
+                                 else if i == 5 then
+                                    Color.green
+
+                                 else
+                                    Color.yellow
+                                )
+                                Dots.none
+                                ("Wobble " ++ String.fromFloat wobb)
+                    )
+    in
+    LineChart.viewCustom
+        { y =
+            -- Axis.default 300 "Settling" .settling
+            Axis.picky 600
+                "Settling"
+                .settling
+                [ 0
+                , 200
+                , 400
+                , 600
+                , 1000
+                , 2000
+                , 3000
+                , 4000
+                ]
+        , x =
+            Axis.default 1200 "Stiffness" .stiffness
+        , container = Container.styled "line-chart-3" [ ( "font-family", "monospace" ) ]
+        , interpolation = Interpolation.default
+        , intersection = Intersection.default
+        , legends = Legends.default
+        , events =
+            Events.default
+        , junk = Junk.default
+        , grid = Grid.default
+        , area = Area.default
+        , line = Line.default
+        , dots = Dots.default
+        }
+        points

@@ -1,4 +1,9 @@
-module Internal.Spring exposing (settlesAt, step)
+module Internal.Spring exposing
+    ( criticalDamping
+    , settlesAt
+    , step
+    , wobble2Damping
+    )
 
 {-| Whew, math. Exciting isn't it?
 
@@ -37,12 +42,12 @@ we can calculate the settling time.
 
     c* = 2 * sqrt (k * m)
 
-    z = c / sqrt (m * k)
+    z = c / 2 * sqrt (m * k)
 
 Expanding our ts equation:
 
     ts =
-        4 / ((c / sqrt (m * k)) * sqrt (k / m))
+        4 / ((c / 2 * sqrt (m * k)) * sqrt (k / m))
 
 
 # Our Usecase!
@@ -50,6 +55,12 @@ Expanding our ts equation:
 So, we have a lot of equations here. What is our ideal scenario?
 
 When interpolating a timeline and heading towards a resting state, we want to use a spring.
+
+
+## Cauchy problems:
+
+Differential equations with bounding conditions!
+<https://en.wikipedia.org/wiki/Cauchy_boundary_condition>
 
 -}
 
@@ -134,7 +145,7 @@ settlesAt { stiffness, damping } =
             damping
 
         cCritical =
-            2 * sqrt (k * m)
+            criticalDamping k m
 
         m =
             1
@@ -175,35 +186,144 @@ settlesAt { stiffness, damping } =
 
             toleranceForEquation =
                 -- this is about 4 for 2%
+                -- however, we want a smaller tolerance
+                -- this is 0.5% tolerance
                 -1 * logBase e 0.005
         in
         1000 * (toleranceForEquation / (dampingAspect * springAspect))
 
 
+criticalDamping k m =
+    2 * sqrt (k * m)
+
+
+
+{- REDEFINING SPRING PARAMS
+
+   Instead of stiffness and damping, we want to describe the motion that we'll have.
+
+   1. pace ->
+       fast/slow
+   2. wobble ->
+       wobbly
+       noWobble
+
+-}
+
+
+wobble2Damping wobble k m =
+    wobble2Ratio wobble * criticalDamping k m
+
+
+{-| wobble:
+0 -> no wobble
+0.5 -> some wobble
+1 -> all the wobble
+
+ratio:
+1 -> nowobble
+
+    0.4 -> max wobble (arbitrarily chosen)
+
+-}
+wobble2Ratio wobble =
+    let
+        bounded =
+            wobble
+                |> max 0
+                |> min 1
+    in
+    1
+        - bounded
+        |> mapToRange 0.3 1
+
+
+mapToRange minimum maximum x =
+    let
+        total =
+            maximum - minimum
+    in
+    minimum + (x * total)
+
+
 
 {-
-    // borrowed from react motion for the moment
-   export default {
-     noWobble: [170, 26], // the default
-     gentle: [120, 14],
-     wobbly: [180, 12],
-     stiff: [210, 20],
-   };
+      // borrowed from react motion for the moment
+     export default {
+       noWobble: [170, 26], // the default
+      - cCritical: 26.06
+      - ratio: ~1
+       gentle: [120, 14],
+      - cCritical: 21.9
+      - ratio: 0.639
+       wobbly: [180, 12],
+      - cCritical: 26.83
+      - ratio: 0.44
+       stiff: [210, 20],
+      - cCritical: 28.98
+      - ratio: 0.69
+
+     };
 
 
 
-   f(0) = 0; f'(0) = 0; f''(t) = -170(f(t) - 1) - 26f'(t)
+   cCritical = 2 * sqrt (k * m)
 
-       -> e^(-13 t) (e^(13 t) - cos(t) - 13 sin(t))
 
-   f(0) = 0; f'(0) = 0; f''(t) = -120(f(t) - 1) - 14f'(t)
 
-       -> 1 - e^(-7 t) cos(sqrt(71) t) - (7 e^(-7 t) sin(sqrt(71) t))/sqrt(71)
 
-   f(0) = 0; f'(0) = 0; f''(t) = -180(f(t) - 1) - 12f'(t)
 
-   f(0) = 0; f'(0) = 0; f''(t) = -210(f(t) - 1) - 20f'(t)
 
-       -> 1 - e^(-10 t) cos(sqrt(110) t) - sqrt(10/11) e^(-10 t) sin(sqrt(110) t)
+
+
+     f(0) = 0; f'(0) = 0; f''(t) = -170(f(t) - 1) - 26f'(t)
+
+         -> e^(-13 t) (e^(13 t) - cos(t) - 13 sin(t))
+
+     f(0) = 0; f'(0) = 0; f''(t) = -120(f(t) - 1) - 14f'(t)
+
+         -> 1 - e^(-7 t) cos(sqrt(71) t) - (7 e^(-7 t) sin(sqrt(71) t))/sqrt(71)
+
+     f(0) = 0; f'(0) = 0; f''(t) = -180(f(t) - 1) - 12f'(t)
+
+     f(0) = 0; f'(0) = 0; f''(t) = -210(f(t) - 1) - 20f'(t)
+
+         -> 1 - e^(-10 t) cos(sqrt(110) t) - sqrt(10/11) e^(-10 t) sin(sqrt(110) t)
+
+-}
+{- Deriving equations for the wobbly setting, varying initial conditions
+
+
+
+    f(0) = 0; f'(0) = 0; f''(t) = -180(f(t) - 1) - 12f'(t)
+
+
+   -- 0,0
+           -1/2   e^(-6 t) (-2 e^(6 t)
+            + 2 cos(12 t)
+            + sin(12 t))
+
+
+    f(0) = 100; f'(0) = 0; f''(t) = -180(f(t) - 1) - 12f'(t)
+   -- 100, 0
+
+           1
+               + 99 e^(-6 t) cos(12 t)
+               + 99/2 e^(-6 t) sin(12 t)
+
+    f(0) = 100; f'(0) = 100; f''(t) = -180(f(t) - 1) - 12f'(t)
+   -- 100, 100
+
+           1
+               + 99 e^(-6 t) cos(12 t)
+               + 347/6 e^(-6 t) sin(12 t)
+
+
+    f(0) = 0; f'(0) = 100; f''(t) = -180(f(t) - 1) - 12f'(t)
+   -- 0, 100
+
+           1 - e^(-6 t) cos(12 t)
+               + 47/6 e^(-6 t) sin(12 t)
+
 
 -}
