@@ -5,8 +5,10 @@ module Animator exposing
     , Duration, millis, seconds, minutes
     , after, between, rewrite
     , queue, update
-    , float, color
-    , move, to, orbit
+    , float, move, color
+    , xy, xyz, to
+    , oscillate, wave, wrap, zigzag
+    , pause, shift
     )
 
 {-|
@@ -29,9 +31,16 @@ module Animator exposing
 
 # Animating
 
-@docs float, color
+@docs float, move, color
 
-@docs move, xy, xyz, to, orbit
+@docs xy, xyz, to
+
+
+# Oscillators
+
+@docs oscillate, wave, wrap, zigzag
+
+@docs pause, shift
 
 -}
 
@@ -280,9 +289,199 @@ to =
     Interpolate.Position
 
 
-orbit : { duration : Duration, point : Float, toPosition : Float -> Float } -> Movement
+type Oscillator
+    = Oscillator (List Pause) (Float -> Float)
+
+
+type Pause
+    = Pause Duration Float
+
+
+within : Float -> Float -> Float -> Bool
+within tolerance anchor at =
+    let
+        low =
+            anchor - tolerance
+
+        high =
+            anchor + tolerance
+    in
+    at >= low && at <= high
+
+
+pauseToBounds : Pause -> Duration -> Duration -> ( Float, Float )
+pauseToBounds (Pause dur at) activeDuration totalDur =
+    let
+        start =
+            Quantity.multiplyBy at activeDuration
+    in
+    ( Quantity.ratio start totalDur
+    , Quantity.ratio (Quantity.plus start dur) totalDur
+    )
+
+
+pauseValue : Pause -> Float
+pauseValue (Pause _ v) =
+    v
+
+
+{-| -}
+oscillate : Duration -> Oscillator -> Movement
+oscillate activeDuration (Oscillator pauses osc) =
+    let
+        -- total duration of the oscillation (active + pauses)
+        totalDuration =
+            List.foldl
+                (\(Pause p _) d ->
+                    Quantity.plus p d
+                )
+                activeDuration
+                pauses
+
+        {- u -> 0-1 of the whole oscillation, including pauses
+           a -> 0-1 of the `active` oscillation, which does not include pausese
+           ^ this is what we use for feeding the osc function.
+
+           ps -> a list of pauses
+
+        -}
+        withPause u a ps =
+            case ps of
+                [] ->
+                    osc a
+
+                p :: [] ->
+                    case pauseToBounds p activeDuration totalDuration of
+                        ( start, end ) ->
+                            if u >= start && u <= end then
+                                -- this pause is currently happening
+                                pauseValue p
+
+                            else if u > end then
+                                -- this pause already happend
+                                -- "shrink" the active duration by the pause's duration
+                                let
+                                    pauseDuration =
+                                        end - start
+                                in
+                                osc (a - pauseDuration)
+
+                            else
+                                -- this pause hasn't happened yet
+                                osc a
+
+                p :: lookahead :: remain ->
+                    case pauseToBounds p activeDuration totalDuration of
+                        ( start, end ) ->
+                            if u >= start && u <= end then
+                                -- this pause is currently happening
+                                pauseValue p
+
+                            else if u > end then
+                                -- this pause already happend
+                                -- "shrink" the active duration by the pause's duration
+                                -- and possibly account for the gap between pauses.
+                                let
+                                    pauseDuration =
+                                        end - start
+
+                                    gap =
+                                        -- this is the gap between pauses
+                                        -- or "active" time
+                                        --
+                                        case pauseToBounds lookahead activeDuration totalDuration of
+                                            ( nextPauseStart, nextPauseEnd ) ->
+                                                if u >= nextPauseStart then
+                                                    nextPauseStart - end
+
+                                                else
+                                                    0
+                                in
+                                withPause u ((a + gap) - pauseDuration) (lookahead :: remain)
+
+                            else
+                                -- this pause hasn't happened yet
+                                osc a
+
+        fn u =
+            osc (withPause u u pauses)
+    in
+    Interpolate.Oscillate totalDuration fn
+
+
+{-| Shift an oscillator over by a certain amount.
+
+It's expecting a number between 0 and 1.
+
+-}
+shift : Float -> Oscillator -> Oscillator
+shift x (Oscillator pauses osc) =
+    Oscillator
+        pauses
+        (\u -> osc (wrapToUnit (u + x)))
+
+
+wrapToUnit x =
+    x - toFloat (floor x)
+
+
+{-| When the oscillator is at a certain point, pause.
+
+This pause time will be added to the time you specify using `oscillate`, so that you can adjust the pause without disturbing the original duration of the oscillator.
+
+-}
+pause : Duration -> Float -> Oscillator -> Oscillator
+pause forDuration at (Oscillator pauses osc) =
+    Oscillator
+        (Pause forDuration at :: pauses)
+        osc
+
+
+orbit : { duration : Duration, toPosition : Float -> Float } -> Movement
 orbit config =
-    Interpolate.Oscillate config.point config.duration config.toPosition
+    Interpolate.Oscillate config.duration config.toPosition
+
+
+{-| Start at one number and move linearly to another. At th end, wrap to the first.
+-}
+wrap : Float -> Float -> Oscillator
+wrap start end =
+    let
+        total =
+            end - start
+    in
+    Oscillator []
+        (\u ->
+            u * total
+        )
+
+
+{-| This is basically a sine wave!
+-}
+wave : Float -> Float -> Oscillator
+wave start end =
+    let
+        total =
+            end - start
+    in
+    Oscillator []
+        (\u ->
+            start + total * sin (turns u)
+        )
+
+
+{-| This is basically a sine wave!
+-}
+zigzag : Float -> Float -> Oscillator
+zigzag start end =
+    let
+        total =
+            end - start
+    in
+    Oscillator []
+        (\u ->
+            start + (total * u)
+        )
 
 
 

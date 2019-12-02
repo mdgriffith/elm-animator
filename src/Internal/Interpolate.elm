@@ -38,7 +38,7 @@ unwrapQuantity (Quantity.Quantity value) =
 
 -}
 type Movement
-    = Oscillate Float Time.Duration (Float -> Float)
+    = Oscillate Time.Duration (Float -> Float)
     | Position Float
 
 
@@ -108,8 +108,8 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
     let
         targetPosition =
             case lookup target of
-                Oscillate center _ toX ->
-                    Pixels.pixels (center + toX 0)
+                Oscillate _ toX ->
+                    Pixels.pixels (toX 0)
 
                 Position x ->
                     Pixels.pixels x
@@ -125,14 +125,14 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
             -- including full dwell time if there is any.
             { position =
                 case lookup target of
-                    Oscillate center period toX ->
+                    Oscillate period toX ->
                         case maybeDwell of
                             Nothing ->
                                 -- we havent had time to oscillate if there is no dwell time.
-                                Pixels.pixels (center + toX 0)
+                                Pixels.pixels (toX 0)
 
                             Just dwell ->
-                                Pixels.pixels (center + toX (wrapUnitAfter period dwell))
+                                Pixels.pixels (toX (wrapUnitAfter period dwell))
 
                     Position x ->
                         Pixels.pixels x
@@ -145,9 +145,9 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
 
                             Just (Timeline.Occurring lookAhead aheadTime maybeLookAheadDwell) ->
                                 case lookup lookAhead of
-                                    Oscillate center freq toX ->
+                                    Oscillate freq toX ->
                                         -- calc forward velocity?
-                                        velocityBetween targetPosition targetTime (Pixels.pixels center) aheadTime
+                                        velocityBetween targetPosition targetTime (Pixels.pixels (toX 0)) aheadTime
 
                                     Position aheadPosition ->
                                         -- we're not dwelling here, and we're moving on to `ahead
@@ -155,7 +155,7 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
 
                     Just dwell ->
                         case lookup target of
-                            Oscillate center period toX ->
+                            Oscillate period toX ->
                                 derivativeOfEasing toX period (wrapUnitAfter period dwell)
 
                             Position aheadPosition ->
@@ -174,7 +174,7 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
 
                         Just (Timeline.Occurring lookAhead aheadTime maybeLookAheadDwell) ->
                             case lookup target of
-                                Oscillate center period toX ->
+                                Oscillate period toX ->
                                     derivativeOfEasing toX period 0
 
                                 Position aheadPosition ->
@@ -215,8 +215,8 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
                     , velocity = Pixels.pixelsPerSecond 0
                     }
 
-                Oscillate center period toX ->
-                    { position = Pixels.pixels (center + toX (wrapUnitAfter period restingDuration))
+                Oscillate period toX ->
+                    { position = Pixels.pixels (toX (wrapUnitAfter period restingDuration))
                     , velocity = derivativeOfEasing toX period (wrapUnitAfter period restingDuration)
                     }
 

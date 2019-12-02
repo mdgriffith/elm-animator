@@ -428,13 +428,8 @@ toHousePositionWithOrbit event =
             Animator.to 100
 
         Griffyndor ->
-            Animator.orbit
-                { point = 400
-                , duration = Animator.millis 200
-                , toPosition =
-                    \u ->
-                        10 * sin (u * (2 * pi))
-                }
+            Animator.wave 390 410
+                |> Animator.oscillate (Animator.millis 200)
 
         Slytherin ->
             Animator.to 700
