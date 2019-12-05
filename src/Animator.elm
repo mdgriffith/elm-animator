@@ -470,8 +470,7 @@ wave start end =
         )
 
 
-{-| This is basically a sine wave!
--}
+{-| -}
 zigzag : Float -> Float -> Oscillator
 zigzag start end =
     let

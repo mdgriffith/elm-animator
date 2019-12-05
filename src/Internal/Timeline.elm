@@ -2,7 +2,6 @@ module Internal.Timeline exposing
     ( Timeline(..), TimelineDetails, Occurring(..), getEvents
     , Interpolator
     , Schedule(..), Event(..)
-    , rewrite, after, between
     , foldp, update, needsUpdate
     , Phase(..), mapPhase
     )
@@ -45,16 +44,36 @@ type Timeline event
 type alias TimelineDetails event =
     { initial : event
     , now : Time.Absolute
-    , events : List (Occurring event)
+    , events : Timetable event
     , queued : Maybe (Schedule event)
     , running : Bool
     }
 
 
-{-| started at list of events that were scheduled
+{-| A time table is a list of timelines that will occur.
+
+Events proceed from earlier to later.
+
+Lines are ordered earliest to latest.
+
 -}
 type Timetable event
-    = Timetable Time.Absolute (List (Occurring event))
+    = Timetable (List (Line event))
+
+
+{-| -}
+type Line event
+    = Line Time.Absolute (List (Occurring event))
+
+
+mapTable : (a -> b) -> Timetable a -> Timetable b
+mapTable fn (Timetable lines) =
+    Timetable (List.map (mapLine fn) lines)
+
+
+mapLine : (a -> b) -> Line a -> Line b
+mapLine fn (Line t els) =
+    Line t (List.map fn els)
 
 
 {-| When the event occurs, and how long we're dwelling at this event (or no dwelling at all)
@@ -73,32 +92,31 @@ filterMapOccurring fn (Occurring ev time maybeDwell) =
             Just (Occurring newEv time maybeDwell)
 
 
-{-| -}
-rewrite : newEvent -> Timeline event -> (event -> Maybe newEvent) -> Timeline newEvent
-rewrite newStart (Timeline tl) newLookup =
-    Timeline
-        { initial = newStart
-        , now = tl.now
-        , running = tl.running
-        , events =
-            List.filterMap (filterMapOccurring newLookup) tl.events
-        , queued = Nothing
-        }
 
-
-{-| -}
-between : event -> event -> Timeline event -> Timeline Bool
-between start end (Timeline tl) =
-    Timeline
-        { initial = start == tl.initial
-        , now = tl.now
-        , running = tl.running
-        , events =
-            List.foldl (betweenEvent start end) ( NotStarted, [] ) tl.events
-                |> Tuple.second
-                |> List.reverse
-        , queued = Nothing
-        }
+-- {-| -}
+-- rewrite : newEvent -> Timeline event -> (event -> Maybe newEvent) -> Timeline newEvent
+-- rewrite newStart (Timeline tl) newLookup =
+--     Timeline
+--         { initial = newStart
+--         , now = tl.now
+--         , running = tl.running
+--         , events =
+--             Timetable. (List.filterMap (filterMapOccurring newLookup)) tl.events
+--         , queued = Nothing
+--         }
+-- {-| -}
+-- between : event -> event -> Timeline event -> Timeline Bool
+-- between start end (Timeline tl) =
+--     Timeline
+--         { initial = start == tl.initial
+--         , now = tl.now
+--         , running = tl.running
+--         , events =
+--             List.foldl (betweenEvent start end) ( NotStarted, [] ) tl.events
+--                 |> Tuple.second
+--                 |> List.reverse
+--         , queued = Nothing
+--         }
 
 
 type Between
@@ -128,23 +146,24 @@ betweenEvent startCheckpoint endCheckpoint (Occurring ev time maybeDwell) ( stat
             ( status, Occurring False time maybeDwell :: events )
 
 
-{-| -}
-after : event -> Timeline event -> Timeline Bool
-after ev (Timeline tl) =
-    let
-        started =
-            tl.initial == ev
-    in
-    Timeline
-        { initial = started
-        , now = tl.now
-        , running = tl.running
-        , events =
-            List.foldl (afterEvent ev) ( started, [] ) tl.events
-                |> Tuple.second
-                |> List.reverse
-        , queued = Nothing
-        }
+
+-- {-| -}
+-- after : event -> Timeline event -> Timeline Bool
+-- after ev (Timeline tl) =
+--     let
+--         started =
+--             tl.initial == ev
+--     in
+--     Timeline
+--         { initial = started
+--         , now = tl.now
+--         , running = tl.running
+--         , events =
+--             List.foldl (afterEvent ev) ( started, [] ) tl.events
+--                 |> Tuple.second
+--                 |> List.reverse
+--         , queued = Nothing
+--         }
 
 
 afterEvent : event -> Occurring event -> ( Bool, List (Occurring Bool) ) -> ( Bool, List (Occurring Bool) )
@@ -188,10 +207,26 @@ update now (Timeline timeline) =
         }
 
 
-{-| Returns the updated list of events
-as well as any additional dwell time that should be added to the `start` event.
+{-| Interrupt a current timetable with a new list of events.
+
+    - If this timeline is after all other timelines
+        -> queue it to the end and extend the dwell of the last event
+    - otherwise, add as a new `Line` to the timetable.
+
 -}
-enqueue : TimelineDetails events -> Time.Absolute -> Schedule events -> List (Occurring events)
+interrupt : TimelineDetails events -> Time.Absolute -> Schedule events -> Timetable.Timetable events
+interrupt details now (Schedule delay reverseQueued) =
+    Debug.todo "Ugh"
+
+
+{-| Queue a list of events to be played after everything.
+
+    - add events to the timeline that is currently active.
+    - if we're past all events,
+        -> add additional dwell time to the last event.
+
+-}
+enqueue : TimelineDetails events -> Time.Absolute -> Schedule events -> Timetable.Timetable events
 enqueue timeline now (Schedule delay reverseQueued) =
     let
         queued =
@@ -307,11 +342,6 @@ foldp lookup mobilize (Timeline timeline) =
                                 target :: remaining ->
                                     case getPhase cursor.previous target timeline.now cursor.state of
                                         ( finished, phase ) ->
-                                            -- let
-                                            --     _ =
-                                            --         Debug.log "target" target
-                                            -- in
-                                            -- Debug.log "rsult" <|
                                             { state =
                                                 mobilize lookup target (List.head remaining) phase
                                             , events = remaining
