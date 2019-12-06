@@ -66,12 +66,12 @@ type Line event
     = Line Time.Absolute (List (Occurring event))
 
 
-mapTable : (a -> b) -> Timetable a -> Timetable b
+mapTable : (Occurring a -> Occurring b) -> Timetable a -> Timetable b
 mapTable fn (Timetable lines) =
     Timetable (List.map (mapLine fn) lines)
 
 
-mapLine : (a -> b) -> Line a -> Line b
+mapLine : (Occurring a -> Occurring b) -> Line a -> Line b
 mapLine fn (Line t els) =
     Line t (List.map fn els)
 
@@ -187,7 +187,11 @@ needsUpdate (Timeline timeline) =
 
 getEvents : Timeline event -> List ( Time.Posix, event )
 getEvents (Timeline timeline) =
-    List.map (\(Occurring evt time maybeDwell) -> ( Time.toPosix time, evt )) timeline.events
+    case timeline.events of
+        Timetable lines ->
+            lines
+                |> List.concatMap (\(Line _ ev) -> ev)
+                |> List.map (\(Occurring evt time maybeDwell) -> ( Time.toPosix time, evt ))
 
 
 {-| -}
@@ -214,7 +218,7 @@ update now (Timeline timeline) =
     - otherwise, add as a new `Line` to the timetable.
 
 -}
-interrupt : TimelineDetails events -> Time.Absolute -> Schedule events -> Timetable.Timetable events
+interrupt : TimelineDetails events -> Time.Absolute -> Schedule events -> Timetable events
 interrupt details now (Schedule delay reverseQueued) =
     Debug.todo "Ugh"
 
@@ -226,14 +230,48 @@ interrupt details now (Schedule delay reverseQueued) =
         -> add additional dwell time to the last event.
 
 -}
-enqueue : TimelineDetails events -> Time.Absolute -> Schedule events -> Timetable.Timetable events
-enqueue timeline now (Schedule delay reverseQueued) =
+enqueue : TimelineDetails events -> Time.Absolute -> Schedule events -> Timetable events
+enqueue timeline now scheduled =
+    case timeline.events of
+        Timetable lines ->
+            Timetable (addToCurrentLine now scheduled lines)
+
+
+addToCurrentLine now scheduled (Timetable lines) =
+    let
+        onCurrent timelines =
+            case timelines of
+                [] ->
+                    [ addEventsToLine now scheduled (Line now [])
+                    ]
+
+                (Line startOne one) :: [] ->
+                    -- if we've gotten here, this line is current
+                    [ addEventsToLine now scheduled (Line startOne one)
+                    ]
+
+                (Line startOne one) :: (Line startTwo two) :: remaining ->
+                    -- we check if now is after startOne, but before startTwo
+                    if Time.thisAfterThat now startOne && Time.thisAfterThat startTwo now then
+                        -- one is the current timeline
+                        [ addEventsToLine now scheduled (Line startOne one)
+                        ]
+
+                    else
+                        -- need to search farther.
+                        Line startOne one :: onCurrent (Line startTwo two :: remaining)
+    in
+    onCurrent lines
+
+
+addEventsToLine : Time.Absolute -> Schedule events -> Line events -> Line events
+addEventsToLine now (Schedule delay reverseQueued) (Line startLineAt events) =
     let
         queued =
             List.reverse reverseQueued
 
         reversedEvents =
-            List.reverse timeline.events
+            List.reverse events
 
         start =
             Time.advanceBy delay now
@@ -243,6 +281,7 @@ enqueue timeline now (Schedule delay reverseQueued) =
             List.foldl toOccurring ( start, [] ) queued
                 |> Tuple.second
                 |> List.reverse
+                |> Line startLineAt
 
         (Occurring lastEvent lastEventTime finalEventDwell) :: eventTail ->
             let
@@ -263,11 +302,13 @@ enqueue timeline now (Schedule delay reverseQueued) =
                             lastEventTime
                             (Just (Time.duration start lastEventTime))
                 in
-                List.reverse (newLastEvent :: eventTail)
-                    ++ newEvents
+                Line startLineAt
+                    (List.reverse (newLastEvent :: eventTail)
+                        ++ newEvents
+                    )
 
             else
-                timeline.events ++ newEvents
+                Line startLineAt (events ++ newEvents)
 
 
 addToDwell duration maybeDwell =
@@ -322,12 +363,12 @@ And we have some type aliases to capture how to create each one of those values.
 foldp : (event -> anchor) -> Interpolator event anchor motion -> Timeline event -> motion
 foldp lookup mobilize (Timeline timeline) =
     case timeline.events of
-        [] ->
+        Timetable [] ->
             -- Generally, this shouldn't be reachable because we require an event on initialization
             -- likely we'll want to change events to `(start, [remaining])` at some point in the future
             mobilize lookup (Occurring timeline.initial timeline.now Nothing) Nothing Start
 
-        startingEvent :: _ ->
+        Timetable (startingEvent :: remaining) ->
             .state <|
                 List.foldl
                     (\_ cursor ->
