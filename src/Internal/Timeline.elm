@@ -4,7 +4,7 @@ module Internal.Timeline exposing
     , Schedule(..), Event(..)
     , after, between
     , foldp, update, needsUpdate
-    , Line(..), Phase(..), Timetable(..), addToDwell, mapPhase
+    , Line(..), Phase(..), Timetable(..), addToDwell, extendEventDwell, mapPhase
     )
 
 {-|
@@ -21,6 +21,7 @@ module Internal.Timeline exposing
 
 -}
 
+import Duration
 import Internal.Time as Time
 import Quantity
 import Time
@@ -35,6 +36,15 @@ type Schedule event
 {-| -}
 type Event event
     = Event Time.Duration event (Maybe Time.Duration)
+
+
+extendEventDwell : Time.Duration -> Event event -> Event event
+extendEventDwell extendBy ((Event at ev maybeDwell) as thisEvent) =
+    if Duration.inMilliseconds extendBy == 0 then
+        thisEvent
+
+    else
+        Event at ev (addToDwell extendBy maybeDwell)
 
 
 {-| -}
@@ -401,26 +411,27 @@ addToCurrentLine : Time.Absolute -> Schedule event -> List (Line event) -> List 
 addToCurrentLine now scheduled lines =
     let
         onCurrent timelines =
-            case timelines of
-                [] ->
-                    [ createLine now scheduled ]
+            Debug.log "added" <|
+                case Debug.log "timelines" timelines of
+                    [] ->
+                        [ createLine now scheduled ]
 
-                (Line startOne startEvent one) :: [] ->
-                    -- if we've gotten here, this line is current
-                    [ addEventsToLine now scheduled (Line startOne startEvent one) ]
+                    (Line startOne startEvent one) :: [] ->
+                        -- if we've gotten here, this line is current
+                        [ addEventsToLine now scheduled (Line startOne startEvent one) ]
 
-                (Line startOne startEventOne one) :: (Line startTwo startEventTwo two) :: remaining ->
-                    -- we check if now is after startOne, but before startTwo
-                    if Time.thisAfterThat now startOne && Time.thisAfterThat startTwo now then
-                        -- one is the current timeline
-                        addEventsToLine now scheduled (Line startOne startEventOne one)
-                            :: Line startTwo startEventTwo two
-                            :: remaining
+                    (Line startOne startEventOne one) :: (Line startTwo startEventTwo two) :: remaining ->
+                        -- we check if now is after startOne, but before startTwo
+                        if Time.thisAfterThat now startOne && Time.thisAfterThat startTwo now then
+                            -- one is the current timeline
+                            addEventsToLine now scheduled (Line startOne startEventOne one)
+                                :: Line startTwo startEventTwo two
+                                :: remaining
 
-                    else
-                        -- need to search farther.
-                        Line startOne startEventOne one
-                            :: onCurrent (Line startTwo startEventTwo two :: remaining)
+                        else
+                            -- need to search farther.
+                            Line startOne startEventOne one
+                                :: onCurrent (Line startTwo startEventTwo two :: remaining)
     in
     onCurrent lines
 
@@ -443,7 +454,7 @@ addEventsToLine : Time.Absolute -> Schedule events -> Line events -> Line events
 addEventsToLine now (Schedule delay scheduledStartingEvent reverseQueued) (Line startLineAt startingEvent events) =
     let
         queued =
-            List.reverse reverseQueued
+            scheduledStartingEvent :: List.reverse reverseQueued
 
         reversedEvents =
             List.reverse events
@@ -453,10 +464,14 @@ addEventsToLine now (Schedule delay scheduledStartingEvent reverseQueued) (Line 
     in
     case reversedEvents of
         [] ->
+            let
+                startingEventWithDwell =
+                    extendDwell delay startingEvent
+            in
             List.foldl toOccurring ( start, [] ) queued
                 |> Tuple.second
                 |> List.reverse
-                |> Line startLineAt startingEvent
+                |> Line startLineAt startingEventWithDwell
 
         (Occurring lastEvent lastEventTime finalEventDwell) :: eventTail ->
             let
@@ -487,16 +502,6 @@ addEventsToLine now (Schedule delay scheduledStartingEvent reverseQueued) (Line 
                 Line startLineAt startingEvent (events ++ newEvents)
 
 
-addToDwell : Time.Duration -> Maybe Time.Duration -> Maybe Time.Duration
-addToDwell duration maybeDwell =
-    case maybeDwell of
-        Nothing ->
-            Just duration
-
-        Just existing ->
-            Just (Quantity.plus duration existing)
-
-
 toOccurring : Event event -> ( Time.Absolute, List (Occurring event) ) -> ( Time.Absolute, List (Occurring event) )
 toOccurring (Event duration event maybeDwell) ( now, events ) =
     let
@@ -512,6 +517,25 @@ toOccurring (Event duration event maybeDwell) ( now, events ) =
                     Time.advanceBy dwell occursAt
     in
     ( endsAt, Occurring event occursAt maybeDwell :: events )
+
+
+extendDwell : Time.Duration -> Occurring a -> Occurring a
+extendDwell newDwell ((Occurring at ev maybeDwell) as occur) =
+    if Duration.inMilliseconds newDwell == 0 then
+        occur
+
+    else
+        Occurring at ev (addToDwell newDwell maybeDwell)
+
+
+addToDwell : Time.Duration -> Maybe Time.Duration -> Maybe Time.Duration
+addToDwell duration maybeDwell =
+    case maybeDwell of
+        Nothing ->
+            Just duration
+
+        Just existing ->
+            Just (Quantity.plus duration existing)
 
 
 getOccurringTime (Occurring _ t _) =

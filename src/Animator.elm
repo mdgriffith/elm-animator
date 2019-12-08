@@ -130,17 +130,25 @@ queue steps (Timeline.Timeline tl) =
     Timeline.Timeline
         { tl
             | queued =
-                case tl.queued of
-                    Nothing ->
-                        case initializeSchedule (millis 0) steps of
-                            Nothing ->
-                                tl.queued
+                Debug.log "sched" <|
+                    case tl.queued of
+                        Nothing ->
+                            case initializeSchedule (millis 0) steps of
+                                Nothing ->
+                                    tl.queued
 
-                            Just ( schedule, otherSteps ) ->
-                                Just (List.foldl stepsToEvents schedule otherSteps)
+                                Just ( schedule, otherSteps ) ->
+                                    let
+                                        _ =
+                                            Debug.log "initsched" schedule
 
-                    Just queued ->
-                        Just (List.foldl stepsToEvents queued steps)
+                                        _ =
+                                            Debug.log "remaining" otherSteps
+                                    in
+                                    Just (List.foldl stepsToEvents schedule otherSteps)
+
+                        Just queued ->
+                            Just (List.foldl stepsToEvents queued steps)
         }
 
 
@@ -166,7 +174,9 @@ initializeSchedule waiting steps =
             Nothing
 
         (Wait additionalWait) :: moreSteps ->
-            initializeSchedule (Quantity.plus waiting additionalWait) moreSteps
+            initializeSchedule
+                (Quantity.plus waiting additionalWait)
+                moreSteps
 
         (TransitionTo dur checkpoint) :: moreSteps ->
             Just ( Timeline.Schedule waiting (Timeline.Event dur checkpoint Nothing) [], moreSteps )
@@ -179,8 +189,8 @@ stepsToEvents step (Timeline.Schedule delay startEvent events) =
             case step of
                 Wait waiting ->
                     Timeline.Schedule
-                        (Quantity.plus delay waiting)
-                        startEvent
+                        delay
+                        (Timeline.extendEventDwell waiting startEvent)
                         events
 
                 TransitionTo dur checkpoint ->
@@ -238,8 +248,8 @@ would create `False`, `True`, `True`.
 
 -}
 after : event -> Timeline event -> Timeline Bool
-after ev timeline =
-    Timeline.after ev timeline
+after =
+    Timeline.after
 
 
 {-| _NOTE_ this might need a rename, it's really "during this even, and after"
