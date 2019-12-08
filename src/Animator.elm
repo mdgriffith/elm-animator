@@ -130,25 +130,17 @@ queue steps (Timeline.Timeline tl) =
     Timeline.Timeline
         { tl
             | queued =
-                Debug.log "sched" <|
-                    case tl.queued of
-                        Nothing ->
-                            case initializeSchedule (millis 0) steps of
-                                Nothing ->
-                                    tl.queued
+                case tl.queued of
+                    Nothing ->
+                        case initializeSchedule (millis 0) steps of
+                            Nothing ->
+                                tl.queued
 
-                                Just ( schedule, otherSteps ) ->
-                                    let
-                                        _ =
-                                            Debug.log "initsched" schedule
+                            Just ( schedule, otherSteps ) ->
+                                Just (List.foldl stepsToEvents schedule otherSteps)
 
-                                        _ =
-                                            Debug.log "remaining" otherSteps
-                                    in
-                                    Just (List.foldl stepsToEvents schedule otherSteps)
-
-                        Just queued ->
-                            Just (List.foldl stepsToEvents queued steps)
+                    Just queued ->
+                        Just (List.foldl stepsToEvents queued steps)
         }
 
 

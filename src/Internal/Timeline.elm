@@ -411,27 +411,26 @@ addToCurrentLine : Time.Absolute -> Schedule event -> List (Line event) -> List 
 addToCurrentLine now scheduled lines =
     let
         onCurrent timelines =
-            Debug.log "added" <|
-                case Debug.log "timelines" timelines of
-                    [] ->
-                        [ createLine now scheduled ]
+            case timelines of
+                [] ->
+                    [ createLine now scheduled ]
 
-                    (Line startOne startEvent one) :: [] ->
-                        -- if we've gotten here, this line is current
-                        [ addEventsToLine now scheduled (Line startOne startEvent one) ]
+                (Line startOne startEvent one) :: [] ->
+                    -- if we've gotten here, this line is current
+                    [ addEventsToLine now scheduled (Line startOne startEvent one) ]
 
-                    (Line startOne startEventOne one) :: (Line startTwo startEventTwo two) :: remaining ->
-                        -- we check if now is after startOne, but before startTwo
-                        if Time.thisAfterThat now startOne && Time.thisAfterThat startTwo now then
-                            -- one is the current timeline
-                            addEventsToLine now scheduled (Line startOne startEventOne one)
-                                :: Line startTwo startEventTwo two
-                                :: remaining
+                (Line startOne startEventOne one) :: (Line startTwo startEventTwo two) :: remaining ->
+                    -- we check if now is after startOne, but before startTwo
+                    if Time.thisAfterThat now startOne && Time.thisAfterThat startTwo now then
+                        -- one is the current timeline
+                        addEventsToLine now scheduled (Line startOne startEventOne one)
+                            :: Line startTwo startEventTwo two
+                            :: remaining
 
-                        else
-                            -- need to search farther.
-                            Line startOne startEventOne one
-                                :: onCurrent (Line startTwo startEventTwo two :: remaining)
+                    else
+                        -- need to search farther.
+                        Line startOne startEventOne one
+                            :: onCurrent (Line startTwo startEventTwo two :: remaining)
     in
     onCurrent lines
 
@@ -447,7 +446,7 @@ createLine now (Schedule delay (Event dur startEvent dwell) reverseQueued) =
                 |> Tuple.second
                 |> List.reverse
     in
-    Line now (Occurring startEvent now dwell) []
+    Line now (Occurring startEvent now dwell) events
 
 
 addEventsToLine : Time.Absolute -> Schedule events -> Line events -> Line events
@@ -606,11 +605,16 @@ foldOverLines lookup mobilize timeline startingCursor lines =
                         { state = startingCursor
                         , events = events
                         , previous = startingEvent
-                        , done = List.isEmpty events
+                        , status =
+                            if List.isEmpty events then
+                                Finished
+
+                            else
+                                NotDone
                         }
                         events
             in
-            if cursor.done then
+            if cursor.status == Finished then
                 cursor.state
 
             else
@@ -621,8 +625,14 @@ type alias Cursor event state =
     { state : state
     , events : List (Occurring event)
     , previous : Occurring event
-    , done : Bool
+    , status : Status
     }
+
+
+type Status
+    = Finished
+    | NotDone
+    | Interrupted
 
 
 overEvents :
@@ -634,23 +644,27 @@ overEvents :
     -> Cursor event motion
     -> Cursor event motion
 overEvents now maybeInterruption lookup mobilize _ cursor =
-    if cursor.done then
-        cursor
+    case cursor.status of
+        Finished ->
+            cursor
 
-    else
-        case cursor.events of
-            [] ->
-                cursor
+        Interrupted ->
+            cursor
 
-            target :: remaining ->
-                case getPhase cursor.previous target now maybeInterruption cursor.state of
-                    ( finished, phase ) ->
-                        { state =
-                            mobilize lookup target (List.head remaining) phase
-                        , events = remaining
-                        , previous = target
-                        , done = finished == Finished
-                        }
+        NotDone ->
+            case cursor.events of
+                [] ->
+                    cursor
+
+                target :: remaining ->
+                    case getPhase cursor.previous target now maybeInterruption cursor.state of
+                        ( status, phase ) ->
+                            { state =
+                                mobilize lookup target (List.head remaining) phase
+                            , events = remaining
+                            , previous = target
+                            , status = status
+                            }
 
 
 {-|
@@ -665,7 +679,7 @@ overEvents now maybeInterruption lookup mobilize _ cursor =
 When we get an interruption, we want to skip all events.
 
 -}
-getPhase : Occurring event -> Occurring event -> Time.Absolute -> Maybe Time.Absolute -> state -> ( DoneOr, Phase state )
+getPhase : Occurring event -> Occurring event -> Time.Absolute -> Maybe Time.Absolute -> state -> ( Status, Phase state )
 getPhase (Occurring prev prevTime maybePrevDwell) (Occurring event eventTime maybeDwell) now maybeInterruption state =
     let
         eventEndTime =
@@ -675,8 +689,43 @@ getPhase (Occurring prev prevTime maybePrevDwell) (Occurring event eventTime may
 
                 Just dwell ->
                     Time.advanceBy dwell eventTime
+
+        interrupted =
+            case maybeInterruption of
+                Nothing ->
+                    False
+
+                Just interruptTime ->
+                    Time.thisBeforeThat interruptTime now
     in
-    if Time.thisAfterThat now eventEndTime then
+    if interrupted then
+        let
+            interruptionTime =
+                Maybe.withDefault now maybeInterruption
+
+            prevEventEndTime =
+                case maybePrevDwell of
+                    Nothing ->
+                        prevTime
+
+                    Just dwell ->
+                        Time.advanceBy dwell prevTime
+
+            progressToNewEvent =
+                Time.progress
+                    prevEventEndTime
+                    eventTime
+                    interruptionTime
+        in
+        ( Interrupted
+        , TransitioningTo
+            { percent = progressToNewEvent
+            , previousTime = prevEventEndTime
+            }
+            state
+        )
+
+    else if Time.thisAfterThat now eventEndTime then
         ( NotDone, After state )
 
     else if Time.thisAfterThat now eventTime then
@@ -735,11 +784,6 @@ type Phase state
     | TransitioningTo Progress state
       -- give me the state while the current event is ongoing
     | Resting Time.Duration state
-
-
-type DoneOr
-    = Finished
-    | NotDone
 
 
 type alias Interpolator event anchor state =
