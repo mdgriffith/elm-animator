@@ -3,7 +3,7 @@ module Internal.Timeline exposing
     , Interpolator
     , Schedule(..), Event(..)
     , foldp, update, needsUpdate
-    , Phase(..), mapPhase
+    , Line(..), Phase(..), Timetable(..), addToDwell, mapPhase
     )
 
 {-|
@@ -28,7 +28,7 @@ import Time
 {-| A list of events that haven't been added to the schedule yet.
 -}
 type Schedule event
-    = Schedule Time.Duration (List (Event event))
+    = Schedule Time.Duration (Event event) (List (Event event))
 
 
 {-| -}
@@ -46,6 +46,7 @@ type alias TimelineDetails event =
     , now : Time.Absolute
     , events : Timetable event
     , queued : Maybe (Schedule event)
+    , interruption : List (Schedule event)
     , running : Bool
     }
 
@@ -63,7 +64,7 @@ type Timetable event
 
 {-| -}
 type Line event
-    = Line Time.Absolute (List (Occurring event))
+    = Line Time.Absolute (Occurring event) (List (Occurring event))
 
 
 mapTable : (Occurring a -> Occurring b) -> Timetable a -> Timetable b
@@ -72,8 +73,8 @@ mapTable fn (Timetable lines) =
 
 
 mapLine : (Occurring a -> Occurring b) -> Line a -> Line b
-mapLine fn (Line t els) =
-    Line t (List.map fn els)
+mapLine fn (Line t startEvent els) =
+    Line t (fn startEvent) (List.map fn els)
 
 
 {-| When the event occurs, and how long we're dwelling at this event (or no dwelling at all)
@@ -190,25 +191,55 @@ getEvents (Timeline timeline) =
     case timeline.events of
         Timetable lines ->
             lines
-                |> List.concatMap (\(Line _ ev) -> ev)
+                |> List.concatMap (\(Line _ start ev) -> start :: ev)
                 |> List.map (\(Occurring evt time maybeDwell) -> ( Time.toPosix time, evt ))
 
 
 {-| -}
 update : Time.Posix -> Timeline event -> Timeline event
 update now (Timeline timeline) =
-    Timeline
-        { timeline
-            | now = Time.absolute now
-            , events =
-                case timeline.queued of
-                    Nothing ->
-                        timeline.events
+    { timeline | now = Time.absolute now }
+        |> applyQueued
+        |> applyInterruptions
+        |> Timeline
 
-                    Just queuedSchedule ->
-                        enqueue timeline (Time.absolute now) queuedSchedule
-            , queued = Nothing
-        }
+
+applyQueued : TimelineDetails event -> TimelineDetails event
+applyQueued timeline =
+    case timeline.queued of
+        Nothing ->
+            timeline
+
+        Just queued ->
+            { timeline
+                | events =
+                    enqueue timeline timeline.now queued
+                , queued = Nothing
+            }
+
+
+applyInterruptions : TimelineDetails event -> TimelineDetails event
+applyInterruptions timeline =
+    case timeline.interruption of
+        [] ->
+            timeline
+
+        _ ->
+            applyInterruptionHelper timeline.interruption { timeline | interruption = [] }
+
+
+applyInterruptionHelper : List (Schedule event) -> TimelineDetails event -> TimelineDetails event
+applyInterruptionHelper interrupts timeline =
+    case interrupts of
+        [] ->
+            timeline
+
+        i :: remaining ->
+            let
+                newEvents =
+                    interrupt timeline timeline.now i
+            in
+            applyInterruptionHelper remaining { timeline | events = newEvents }
 
 
 {-| Interrupt a current timetable with a new list of events.
@@ -219,8 +250,34 @@ update now (Timeline timeline) =
 
 -}
 interrupt : TimelineDetails events -> Time.Absolute -> Schedule events -> Timetable events
-interrupt details now (Schedule delay reverseQueued) =
-    Debug.todo "Ugh"
+interrupt details now ((Schedule delay startingEvent reverseQueued) as scheduled) =
+    case details.events of
+        Timetable lines ->
+            case getLastEventTime lines of
+                Nothing ->
+                    enqueue details now scheduled
+
+                Just last ->
+                    if Time.thisAfterThat now last then
+                        enqueue details now scheduled
+
+                    else
+                        Timetable (lines ++ [ createLine now scheduled ])
+
+
+getLastEventTime : List (Line event) -> Maybe Time.Absolute
+getLastEventTime lines =
+    case List.head (List.reverse lines) of
+        Nothing ->
+            Nothing
+
+        Just (Line startTime startEvent trailing) ->
+            case List.reverse trailing of
+                [] ->
+                    Just startTime
+
+                (Occurring _ at maybeDwell) :: _ ->
+                    Just at
 
 
 {-| Queue a list of events to be played after everything.
@@ -237,35 +294,50 @@ enqueue timeline now scheduled =
             Timetable (addToCurrentLine now scheduled lines)
 
 
-addToCurrentLine now scheduled (Timetable lines) =
+addToCurrentLine : Time.Absolute -> Schedule event -> List (Line event) -> List (Line event)
+addToCurrentLine now scheduled lines =
     let
         onCurrent timelines =
             case timelines of
                 [] ->
-                    [ addEventsToLine now scheduled (Line now [])
-                    ]
+                    [ createLine now scheduled ]
 
-                (Line startOne one) :: [] ->
+                (Line startOne startEvent one) :: [] ->
                     -- if we've gotten here, this line is current
-                    [ addEventsToLine now scheduled (Line startOne one)
-                    ]
+                    [ addEventsToLine now scheduled (Line startOne startEvent one) ]
 
-                (Line startOne one) :: (Line startTwo two) :: remaining ->
+                (Line startOne startEventOne one) :: (Line startTwo startEventTwo two) :: remaining ->
                     -- we check if now is after startOne, but before startTwo
                     if Time.thisAfterThat now startOne && Time.thisAfterThat startTwo now then
                         -- one is the current timeline
-                        [ addEventsToLine now scheduled (Line startOne one)
-                        ]
+                        addEventsToLine now scheduled (Line startOne startEventOne one)
+                            :: Line startTwo startEventTwo two
+                            :: remaining
 
                     else
                         -- need to search farther.
-                        Line startOne one :: onCurrent (Line startTwo two :: remaining)
+                        Line startOne startEventOne one
+                            :: onCurrent (Line startTwo startEventTwo two :: remaining)
     in
     onCurrent lines
 
 
+createLine : Time.Absolute -> Schedule events -> Line events
+createLine now (Schedule delay (Event dur startEvent dwell) reverseQueued) =
+    let
+        start =
+            Time.advanceBy delay now
+
+        events =
+            List.foldl toOccurring ( start, [] ) (List.reverse reverseQueued)
+                |> Tuple.second
+                |> List.reverse
+    in
+    Line now (Occurring startEvent now dwell) []
+
+
 addEventsToLine : Time.Absolute -> Schedule events -> Line events -> Line events
-addEventsToLine now (Schedule delay reverseQueued) (Line startLineAt events) =
+addEventsToLine now (Schedule delay scheduledStartingEvent reverseQueued) (Line startLineAt startingEvent events) =
     let
         queued =
             List.reverse reverseQueued
@@ -281,7 +353,7 @@ addEventsToLine now (Schedule delay reverseQueued) (Line startLineAt events) =
             List.foldl toOccurring ( start, [] ) queued
                 |> Tuple.second
                 |> List.reverse
-                |> Line startLineAt
+                |> Line startLineAt startingEvent
 
         (Occurring lastEvent lastEventTime finalEventDwell) :: eventTail ->
             let
@@ -303,14 +375,16 @@ addEventsToLine now (Schedule delay reverseQueued) (Line startLineAt events) =
                             (Just (Time.duration start lastEventTime))
                 in
                 Line startLineAt
+                    startingEvent
                     (List.reverse (newLastEvent :: eventTail)
                         ++ newEvents
                     )
 
             else
-                Line startLineAt (events ++ newEvents)
+                Line startLineAt startingEvent (events ++ newEvents)
 
 
+addToDwell : Time.Duration -> Maybe Time.Duration -> Maybe Time.Duration
 addToDwell duration maybeDwell =
     case maybeDwell of
         Nothing ->
@@ -355,51 +429,117 @@ getOccurringTime (Occurring _ t _) =
 
 And we have some type aliases to capture how to create each one of those values.
 
-    `Promoter` is a function that transforms an `anchor` into a `motion`.
-
     `Interpolator` is a function that maps linearly between two `motions`.
 
 -}
 foldp : (event -> anchor) -> Interpolator event anchor motion -> Timeline event -> motion
-foldp lookup mobilize (Timeline timeline) =
-    case timeline.events of
-        Timetable [] ->
+foldp lookup mobilize ((Timeline timelineDetails) as timeline) =
+    case timelineDetails.events of
+        Timetable timetable ->
+            let
+                maybeNextEvent =
+                    Nothing
+
+                startingEvent =
+                    case List.head timetable of
+                        Nothing ->
+                            Occurring timelineDetails.initial timelineDetails.now Nothing
+
+                        Just (Line _ start _) ->
+                            start
+
+                startingCursor =
+                    mobilize lookup startingEvent maybeNextEvent Start
+            in
+            foldOverLines lookup mobilize timelineDetails startingCursor timetable
+
+
+foldOverLines : (event -> anchor) -> Interpolator event anchor motion -> TimelineDetails event -> motion -> List (Line event) -> motion
+foldOverLines lookup mobilize timeline startingCursor lines =
+    case lines of
+        [] ->
             -- Generally, this shouldn't be reachable because we require an event on initialization
             -- likely we'll want to change events to `(start, [remaining])` at some point in the future
-            mobilize lookup (Occurring timeline.initial timeline.now Nothing) Nothing Start
+            -- mobilize lookup (Occurring timeline.initial timeline.now Nothing) Nothing Start
+            startingCursor
 
-        Timetable (startingEvent :: remaining) ->
-            .state <|
-                List.foldl
-                    (\_ cursor ->
-                        if cursor.done then
-                            cursor
+        (Line startAt startingEvent events) :: remaining ->
+            let
+                maybeInterruption =
+                    case List.head remaining of
+                        Nothing ->
+                            Nothing
 
-                        else
-                            case cursor.events of
-                                [] ->
-                                    cursor
+                        Just (Line interruptAt interruptEv interruptEvents) ->
+                            Just interruptAt
 
-                                target :: remaining ->
-                                    case getPhase cursor.previous target timeline.now cursor.state of
-                                        ( finished, phase ) ->
-                                            { state =
-                                                mobilize lookup target (List.head remaining) phase
-                                            , events = remaining
-                                            , previous = target
-                                            , done = finished == Finished
-                                            }
-                    )
-                    { state = mobilize lookup startingEvent (List.head (List.drop 1 timeline.events)) Start
-                    , events = timeline.events
-                    , previous = startingEvent
-                    , done = List.isEmpty timeline.events
-                    }
-                    timeline.events
+                cursor =
+                    List.foldl
+                        (overEvents timeline.now maybeInterruption lookup mobilize)
+                        { state = startingCursor
+                        , events = events
+                        , previous = startingEvent
+                        , done = List.isEmpty events
+                        }
+                        events
+            in
+            if cursor.done then
+                cursor.state
+
+            else
+                foldOverLines lookup mobilize timeline cursor.state remaining
 
 
-getPhase : Occurring event -> Occurring event -> Time.Absolute -> state -> ( DoneOr, Phase state )
-getPhase (Occurring prev prevTime maybePrevDwell) (Occurring event eventTime maybeDwell) now state =
+type alias Cursor event state =
+    { state : state
+    , events : List (Occurring event)
+    , previous : Occurring event
+    , done : Bool
+    }
+
+
+overEvents :
+    Time.Absolute
+    -> Maybe Time.Absolute
+    -> (event -> anchor)
+    -> Interpolator event anchor motion
+    -> Occurring event
+    -> Cursor event motion
+    -> Cursor event motion
+overEvents now maybeInterruption lookup mobilize _ cursor =
+    if cursor.done then
+        cursor
+
+    else
+        case cursor.events of
+            [] ->
+                cursor
+
+            target :: remaining ->
+                case getPhase cursor.previous target now maybeInterruption cursor.state of
+                    ( finished, phase ) ->
+                        { state =
+                            mobilize lookup target (List.head remaining) phase
+                        , events = remaining
+                        , previous = target
+                        , done = finished == Finished
+                        }
+
+
+{-|
+
+    Params:
+        1. Previous Event
+        2. Current Event
+        3. Now
+        4. Maybe interruption time
+        5. state
+
+When we get an interruption, we want to skip all events.
+
+-}
+getPhase : Occurring event -> Occurring event -> Time.Absolute -> Maybe Time.Absolute -> state -> ( DoneOr, Phase state )
+getPhase (Occurring prev prevTime maybePrevDwell) (Occurring event eventTime maybeDwell) now maybeInterruption state =
     let
         eventEndTime =
             case maybeDwell of

@@ -4,7 +4,7 @@ module Animator exposing
     , wait, event
     , Duration, millis, seconds, minutes
     , after, between, rewrite
-    , queue, update
+    , queue, interrupt, update
     , float, move, color
     , xy, xyz, to
     , oscillate, wave, wrap, zigzag
@@ -26,7 +26,7 @@ module Animator exposing
 
 @docs after, between, rewrite
 
-@docs queue, update
+@docs queue, interrupt, update
 
 
 # Animating
@@ -64,13 +64,22 @@ update =
     Timeline.update
 
 
+{-| -}
 init : Time.Posix -> event -> Timeline event
 init start first =
     Timeline.Timeline
         { initial = first
         , now = Time.absolute start
-        , events = [ Timeline.Occurring first (Time.absolute start) Nothing ]
+        , events =
+            let
+                firstOccurring =
+                    Timeline.Occurring first (Time.absolute start) Nothing
+            in
+            Timeline.Timetable
+                [ Timeline.Line (Time.absolute start) firstOccurring []
+                ]
         , queued = Nothing
+        , interruption = []
         , running = True
         }
 
@@ -115,19 +124,69 @@ wait =
     Wait
 
 
+{-| -}
+queue : List (Step event) -> Timeline event -> Timeline event
+queue steps (Timeline.Timeline tl) =
+    Timeline.Timeline
+        { tl
+            | queued =
+                case tl.queued of
+                    Nothing ->
+                        case initializeSchedule (millis 0) steps of
+                            Nothing ->
+                                tl.queued
+
+                            Just ( schedule, otherSteps ) ->
+                                Just (List.foldl stepsToEvents schedule otherSteps)
+
+                    Just queued ->
+                        Just (List.foldl stepsToEvents queued steps)
+        }
+
+
+{-| -}
+interrupt : List (Step event) -> Timeline event -> Timeline event
+interrupt steps (Timeline.Timeline tl) =
+    Timeline.Timeline
+        { tl
+            | interruption =
+                case initializeSchedule (millis 0) steps of
+                    Nothing ->
+                        tl.interruption
+
+                    Just ( schedule, otherSteps ) ->
+                        List.foldl stepsToEvents schedule otherSteps :: tl.interruption
+        }
+
+
+initializeSchedule : Time.Duration -> List (Step event) -> Maybe ( Schedule event, List (Step event) )
+initializeSchedule waiting steps =
+    case steps of
+        [] ->
+            Nothing
+
+        (Wait additionalWait) :: moreSteps ->
+            initializeSchedule (Quantity.plus waiting additionalWait) moreSteps
+
+        (TransitionTo dur checkpoint) :: moreSteps ->
+            Just ( Timeline.Schedule waiting (Timeline.Event dur checkpoint Nothing) [], moreSteps )
+
+
 stepsToEvents : Step event -> Timeline.Schedule event -> Timeline.Schedule event
-stepsToEvents step (Timeline.Schedule delay events) =
+stepsToEvents step (Timeline.Schedule delay startEvent events) =
     case events of
         [] ->
             case step of
                 Wait waiting ->
                     Timeline.Schedule
                         (Quantity.plus delay waiting)
+                        startEvent
                         events
 
                 TransitionTo dur checkpoint ->
                     Timeline.Schedule
                         delay
+                        startEvent
                         [ Timeline.Event dur checkpoint Nothing ]
 
         (Timeline.Event durationTo recentEvent maybeDwell) :: remaining ->
@@ -135,36 +194,21 @@ stepsToEvents step (Timeline.Schedule delay events) =
                 Wait dur ->
                     Timeline.Schedule
                         delay
-                        (Timeline.Event durationTo recentEvent (addToDwell dur maybeDwell) :: remaining)
+                        startEvent
+                        (Timeline.Event durationTo recentEvent (Timeline.addToDwell dur maybeDwell) :: remaining)
 
                 TransitionTo dur checkpoint ->
                     if checkpoint == recentEvent then
                         Timeline.Schedule
                             delay
-                            (Timeline.Event durationTo recentEvent (addToDwell dur maybeDwell) :: remaining)
+                            startEvent
+                            (Timeline.Event durationTo recentEvent (Timeline.addToDwell dur maybeDwell) :: remaining)
 
                     else
                         Timeline.Schedule
                             delay
+                            startEvent
                             (Timeline.Event dur checkpoint Nothing :: events)
-
-
-addToDwell duration maybeDwell =
-    case maybeDwell of
-        Nothing ->
-            Just duration
-
-        Just existing ->
-            Just (Quantity.plus duration existing)
-
-
-queue : List (Step event) -> Timeline event -> Timeline event
-queue steps (Timeline.Timeline tl) =
-    Timeline.Timeline
-        { tl
-            | queued =
-                Just (List.foldl stepsToEvents (Timeline.Schedule (millis 0) []) steps)
-        }
 
 
 {-| -}
@@ -180,7 +224,8 @@ type alias Schedule event =
 {-| -}
 rewrite : newEvent -> Timeline event -> (event -> Maybe newEvent) -> Timeline newEvent
 rewrite newStart timeline newLookup =
-    Timeline.rewrite newStart timeline newLookup
+    -- Timeline.rewrite newStart timeline newLookup
+    Debug.todo "ugh"
 
 
 {-| _NOTE_ this might need a rename, it's really "during this even, and after"
@@ -194,7 +239,8 @@ would create `False`, `True`, `True`.
 -}
 after : event -> Timeline event -> Timeline Bool
 after ev timeline =
-    Timeline.after ev timeline
+    -- Timeline.after ev timeline
+    Debug.todo ""
 
 
 {-| _NOTE_ this might need a rename, it's really "during this even, and after"
@@ -208,7 +254,8 @@ would create `False`, `True`, `True`.
 -}
 between : event -> event -> Timeline event -> Timeline Bool
 between =
-    Timeline.between
+    -- Timeline.between
+    Debug.todo ""
 
 
 
