@@ -2,6 +2,7 @@ module Internal.Timeline exposing
     ( Timeline(..), TimelineDetails, Occurring(..), getEvents
     , Interpolator
     , Schedule(..), Event(..)
+    , after, between
     , foldp, update, needsUpdate
     , Line(..), Phase(..), Timetable(..), addToDwell, mapPhase
     )
@@ -77,6 +78,47 @@ mapLine fn (Line t startEvent els) =
     Line t (fn startEvent) (List.map fn els)
 
 
+mapTableWith : (Occurring a -> state -> ( Occurring b, state )) -> state -> Timetable a -> ( Timetable b, state )
+mapTableWith fn initial (Timetable lines) =
+    let
+        overLines line ( existingLines, state ) =
+            let
+                ( newLine, newLineState ) =
+                    mapLineWith fn state line
+            in
+            ( newLine :: existingLines, newLineState )
+
+        ( reversedUpdatedLines, finalState ) =
+            List.foldl overLines ( [], initial ) lines
+    in
+    ( Timetable (List.reverse reversedUpdatedLines)
+    , finalState
+    )
+
+
+mapLineWith : (Occurring a -> state -> ( Occurring b, state )) -> state -> Line a -> ( Line b, state )
+mapLineWith fn initial (Line start startingEvent remaining) =
+    let
+        onLine occur ( events, state ) =
+            let
+                ( newOccur, newState ) =
+                    fn occur state
+            in
+            ( newOccur :: events, newState )
+
+        ( newStartingEvent, startingState ) =
+            fn startingEvent initial
+    in
+    case List.foldl onLine ( [], startingState ) remaining of
+        ( reversedEvents, newState ) ->
+            ( Line start newStartingEvent (List.reverse reversedEvents), newState )
+
+
+foldLine : (Occurring a -> b -> b) -> b -> Line a -> b
+foldLine fn cursor (Line start startingEvent remaining) =
+    List.foldl fn cursor (startingEvent :: remaining)
+
+
 {-| When the event occurs, and how long we're dwelling at this event (or no dwelling at all)
 -}
 type Occurring event
@@ -105,78 +147,139 @@ filterMapOccurring fn (Occurring ev time maybeDwell) =
 --             Timetable. (List.filterMap (filterMapOccurring newLookup)) tl.events
 --         , queued = Nothing
 --         }
--- {-| -}
--- between : event -> event -> Timeline event -> Timeline Bool
--- between start end (Timeline tl) =
---     Timeline
---         { initial = start == tl.initial
---         , now = tl.now
---         , running = tl.running
---         , events =
---             List.foldl (betweenEvent start end) ( NotStarted, [] ) tl.events
---                 |> Tuple.second
---                 |> List.reverse
---         , queued = Nothing
---         }
+
+
+{-| -}
+between : event -> event -> Timeline event -> Timeline Bool
+between start end (Timeline tl) =
+    let
+        isStarted =
+            tl.initial == start
+
+        initialState =
+            if isStarted then
+                -- TODO: pretty sure this should be the starting time of the whole timeline
+                StartedAt (Time.absolute (Time.millisToPosix 0)) Nothing
+
+            else
+                NotStarted
+    in
+    Timeline
+        { initial = isStarted
+        , now = tl.now
+        , running = tl.running
+        , events =
+            Tuple.first
+                (mapTableWith
+                    (betweenEvent start end)
+                    initialState
+                    tl.events
+                )
+        , queued = Nothing -- TODO: carry over queues and interruptions
+        , interruption = []
+        }
 
 
 type Between
     = NotStarted
-    | Started
-    | Done
+      -- starting time, and ending time.
+    | StartedAt Time.Absolute (Maybe Time.Absolute)
 
 
-betweenEvent : event -> event -> Occurring event -> ( Between, List (Occurring Bool) ) -> ( Between, List (Occurring Bool) )
-betweenEvent startCheckpoint endCheckpoint (Occurring ev time maybeDwell) ( status, events ) =
+betweenEvent : event -> event -> Occurring event -> Between -> ( Occurring Bool, Between )
+betweenEvent startCheckpoint endCheckpoint (Occurring ev time maybeDwell) status =
     case status of
         NotStarted ->
             if startCheckpoint == ev then
-                ( Started, Occurring True time maybeDwell :: events )
+                ( Occurring True time maybeDwell
+                , StartedAt time Nothing
+                )
 
             else
-                ( NotStarted, Occurring False time maybeDwell :: events )
+                ( Occurring False time maybeDwell
+                , status
+                )
 
-        Started ->
-            if startCheckpoint == ev then
-                ( Started, Occurring True time maybeDwell :: events )
+        StartedAt startedAt maybeEnd ->
+            if Time.thisAfterThat time startedAt then
+                case maybeEnd of
+                    Nothing ->
+                        ( Occurring True time maybeDwell
+                        , if ev == endCheckpoint then
+                            StartedAt startedAt (Just time)
+
+                          else
+                            status
+                        )
+
+                    Just end ->
+                        if Time.thisAfterThat time end then
+                            ( Occurring False time maybeDwell
+                            , status
+                            )
+
+                        else
+                            ( Occurring True time maybeDwell
+                            , status
+                            )
 
             else
-                ( NotStarted, Occurring False time maybeDwell :: events )
-
-        Done ->
-            ( status, Occurring False time maybeDwell :: events )
-
+                ( Occurring False time maybeDwell
+                , status
+                )
 
 
--- {-| -}
--- after : event -> Timeline event -> Timeline Bool
--- after ev (Timeline tl) =
---     let
---         started =
---             tl.initial == ev
---     in
---     Timeline
---         { initial = started
---         , now = tl.now
---         , running = tl.running
---         , events =
---             List.foldl (afterEvent ev) ( started, [] ) tl.events
---                 |> Tuple.second
---                 |> List.reverse
---         , queued = Nothing
---         }
+{-| -}
+after : event -> Timeline event -> Timeline Bool
+after ev (Timeline tl) =
+    let
+        isStarted =
+            tl.initial == ev
+
+        initialState =
+            if isStarted then
+                -- TODO: pretty sure this should be the starting time of the whole timeline
+                Just (Time.absolute (Time.millisToPosix 0))
+
+            else
+                Nothing
+    in
+    Timeline
+        { initial = isStarted
+        , now = tl.now
+        , events =
+            Tuple.first
+                (mapTableWith
+                    (afterEvent ev)
+                    initialState
+                    tl.events
+                )
+
+        -- TODO: these should be added
+        , interruption = [] --tl.interruption
+        , queued = Nothing -- tl.queued
+        , running = tl.running
+        }
 
 
-afterEvent : event -> Occurring event -> ( Bool, List (Occurring Bool) ) -> ( Bool, List (Occurring Bool) )
-afterEvent checkpoint (Occurring ev time maybeDwell) ( isAfter, events ) =
-    if isAfter then
-        ( isAfter, Occurring isAfter time maybeDwell :: events )
+afterEvent : event -> Occurring event -> Maybe Time.Absolute -> ( Occurring Bool, Maybe Time.Absolute )
+afterEvent checkpoint (Occurring ev time maybeDwell) maybeCheckpointTime =
+    case maybeCheckpointTime of
+        Nothing ->
+            if checkpoint == ev then
+                ( Occurring True time maybeDwell
+                , Just time
+                )
 
-    else if checkpoint == ev then
-        ( True, Occurring True time maybeDwell :: events )
+            else
+                ( Occurring False time maybeDwell
+                , maybeCheckpointTime
+                )
 
-    else
-        ( False, Occurring False time maybeDwell :: events )
+        Just checkpointAt ->
+            ( Occurring (Time.thisAfterThat time checkpointAt) time maybeDwell
+            , maybeCheckpointTime
+            )
 
 
 {-| -}

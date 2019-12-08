@@ -239,8 +239,7 @@ would create `False`, `True`, `True`.
 -}
 after : event -> Timeline event -> Timeline Bool
 after ev timeline =
-    -- Timeline.after ev timeline
-    Debug.todo ""
+    Timeline.after ev timeline
 
 
 {-| _NOTE_ this might need a rename, it's really "during this even, and after"
@@ -254,8 +253,7 @@ would create `False`, `True`, `True`.
 -}
 between : event -> event -> Timeline event -> Timeline Bool
 between =
-    -- Timeline.between
-    Debug.todo ""
+    Timeline.between
 
 
 
