@@ -238,14 +238,19 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
                 velocityAtEndOfTransition =
                     case maybeLookAhead of
                         Nothing ->
-                            Pixels.pixelsPerSecond 0
+                            case lookup target of
+                                Position _ arriving _ ->
+                                    Pixels.pixelsPerSecond 0
+
+                                Oscillate _ _ ->
+                                    Pixels.pixelsPerSecond 0
 
                         Just (Timeline.Occurring lookAhead aheadTime maybeLookAheadDwell) ->
-                            case lookup target of
+                            case lookup lookAhead of
                                 Oscillate period toX ->
                                     derivativeOfEasing toX period 0
 
-                                Position _ _ aheadPosition ->
+                                Position _ arriving aheadPosition ->
                                     velocityBetween targetPosition targetTime (Pixels.pixels aheadPosition) aheadTime
 
                 targetTimeInMs =

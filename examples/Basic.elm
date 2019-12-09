@@ -15,7 +15,7 @@ main =
     Browser.document
         { init =
             \() ->
-                update QueueThree
+                update QueueOne
                     { timeline =
                         Animator.init (Time.millisToPosix 0) Hufflepuff
                     , time = Time.millisToPosix 0
@@ -43,6 +43,7 @@ type Msg
     = Tick (Animator.Timeline House)
     | NextHouse
     | QueueThree
+    | QueueOne
     | NewTime Time.Posix
     | ChartMsg Help.Plot.Msg
 
@@ -109,24 +110,22 @@ view model =
                     (toPx
                         (.position (Animator.move model.timeline toPos))
                     )
-                , Attr.style "background-color"
-                    (Color.toCssString
-                        (Animator.color model.timeline <|
-                            \event ->
-                                case event of
-                                    Hufflepuff ->
-                                        yellow
 
-                                    Griffyndor ->
-                                        red
-
-                                    Slytherin ->
-                                        green
-
-                                    Ravenclaw ->
-                                        blue
-                        )
-                    )
+                -- , Attr.style "background-color"
+                --     (Color.toCssString
+                --         (Animator.color model.timeline <|
+                --             \event ->
+                --                 case event of
+                --                     Hufflepuff ->
+                --                         yellow
+                --                     Griffyndor ->
+                --                         red
+                --                     Slytherin ->
+                --                         green
+                --                     Ravenclaw ->
+                --                         blue
+                --         )
+                --     )
                 ]
                 [ case Animator.move model.timeline toPos of
                     { position, velocity } ->
@@ -149,119 +148,116 @@ view model =
                 }
             )
 
-        -- noWobble
-        , Html.span [] [ Html.text "noWobble" ]
-        , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
-            [ Help.Plot.spring
-                { stiffness = 170
-                , damping = 26
-                , initialPosition = 0
-                , initialVelocity = 0
-                }
-            , Help.Plot.spring
-                { stiffness = 170
-                , damping = 26
-                , initialPosition = -10
-                , initialVelocity = 0
-                }
-            , Help.Plot.spring
-                { stiffness = 170
-                , damping = 26
-                , initialPosition = 0
-                , initialVelocity = 500
-                }
-            ]
-
-        -- stiff
-        , Html.span [] [ Html.text "stiff" ]
-        , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
-            [ Help.Plot.spring
-                { stiffness = 210
-                , damping = 20
-                , initialPosition = 0
-                , initialVelocity = 0
-                }
-            , Help.Plot.spring
-                { stiffness = 210
-                , damping = 20
-                , initialPosition = -10
-                , initialVelocity = 0
-                }
-            , Help.Plot.spring
-                { stiffness = 210
-                , damping = 20
-                , initialPosition = 0
-                , initialVelocity = 500
-                }
-            ]
-
-        -- gentle
-        , Html.span [] [ Html.text "gentle" ]
-        , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
-            [ Help.Plot.spring
-                { stiffness = 120
-                , damping = 14
-                , initialPosition = 0
-                , initialVelocity = 0
-                }
-            , Help.Plot.spring
-                { stiffness = 120
-                , damping = 14
-                , initialPosition = -10
-                , initialVelocity = 0
-                }
-            , Help.Plot.spring
-                { stiffness = 120
-                , damping = 14
-                , initialPosition = 0
-                , initialVelocity = 500
-                }
-            ]
-
-        -- wobbly
-        , Html.span [] [ Html.text "wobbly" ]
-        , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
-            [ Help.Plot.spring
-                { stiffness = 180
-                , damping = 12
-                , initialPosition = 0
-                , initialVelocity = 0
-                }
-            , Help.Plot.spring
-                { stiffness = 180
-                , damping = 12
-                , initialPosition = -10
-                , initialVelocity = 0
-                }
-            , Help.Plot.spring
-                { stiffness = 180
-                , damping = 12
-                , initialPosition = 0
-                , initialVelocity = 500
-                }
-            ]
-        , Html.span [] [ Html.text "Critical Damping vs K" ]
-        , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
-            [ Help.Plot.damping
-                { kMin = 10
-                , kMax = 300
-                }
-            ]
-        , Html.span [] [ Html.text "Wobles, K vs Settling Time" ]
-        , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
-            [ Help.Plot.settlingTime
-                { kMin = 10
-                , kMax = 600
-                , wobbles =
-                    [ 0
-                    , 0.1
-                    , 0.25
-                    , 0.5
-                    , 75
-                    , 1
-                    ]
-                }
-            ]
+        -- -- noWobble
+        -- , Html.span [] [ Html.text "noWobble" ]
+        -- , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
+        --     [ Help.Plot.spring
+        --         { stiffness = 170
+        --         , damping = 26
+        --         , initialPosition = 0
+        --         , initialVelocity = 0
+        --         }
+        --     , Help.Plot.spring
+        --         { stiffness = 170
+        --         , damping = 26
+        --         , initialPosition = -10
+        --         , initialVelocity = 0
+        --         }
+        --     , Help.Plot.spring
+        --         { stiffness = 170
+        --         , damping = 26
+        --         , initialPosition = 0
+        --         , initialVelocity = 500
+        --         }
+        --     ]
+        -- -- stiff
+        -- , Html.span [] [ Html.text "stiff" ]
+        -- , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
+        --     [ Help.Plot.spring
+        --         { stiffness = 210
+        --         , damping = 20
+        --         , initialPosition = 0
+        --         , initialVelocity = 0
+        --         }
+        --     , Help.Plot.spring
+        --         { stiffness = 210
+        --         , damping = 20
+        --         , initialPosition = -10
+        --         , initialVelocity = 0
+        --         }
+        --     , Help.Plot.spring
+        --         { stiffness = 210
+        --         , damping = 20
+        --         , initialPosition = 0
+        --         , initialVelocity = 500
+        --         }
+        --     ]
+        -- -- gentle
+        -- , Html.span [] [ Html.text "gentle" ]
+        -- , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
+        --     [ Help.Plot.spring
+        --         { stiffness = 120
+        --         , damping = 14
+        --         , initialPosition = 0
+        --         , initialVelocity = 0
+        --         }
+        --     , Help.Plot.spring
+        --         { stiffness = 120
+        --         , damping = 14
+        --         , initialPosition = -10
+        --         , initialVelocity = 0
+        --         }
+        --     , Help.Plot.spring
+        --         { stiffness = 120
+        --         , damping = 14
+        --         , initialPosition = 0
+        --         , initialVelocity = 500
+        --         }
+        --     ]
+        -- -- wobbly
+        -- , Html.span [] [ Html.text "wobbly" ]
+        -- , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
+        --     [ Help.Plot.spring
+        --         { stiffness = 180
+        --         , damping = 12
+        --         , initialPosition = 0
+        --         , initialVelocity = 0
+        --         }
+        --     , Help.Plot.spring
+        --         { stiffness = 180
+        --         , damping = 12
+        --         , initialPosition = -10
+        --         , initialVelocity = 0
+        --         }
+        --     , Help.Plot.spring
+        --         { stiffness = 180
+        --         , damping = 12
+        --         , initialPosition = 0
+        --         , initialVelocity = 500
+        --         }
+        --     ]
+        -- , Html.span [] [ Html.text "Critical Damping vs K" ]
+        -- , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
+        --     [ Help.Plot.damping
+        --         { kMin = 10
+        --         , kMax = 300
+        --         }
+        --     ]
+        -- , Html.span [] [ Html.text "Wobles, K vs Settling Time" ]
+        -- , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
+        --     [ Help.Plot.settlingTime
+        --         { kMin = 10
+        --         , kMax = 600
+        --         , wobbles =
+        --             [ 0
+        --             , 0.1
+        --             , 0.25
+        --             , 0.5
+        --             , 75
+        --             , 1
+        --             ]
+        --         }
+        --     ]
         ]
     }
 
@@ -358,6 +354,20 @@ update msg model =
             , Cmd.none
             )
 
+        QueueOne ->
+            ( { model
+                | timeline =
+                    Animator.queue
+                        [ Animator.event (Animator.seconds 1) Slytherin
+                        , Animator.wait (Animator.seconds 3)
+                        ]
+                        model.timeline
+                        |> Animator.update (Time.millisToPosix 0)
+                        |> Animator.update (Time.millisToPosix 1409)
+              }
+            , Cmd.none
+            )
+
         NextHouse ->
             let
                 newHouse =
@@ -429,7 +439,7 @@ toHousePositionWithOrbit event =
 
         Griffyndor ->
             Animator.wave 390 410
-                |> Animator.oscillate (Animator.millis 200)
+                |> Animator.oscillate (Animator.millis 400)
 
         Slytherin ->
             Animator.to 700
