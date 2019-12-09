@@ -2,6 +2,7 @@ module Internal.Interpolate exposing
     ( color
     , Movement(..), move, xy, xyz
     , derivativeOfEasing
+    , defaultArrival, defaultDeparture
     )
 
 {-|
@@ -39,7 +40,74 @@ unwrapQuantity (Quantity.Quantity value) =
 -}
 type Movement
     = Oscillate Time.Duration (Float -> Float)
-    | Position Float
+    | Position Departure Arrival Float
+
+
+defaultDeparture : Departure
+defaultDeparture =
+    { late = 0
+    , speed = 0
+    }
+
+
+defaultArrival : Arrival
+defaultArrival =
+    { wobbliness = 0
+    , early = 0
+    , speed = 0
+    }
+
+
+{-| Number betwen 0 and 1
+-}
+type alias Proportion =
+    Float
+
+
+type alias Arrival =
+    { wobbliness : Proportion
+    , early : Proportion
+    , speed : Proportion
+    }
+
+
+type alias Departure =
+    { late : Proportion
+    , speed : Proportion
+    }
+
+
+
+{- Possible characteristics
+
+
+   We can't leave early or arrive late because that violates our bounds.  Doesn't seem to be an issue.
+
+
+
+
+   Arrival ->
+       Wobbly Float
+       Early
+       ~Late~
+       ?Quickly
+
+
+   Departure ->
+       Quickly
+       Late
+       ~Early~
+
+    - Arrive Wobbly, Float
+    - Leave Late (Linger before departing)
+    - Depart quickly
+    - Arrive Early
+    -
+
+
+
+
+-}
 
 
 wrapUnitAfter dur total =
@@ -111,7 +179,7 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
                 Oscillate _ toX ->
                     Pixels.pixels (toX 0)
 
-                Position x ->
+                Position _ _ x ->
                     Pixels.pixels x
     in
     case phase of
@@ -134,7 +202,7 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
                             Just dwell ->
                                 Pixels.pixels (toX (wrapUnitAfter period dwell))
 
-                    Position x ->
+                    Position _ _ x ->
                         Pixels.pixels x
             , velocity =
                 case maybeDwell of
@@ -149,7 +217,7 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
                                         -- calc forward velocity?
                                         velocityBetween targetPosition targetTime (Pixels.pixels (toX 0)) aheadTime
 
-                                    Position aheadPosition ->
+                                    Position _ _ aheadPosition ->
                                         -- we're not dwelling here, and we're moving on to `ahead
                                         velocityBetween targetPosition targetTime (Pixels.pixels aheadPosition) aheadTime
 
@@ -158,7 +226,7 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
                             Oscillate period toX ->
                                 derivativeOfEasing toX period (wrapUnitAfter period dwell)
 
-                            Position aheadPosition ->
+                            Position _ _ aheadPosition ->
                                 Pixels.pixelsPerSecond 0
             }
 
@@ -177,7 +245,7 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
                                 Oscillate period toX ->
                                     derivativeOfEasing toX period 0
 
-                                Position aheadPosition ->
+                                Position _ _ aheadPosition ->
                                     velocityBetween targetPosition targetTime (Pixels.pixels aheadPosition) aheadTime
 
                 targetTimeInMs =
@@ -210,7 +278,7 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
 
         Timeline.Resting restingDuration state ->
             case lookup target of
-                Position pos ->
+                Position _ _ pos ->
                     { position = Pixels.pixels pos
                     , velocity = Pixels.pixelsPerSecond 0
                     }

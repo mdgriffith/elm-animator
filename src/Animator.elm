@@ -333,7 +333,7 @@ type alias Movement =
 
 to : Float -> Movement
 to =
-    Interpolate.Position
+    Interpolate.Position Interpolate.defaultDeparture Interpolate.defaultArrival
 
 
 type Oscillator
@@ -451,7 +451,7 @@ oscillate activeDuration (Oscillator pauses osc) =
                                 osc a
 
         fn u =
-            osc (withPause u u pauses)
+            withPause u u pauses
     in
     Interpolate.Oscillate totalDuration fn
 
@@ -508,12 +508,22 @@ wrap start end =
 wave : Float -> Float -> Oscillator
 wave start end =
     let
+        top =
+            max start end
+
+        bottom =
+            min start end
+
         total =
-            end - start
+            top - bottom
     in
     Oscillator []
         (\u ->
-            start + total * sin (turns u)
+            let
+                normalized =
+                    (cos (turns (0.5 + u)) + 1) / 2
+            in
+            start + total * normalized
         )
 
 
