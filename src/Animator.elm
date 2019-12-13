@@ -6,9 +6,10 @@ module Animator exposing
     , after, between, rewrite
     , queue, interrupt, update
     , float, move, color
-    , xy, xyz, to
+    , xy, xyz, to, Movement
     , oscillate, wave, wrap, zigzag
     , pause, shift
+    , withArriveSpeed, withDepartSpeed
     )
 
 {-|
@@ -33,7 +34,7 @@ module Animator exposing
 
 @docs float, move, color
 
-@docs xy, xyz, to
+@docs xy, xyz, to, Movement
 
 
 # Oscillators
@@ -327,19 +328,41 @@ unwrapUnits { position, velocity } =
     }
 
 
+{-| -}
 type alias Movement =
     Interpolate.Movement
 
 
+{-| -}
 to : Float -> Movement
 to =
     Interpolate.Position Interpolate.defaultDeparture Interpolate.defaultArrival
 
 
+withDepartSpeed s movement =
+    case movement of
+        Interpolate.Position dep arrival pos ->
+            Interpolate.Position { dep | speed = s } arrival pos
+
+        Interpolate.Oscillate _ _ ->
+            movement
+
+
+withArriveSpeed s movement =
+    case movement of
+        Interpolate.Position dep arrival pos ->
+            Interpolate.Position dep { arrival | speed = s } pos
+
+        Interpolate.Oscillate _ _ ->
+            movement
+
+
+{-| -}
 type Oscillator
     = Oscillator (List Pause) (Float -> Float)
 
 
+{-| -}
 type Pause
     = Pause Duration Float
 

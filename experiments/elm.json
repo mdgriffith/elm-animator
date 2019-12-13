@@ -2,8 +2,7 @@
     "type": "application",
     "source-directories": [
         ".",
-        "../src",
-        "../experiments"
+        "../src"
     ],
     "elm-version": "0.19.1",
     "dependencies": {
@@ -14,6 +13,7 @@
             "elm/html": "1.0.0",
             "elm/svg": "1.0.1",
             "elm/time": "1.0.0",
+            "elm-community/easing-functions": "2.0.0",
             "ianmackenzie/elm-geometry": "2.0.0",
             "ianmackenzie/elm-units": "2.2.0",
             "terezka/line-charts": "2.0.0"

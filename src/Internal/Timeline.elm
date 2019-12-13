@@ -308,6 +308,16 @@ getEvents (Timeline timeline) =
                 |> List.map (\(Occurring evt time maybeDwell) -> ( Time.toPosix time, evt ))
 
 
+getEnd : Timeline event -> Time.Posix
+getEnd timeline =
+    Time.millisToPosix 0
+
+
+getStart : Timeline event -> Time.Posix
+getStart timeline =
+    Time.millisToPosix 0
+
+
 {-| -}
 update : Time.Posix -> Timeline event -> Timeline event
 update now (Timeline timeline) =

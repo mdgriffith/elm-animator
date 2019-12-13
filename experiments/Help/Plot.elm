@@ -1,12 +1,25 @@
-module Help.Plot exposing (Model, Msg, damping, init, settlingTime, spring, update, view)
+module Help.Plot exposing
+    ( Model
+    , Msg
+    , damping
+    , easing
+    , init
+    , settlingTime
+    , spring
+    , timeline
+    , update
+    , view
+    )
 
 {-| -}
 
+import Animator
 import Browser
 import Color
 import Html exposing (Html, div, h1, node, p, text)
 import Html.Attributes exposing (class)
 import Internal.Spring as Spring
+import Internal.Timeline
 import LineChart as LineChart
 import LineChart.Area as Area
 import LineChart.Axis as Axis
@@ -20,6 +33,7 @@ import LineChart.Junk as Junk exposing (..)
 import LineChart.Legends as Legends
 import LineChart.Line as Line
 import Svg exposing (Attribute, Svg, g, text_, tspan)
+import Time
 
 
 
@@ -59,6 +73,320 @@ update msg model =
 
 
 -- VIEW
+
+
+timeline :
+    { timeline : Animator.Timeline event
+    , toMovement : event -> Animator.Movement
+    }
+    -> Svg msg
+timeline config =
+    let
+        rendered =
+            render config.timeline
+                config.toMovement
+                { framesPerSecond = 30
+                , start = Time.millisToPosix 0
+                , end = Time.millisToPosix 1500
+                }
+
+        points =
+            List.map
+                (\e ->
+                    { time = toFloat (Time.posixToMillis e.time)
+                    , value = e.value.position
+                    }
+                )
+                rendered
+
+        velocities =
+            List.map
+                (\e ->
+                    { time = toFloat (Time.posixToMillis e.time)
+                    , value = e.value.velocity
+                    }
+                )
+                rendered
+
+        acceleration =
+            calcAcceleration rendered
+
+        events =
+            renderEvents (Internal.Timeline.getEvents config.timeline)
+    in
+    Html.div
+        [ class "container" ]
+        [ LineChart.viewCustom
+            { y = Axis.default 450 "Value" .value
+            , x = Axis.default 600 "Time" .time
+            , container = Container.styled "line-chart-1" [ ( "font-family", "monospace" ) ]
+            , interpolation = Interpolation.default
+            , intersection = Intersection.default
+            , legends = Legends.default
+            , events =
+                Events.default
+            , junk = Junk.default
+            , grid = Grid.default
+            , area = Area.default
+            , line = Line.default
+            , dots = Dots.default
+            }
+            [ LineChart.line Color.purple Dots.none "Position" points
+            , LineChart.line Color.blue Dots.none "Velocity" velocities
+            , LineChart.line Color.orange Dots.none "Accel" acceleration
+            , LineChart.line Color.green Dots.plus "Events" events
+            ]
+        ]
+
+
+easing : (Float -> Float) -> Float -> Float -> Svg msg
+easing ease start end =
+    let
+        rendered =
+            renderEasingRange ease start end 200
+
+        points =
+            List.map
+                (\e ->
+                    { time = e.time
+                    , value = e.position
+                    }
+                )
+                rendered
+
+        velocities =
+            List.map
+                (\e ->
+                    { time = e.time
+                    , value = e.velocity
+                    }
+                )
+                rendered
+
+        acceleration =
+            List.map
+                (\e ->
+                    { time = e.time
+                    , value = e.acceleration
+                    }
+                )
+                rendered
+    in
+    Html.div
+        [ class "container" ]
+        [ LineChart.viewCustom
+            { y = Axis.default 450 "Value" .value
+            , x = Axis.default 600 "Time" .time
+            , container = Container.styled "line-chart-1" [ ( "font-family", "monospace" ) ]
+            , interpolation = Interpolation.default
+            , intersection = Intersection.default
+            , legends = Legends.default
+            , events = Events.default
+            , junk = Junk.default
+            , grid = Grid.default
+            , area = Area.default
+            , line = Line.default
+            , dots = Dots.default
+            }
+            [ LineChart.line Color.purple Dots.none "Position" points
+            , LineChart.line Color.blue Dots.none "Velocity" velocities
+            , LineChart.line Color.orange Dots.none "Acceleration" acceleration
+            ]
+        ]
+
+
+renderEasingRange ease start end steps =
+    let
+        dt =
+            (end - start) / toFloat steps
+
+        renderPoint i points =
+            let
+                f =
+                    toFloat i
+
+                new =
+                    { position = ease (f * dt)
+                    , velocity = easingVelocity ease (f * dt) dt
+                    , acceleration = easingAcceleration ease (f * dt) dt
+                    , time = f * dt
+                    }
+            in
+            new :: points
+    in
+    List.foldl renderPoint [] (List.range 0 steps)
+
+
+easingVelocity ease i dt =
+    let
+        ( start, end ) =
+            ( i - (dt / 2)
+            , i + (dt / 2)
+            )
+
+        dx =
+            ease end - ease start
+    in
+    dx / dt
+
+
+easingAcceleration fn i dt =
+    let
+        ( start, end ) =
+            ( i - (dt / 2)
+            , i + (dt / 2)
+            )
+
+        v1 =
+            easingVelocity fn start dt
+
+        v2 =
+            easingVelocity fn end dt
+
+        ddx =
+            v2 - v1
+    in
+    ddx / dt
+
+
+avgTime t1 t2 =
+    let
+        t1InMs =
+            Time.posixToMillis t1
+
+        t2InMs =
+            Time.posixToMillis t2
+
+        start =
+            min t1InMs t2InMs
+    in
+    Time.millisToPosix (start + round (abs (toFloat t1InMs - toFloat t2InMs) / 2))
+
+
+calcAcceleration points =
+    case points of
+        [] ->
+            []
+
+        start :: remain ->
+            List.foldl
+                (\point ( prev, accels ) ->
+                    let
+                        t1InMs =
+                            Time.posixToMillis prev.time
+
+                        t2InMs =
+                            Time.posixToMillis point.time
+
+                        dt =
+                            abs (toFloat t1InMs - toFloat t2InMs) / 2
+
+                        newPoint =
+                            { time = toFloat (Time.posixToMillis (avgTime prev.time point.time))
+                            , value =
+                                10
+                                    * ((prev.value.velocity - point.value.velocity)
+                                        / dt
+                                      )
+                            }
+                    in
+                    ( point, newPoint :: accels )
+                )
+                ( start, [] )
+                remain
+                |> Tuple.second
+
+
+render :
+    Animator.Timeline event
+    -> (event -> Animator.Movement)
+    ->
+        { framesPerSecond : Float
+        , start : Time.Posix
+        , end : Time.Posix
+        }
+    ->
+        List
+            { time : Time.Posix
+            , value : { position : Float, velocity : Float }
+            }
+render myTimeline toPos config =
+    let
+        startTimeInMs =
+            Time.posixToMillis config.start
+
+        durationInMs =
+            Time.posixToMillis config.end
+                - startTimeInMs
+
+        frameCount =
+            (toFloat durationInMs / 1000) * config.framesPerSecond
+
+        frameSize =
+            1000 / config.framesPerSecond
+
+        frames =
+            List.range 0 (ceiling frameCount)
+    in
+    List.foldl
+        (\i rendered ->
+            let
+                currentTime =
+                    Time.millisToPosix (round (toFloat startTimeInMs + (toFloat i * frameSize)))
+            in
+            { time = currentTime
+            , value = Animator.move (Animator.update currentTime myTimeline) toPos
+            }
+                :: rendered
+        )
+        []
+        frames
+
+
+renderEvents events =
+    List.map
+        (\( time, ev ) ->
+            { time = toFloat (Time.posixToMillis time)
+            , value = 300
+            }
+        )
+        events
+
+
+renderPoints move tl toPos =
+    List.foldl
+        (\i rendered ->
+            let
+                currentTime =
+                    Time.millisToPosix (i * 16)
+            in
+            case move (Animator.update currentTime tl) toPos of
+                current ->
+                    { time = toFloat i * 16
+                    , position = current.position
+                    }
+                        :: rendered
+        )
+        []
+        (List.range 0 400)
+
+
+renderVelocities move tl toPos =
+    List.foldl
+        (\i rendered ->
+            let
+                currentTime =
+                    Time.millisToPosix (i * 16)
+            in
+            case move (Animator.update currentTime tl) toPos of
+                current ->
+                    { time = toFloat i * 16
+                    , position = current.velocity
+                    }
+                        :: rendered
+        )
+        []
+        (List.range 0 400)
 
 
 view :

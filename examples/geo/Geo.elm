@@ -43,6 +43,14 @@ current =
     }
 
 
+one =
+    0.2
+
+
+two =
+    0.8
+
+
 view : Model -> Html Msg
 view { x0 } =
     let
@@ -63,11 +71,17 @@ view { x0 } =
             --     (Vector2d.pixels 100 0)
             --     (Point2d.pixels 300 300)
             --     (Vector2d.pixels 0 -300)
-            CubicSpline2d.fromEndpoints
+            -- CubicSpline2d.fromEndpoints
+            --     (Point2d.pixels 100 current.start.position)
+            --     (Vector2d.pixels 100 current.start.velocity)
+            --     (Point2d.pixels 400 current.end.position)
+            --     (Vector2d.pixels 400 current.end.velocity)
+            CubicSpline2d.fromControlPoints
                 (Point2d.pixels 100 current.start.position)
-                (Vector2d.pixels 100 current.start.velocity)
+                (Point2d.pixels (100 + (300 * one)) current.start.position)
+                -- (Point2d.pixels (400 + (300 * 0.2)) current.end.position)
+                (Point2d.pixels (100 + (300 * two)) current.end.position)
                 (Point2d.pixels 400 current.end.position)
-                (Vector2d.pixels 400 (-1 * current.end.velocity))
 
         -- point on: Point2d { x = 212.5, y = 325.274011578393 }
         -- point on: Point2d { x = 175, y = 325.274011578393 }
@@ -90,6 +104,12 @@ view { x0 } =
                     , Svg.Attributes.strokeWidth "1"
                     ]
                     spline
+                , Svg.circle2d
+                    [ Svg.Attributes.fill "black"
+                    ]
+                  <|
+                    Circle2d.withRadius (Pixels.pixels 4)
+                        (Point2d.pixels 100 100)
                 , Svg.circle2d
                     [ Svg.Attributes.fill "black"
                     ]

@@ -240,7 +240,11 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
                         Nothing ->
                             case lookup target of
                                 Position _ arriving _ ->
-                                    Pixels.pixelsPerSecond 0
+                                    let
+                                        _ =
+                                            Debug.log "arrivin speed"
+                                    in
+                                    Pixels.pixelsPerSecond (-1000 * arriving.speed)
 
                                 Oscillate _ _ ->
                                     Pixels.pixelsPerSecond 0
@@ -251,27 +255,64 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
                                     derivativeOfEasing toX period 0
 
                                 Position _ arriving aheadPosition ->
-                                    velocityBetween targetPosition targetTime (Pixels.pixels aheadPosition) aheadTime
+                                    Quantity.plus
+                                        (velocityBetween targetPosition targetTime (Pixels.pixels aheadPosition) aheadTime)
+                                        (Pixels.pixelsPerSecond (600 * arriving.speed))
 
+                -- startVelocity =
                 targetTimeInMs =
                     Time.inMilliseconds targetTime
 
                 startTimeInMs =
                     Time.inMilliseconds progress.previousTime
 
-                curve =
-                    CubicSpline2d.fromEndpoints
-                        (Point2d.unitless startTimeInMs (Pixels.inPixels state.position))
-                        (Vector2d.unitless startTimeInMs (Pixels.inPixelsPerSecond state.velocity))
-                        (Point2d.unitless targetTimeInMs (Pixels.inPixels targetPosition))
-                        (Vector2d.unitless targetTimeInMs (Pixels.inPixelsPerSecond velocityAtEndOfTransition))
+                totalDur =
+                    targetTimeInMs - startTimeInMs
 
+                one =
+                    0.4
+
+                two =
+                    0.2
+
+                curve =
+                    -- CubicSpline2d.fromEndpoints
+                    --     (Point2d.unitless startTimeInMs (Pixels.inPixels state.position))
+                    --     (Vector2d.unitless startTimeInMs (Pixels.inPixelsPerSecond state.velocity))
+                    --     (Point2d.unitless targetTimeInMs (Pixels.inPixels targetPosition))
+                    --     (Vector2d.unitless targetTimeInMs (Pixels.inPixelsPerSecond velocityAtEndOfTransition))
+                    CubicSpline2d.fromControlPoints
+                        (Point2d.unitless startTimeInMs (Pixels.inPixels state.position))
+                        (Point2d.unitless (startTimeInMs + (totalDur * one)) (Pixels.inPixels state.position))
+                        (Point2d.unitless (startTimeInMs + (totalDur * two)) (Pixels.inPixels targetPosition))
+                        (Point2d.unitless targetTimeInMs (Pixels.inPixels targetPosition))
+
+                -- bezier
+                --     0.4
+                --     0
+                --     0.2
+                --     1
+                -- point =
+                --     CubicSpline2d.pointOn curve progress.percent
+                -- _ =
+                -- Debug.log "pnt" ( point, startTimeInMs + (progress.percent * totalDur) )
                 current =
                     { position =
-                        CubicSpline2d.pointOn curve progress.percent
-                            |> Point2d.yCoordinate
-                            |> Quantity.toFloat
+                        (Pixels.inPixels state.position
+                            + (bezier 0.4 0 0.2 1.0 progress.percent
+                                * (Pixels.inPixels targetPosition
+                                    - Pixels.inPixels state.position
+                                  )
+                              )
+                        )
                             |> Pixels.pixels
+
+                    -- CubicSpline2d.pointOn curve progress.percent
+                    --     |> Point2d.yCoordinate
+                    --     |> Quantity.toFloat
+                    --     |> Pixels.pixels
+                    -- linear (Pixels.inPixels state.position) (Pixels.inPixels targetPosition) progress.percent
+                    -- |> Pixels.pixels
                     , velocity =
                         CubicSpline2d.firstDerivative curve progress.percent
                             |> Vector2d.yComponent
@@ -292,6 +333,35 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
                     { position = Pixels.pixels (toX (wrapUnitAfter period restingDuration))
                     , velocity = derivativeOfEasing toX period (wrapUnitAfter period restingDuration)
                     }
+
+
+bezier : Float -> Float -> Float -> Float -> Float -> Float
+bezier x1 y1 x2 y2 time =
+    let
+        lerp from to v =
+            from + (to - from) * v
+
+        pair interpolate ( a0, b0 ) ( a1, b1 ) v =
+            ( interpolate a0 a1 v, interpolate b0 b1 v )
+
+        casteljau ps =
+            case ps of
+                [ ( x, y ) ] ->
+                    y
+
+                xs ->
+                    List.map2 (\x y -> pair lerp x y time) xs (Maybe.withDefault [] (List.tail xs))
+                        |> casteljau
+    in
+    casteljau [ ( 0, 0 ), ( x1, y1 ), ( x2, y2 ), ( 1, 1 ) ]
+
+
+linear start end percent =
+    let
+        dur =
+            end - start
+    in
+    start + (percent * dur)
 
 
 {-|
