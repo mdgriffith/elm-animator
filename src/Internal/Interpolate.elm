@@ -27,10 +27,6 @@ import Quantity
 import Vector2d
 
 
-unwrapQuantity (Quantity.Quantity value) =
-    value
-
-
 {-|
 
     oscillate around a point
@@ -39,14 +35,14 @@ unwrapQuantity (Quantity.Quantity value) =
 
 -}
 type Movement
-    = Oscillate Time.Duration (Float -> Float)
+    = Oscillate Departure Arrival Time.Duration (Float -> Float)
     | Position Departure Arrival Float
 
 
 defaultDeparture : Departure
 defaultDeparture =
     { late = 0
-    , speed = 0
+    , slowly = 0
     }
 
 
@@ -54,7 +50,7 @@ defaultArrival : Arrival
 defaultArrival =
     { wobbliness = 0
     , early = 0
-    , speed = 0
+    , slowly = 0
     }
 
 
@@ -67,13 +63,13 @@ type alias Proportion =
 type alias Arrival =
     { wobbliness : Proportion
     , early : Proportion
-    , speed : Proportion
+    , slowly : Proportion
     }
 
 
 type alias Departure =
     { late : Proportion
-    , speed : Proportion
+    , slowly : Proportion
     }
 
 
@@ -142,7 +138,7 @@ type alias XY thing =
     }
 
 
-xy : (event -> XY Movement) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase (XY State) -> XY State
+xy : (event -> XY Movement) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase event (XY State) -> XY State
 xy lookup current maybeLookAhead phase =
     { x = move (lookup >> .x) current maybeLookAhead (Timeline.mapPhase .x phase)
     , y = move (lookup >> .y) current maybeLookAhead (Timeline.mapPhase .y phase)
@@ -156,7 +152,7 @@ type alias XYZ thing =
     }
 
 
-xyz : (event -> XYZ Movement) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase (XYZ State) -> XYZ State
+xyz : (event -> XYZ Movement) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase event (XYZ State) -> XYZ State
 xyz lookup current maybeLookAhead phase =
     { x = move (lookup >> .x) current maybeLookAhead (Timeline.mapPhase .x phase)
     , y = move (lookup >> .y) current maybeLookAhead (Timeline.mapPhase .y phase)
@@ -171,12 +167,12 @@ xyz lookup current maybeLookAhead phase =
         - or while the target event has been active
 
 -}
-move : (event -> Movement) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase State -> State
-move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead phase =
+move : (event -> Movement) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase event State -> State
+move lookup ((Timeline.Occurring target targetTime maybeDwell) as targetOccurring) maybeLookAhead phase =
     let
         targetPosition =
             case lookup target of
-                Oscillate _ toX ->
+                Oscillate _ _ _ toX ->
                     Pixels.pixels (toX 0)
 
                 Position _ _ x ->
@@ -193,7 +189,7 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
             -- including full dwell time if there is any.
             { position =
                 case lookup target of
-                    Oscillate period toX ->
+                    Oscillate depart arrive period toX ->
                         case maybeDwell of
                             Nothing ->
                                 -- we havent had time to oscillate if there is no dwell time.
@@ -213,7 +209,7 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
 
                             Just (Timeline.Occurring lookAhead aheadTime maybeLookAheadDwell) ->
                                 case lookup lookAhead of
-                                    Oscillate freq toX ->
+                                    Oscillate depart arrive freq toX ->
                                         -- calc forward velocity?
                                         velocityBetween targetPosition targetTime (Pixels.pixels (toX 0)) aheadTime
 
@@ -223,105 +219,126 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
 
                     Just dwell ->
                         case lookup target of
-                            Oscillate period toX ->
+                            Oscillate depart arrive period toX ->
                                 derivativeOfEasing toX period (wrapUnitAfter period dwell)
 
                             Position _ _ aheadPosition ->
                                 Pixels.pixelsPerSecond 0
             }
 
-        Timeline.TransitioningTo progress state ->
+        Timeline.TransitioningTo previous now state ->
             let
-                -- at end of transition
-                -- we don't care about dwell time
-                -- because we're not there yet.
-                velocityAtEndOfTransition =
-                    case maybeLookAhead of
-                        Nothing ->
-                            case lookup target of
-                                Position _ arriving _ ->
-                                    let
-                                        _ =
-                                            Debug.log "arrivin speed"
-                                    in
-                                    Pixels.pixelsPerSecond (-1000 * arriving.speed)
+                departure =
+                    getLeave lookup previous
 
-                                Oscillate _ _ ->
-                                    Pixels.pixelsPerSecond 0
+                arrival =
+                    getArrival lookup targetOccurring
 
-                        Just (Timeline.Occurring lookAhead aheadTime maybeLookAheadDwell) ->
-                            case lookup lookAhead of
-                                Oscillate period toX ->
-                                    derivativeOfEasing toX period 0
+                totalDuration =
+                    Time.duration (Timeline.endTime previous) targetTime
 
-                                Position _ arriving aheadPosition ->
-                                    Quantity.plus
-                                        (velocityBetween targetPosition targetTime (Pixels.pixels aheadPosition) aheadTime)
-                                        (Pixels.pixelsPerSecond (600 * arriving.speed))
+                departureTime =
+                    Debug.todo "Do this one"
 
-                -- startVelocity =
-                targetTimeInMs =
-                    Time.inMilliseconds targetTime
+                waitingForLateDeparture =
+                    (departure.late /= 0)
+                        && Time.thisBeforeThat now departureTime
 
-                startTimeInMs =
-                    Time.inMilliseconds progress.previousTime
+                arrivalTime =
+                    Debug.todo "ugh"
 
-                totalDur =
-                    targetTimeInMs - startTimeInMs
-
-                one =
-                    0.4
-
-                two =
-                    0.2
-
-                curve =
-                    -- CubicSpline2d.fromEndpoints
-                    --     (Point2d.unitless startTimeInMs (Pixels.inPixels state.position))
-                    --     (Vector2d.unitless startTimeInMs (Pixels.inPixelsPerSecond state.velocity))
-                    --     (Point2d.unitless targetTimeInMs (Pixels.inPixels targetPosition))
-                    --     (Vector2d.unitless targetTimeInMs (Pixels.inPixelsPerSecond velocityAtEndOfTransition))
-                    CubicSpline2d.fromControlPoints
-                        (Point2d.unitless startTimeInMs (Pixels.inPixels state.position))
-                        (Point2d.unitless (startTimeInMs + (totalDur * one)) (Pixels.inPixels state.position))
-                        (Point2d.unitless (startTimeInMs + (totalDur * two)) (Pixels.inPixels targetPosition))
-                        (Point2d.unitless targetTimeInMs (Pixels.inPixels targetPosition))
-
-                -- bezier
-                --     0.4
-                --     0
-                --     0.2
-                --     1
-                -- point =
-                --     CubicSpline2d.pointOn curve progress.percent
-                -- _ =
-                -- Debug.log "pnt" ( point, startTimeInMs + (progress.percent * totalDur) )
-                current =
-                    { position =
-                        (Pixels.inPixels state.position
-                            + (bezier 0.4 0 0.2 1.0 progress.percent
-                                * (Pixels.inPixels targetPosition
-                                    - Pixels.inPixels state.position
-                                  )
-                              )
-                        )
-                            |> Pixels.pixels
-
-                    -- CubicSpline2d.pointOn curve progress.percent
-                    --     |> Point2d.yCoordinate
-                    --     |> Quantity.toFloat
-                    --     |> Pixels.pixels
-                    -- linear (Pixels.inPixels state.position) (Pixels.inPixels targetPosition) progress.percent
-                    -- |> Pixels.pixels
-                    , velocity =
-                        CubicSpline2d.firstDerivative curve progress.percent
-                            |> Vector2d.yComponent
-                            |> Quantity.toFloat
-                            |> Pixels.pixelsPerSecond
-                    }
+                arrivedEarly =
+                    (arrival.early /= 0)
+                        && Time.thisAfterThat now arrivalTime
             in
-            current
+            -- If leaving late from `previous`,
+            --    -> also start in a resting state, and then interpolate
+            --
+            -- if arriving early to the target state
+            --    -> interpolate
+            --    -> go to resting
+            --
+            if waitingForLateDeparture then
+                let
+                    departureDuration =
+                        Time.duration (Timeline.endTime previous) now
+                in
+                move lookup targetOccurring maybeLookAhead (Timeline.Resting departureDuration state)
 
+            else if arrivedEarly then
+                let
+                    arrivalDuration =
+                        Time.duration arrivalTime now
+                in
+                move lookup targetOccurring maybeLookAhead (Timeline.Resting arrivalDuration state)
+
+            else
+                interpolateBetween lookup targetOccurring maybeLookAhead previous now state
+
+        -- let
+        --     velocityAtEndOfTransition =
+        --         -- This is the velocity we're shooting for.
+        --         case maybeDwell of
+        --             Nothing ->
+        --                 case maybeLookAhead of
+        --                     Nothing ->
+        --                         case lookup target of
+        --                             Position _ arriving _ ->
+        --                                 Pixels.pixelsPerSecond 0
+        --                             Oscillate depart arriving period toX ->
+        --                                 -- if there's no dwell and no lookahead,
+        --                                 -- then we're approaching the last event
+        --                                 -- which will "dwell" automatically
+        --                                 -- until somethign happens
+        --                                 derivativeOfEasing toX period 0
+        --                     Just (Timeline.Occurring lookAhead aheadTime maybeLookAheadDwell) ->
+        -- case lookup lookAhead of
+        --     Position _ arriving aheadPosition ->
+        --         velocityBetween targetPosition targetTime (Pixels.pixels aheadPosition) aheadTime
+        --     Oscillate depart arriving period toX ->
+        --         derivativeOfEasing toX period 0
+        --             Just dwell ->
+        --                 case lookup target of
+        --                     Position _ arriving _ ->
+        --                         Pixels.pixelsPerSecond 0
+        --                     Oscillate depart arriving period toX ->
+        --                         derivativeOfEasing toX period 0
+        --     targetTimeInMs =
+        --         Time.inMilliseconds targetTime
+        --     startTimeInMs =
+        --         Time.inMilliseconds (Timeline.endTime previous)
+        --     curve =
+        --         createSpline
+        --             { start = Point2d.unitless startTimeInMs (Pixels.inPixels state.position)
+        --             , startVelocity = Vector2d.unitless 1000 (Pixels.inPixelsPerSecond state.velocity)
+        --             , departure = getLeave lookup previous
+        --             , end = Point2d.unitless targetTimeInMs (Pixels.inPixels targetPosition)
+        --             , endVelocity = Vector2d.unitless 1000 (Pixels.inPixelsPerSecond velocityAtEndOfTransition)
+        --             , arrival = getArrival lookup targetOccurring
+        --             }
+        --     current =
+        --         findAtX curve
+        --             (Time.inMilliseconds currentTime)
+        --             -- tolerance
+        --             1
+        --             -- jumpSize
+        --             0.25
+        --             -- starting t
+        --             0.5
+        --             -- depth
+        --             0
+        -- in
+        -- { position =
+        --     current.point
+        --         |> Point2d.yCoordinate
+        --         |> Quantity.toFloat
+        --         |> Pixels.pixels
+        -- , velocity =
+        --     CubicSpline2d.firstDerivative curve current.t
+        --         |> Vector2d.yComponent
+        --         |> Quantity.toFloat
+        --         |> Pixels.pixelsPerSecond
+        -- }
         Timeline.Resting restingDuration state ->
             case lookup target of
                 Position _ _ pos ->
@@ -329,10 +346,227 @@ move lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead pha
                     , velocity = Pixels.pixelsPerSecond 0
                     }
 
-                Oscillate period toX ->
+                Oscillate _ _ period toX ->
                     { position = Pixels.pixels (toX (wrapUnitAfter period restingDuration))
                     , velocity = derivativeOfEasing toX period (wrapUnitAfter period restingDuration)
                     }
+
+
+interpolateBetween lookup ((Timeline.Occurring target targetTime maybeDwell) as targetOccurring) maybeLookAhead previous currentTime state =
+    let
+        targetPosition =
+            case lookup target of
+                Oscillate _ _ _ toX ->
+                    Pixels.pixels (toX 0)
+
+                Position _ _ x ->
+                    Pixels.pixels x
+
+        velocityAtEndOfTransition =
+            -- This is the velocity we're shooting for.
+            case maybeDwell of
+                Nothing ->
+                    case maybeLookAhead of
+                        Nothing ->
+                            case lookup target of
+                                Position _ arriving _ ->
+                                    Pixels.pixelsPerSecond 0
+
+                                Oscillate depart arriving period toX ->
+                                    -- if there's no dwell and no lookahead,
+                                    -- then we're approaching the last event
+                                    -- which will "dwell" automatically
+                                    -- until somethign happens
+                                    derivativeOfEasing toX period 0
+
+                        Just (Timeline.Occurring lookAhead aheadTime maybeLookAheadDwell) ->
+                            case lookup lookAhead of
+                                Position _ arriving aheadPosition ->
+                                    velocityBetween targetPosition targetTime (Pixels.pixels aheadPosition) aheadTime
+
+                                Oscillate depart arriving period toX ->
+                                    derivativeOfEasing toX period 0
+
+                Just dwell ->
+                    case lookup target of
+                        Position _ arriving _ ->
+                            Pixels.pixelsPerSecond 0
+
+                        Oscillate depart arriving period toX ->
+                            derivativeOfEasing toX period 0
+
+        targetTimeInMs =
+            Time.inMilliseconds targetTime
+
+        startTimeInMs =
+            Time.inMilliseconds (Timeline.endTime previous)
+
+        curve =
+            createSpline
+                { start = Point2d.unitless startTimeInMs (Pixels.inPixels state.position)
+                , startVelocity = Vector2d.unitless 1000 (Pixels.inPixelsPerSecond state.velocity)
+                , departure = getLeave lookup previous
+                , end = Point2d.unitless targetTimeInMs (Pixels.inPixels targetPosition)
+                , endVelocity = Vector2d.unitless 1000 (Pixels.inPixelsPerSecond velocityAtEndOfTransition)
+                , arrival = getArrival lookup targetOccurring
+                }
+
+        current =
+            findAtX curve
+                (Time.inMilliseconds currentTime)
+                -- tolerance
+                1
+                -- jumpSize
+                0.25
+                -- starting t
+                0.5
+                -- depth
+                0
+    in
+    { position =
+        current.point
+            |> Point2d.yCoordinate
+            |> Quantity.toFloat
+            |> Pixels.pixels
+    , velocity =
+        CubicSpline2d.firstDerivative curve current.t
+            |> Vector2d.yComponent
+            |> Quantity.toFloat
+            |> Pixels.pixelsPerSecond
+    }
+
+
+getLeave lookup (Timeline.Occurring event _ _) =
+    case lookup event of
+        Position departure _ _ ->
+            departure
+
+        Oscillate departure _ _ _ ->
+            departure
+
+
+getArrival lookup (Timeline.Occurring event _ _) =
+    case lookup event of
+        Position _ arrival _ ->
+            arrival
+
+        Oscillate _ arrival _ _ ->
+            arrival
+
+
+type alias Curve coordinates =
+    { start : Point2d.Point2d Quantity.Unitless coordinates
+    , startVelocity : Vector2d.Vector2d Quantity.Unitless coordinates
+    , departure : Departure
+    , end : Point2d.Point2d Quantity.Unitless coordinates
+    , endVelocity : Vector2d.Vector2d Quantity.Unitless coordinates
+    , arrival : Arrival
+    }
+
+
+createSpline : Curve coordinates -> CubicSpline2d.CubicSpline2d Quantity.Unitless coordinates
+createSpline config =
+    let
+        startX =
+            config.start
+                |> Point2d.xCoordinate
+                |> Quantity.toFloat
+
+        endX =
+            config.end
+                |> Point2d.xCoordinate
+                |> Quantity.toFloat
+
+        totalX =
+            endX - startX
+
+        startVelocity =
+            if config.departure.slowly == 0 then
+                config.startVelocity
+
+            else if config.startVelocity == Vector2d.zero then
+                Vector2d.unitless totalX 0
+                    |> Vector2d.scaleBy (config.departure.slowly * 3)
+
+            else
+                config.startVelocity
+                    |> Vector2d.scaleBy (config.departure.slowly * 3)
+
+        endVelocity =
+            if config.arrival.slowly == 0 then
+                config.endVelocity
+
+            else if config.endVelocity == Vector2d.zero then
+                Vector2d.unitless totalX 0
+                    |> Vector2d.scaleBy (config.arrival.slowly * 3)
+
+            else
+                config.endVelocity
+                    |> Vector2d.scaleBy (config.arrival.slowly * 3)
+    in
+    CubicSpline2d.fromEndpoints
+        config.start
+        startVelocity
+        config.end
+        endVelocity
+
+
+{-| Once we have a bezier curve, we need to find the value of y at a given x.
+
+A simple way to do this is just a binary search, which is what this does.
+
+However we could use Newton's Method:
+<https://en.wikipedia.org/wiki/Newton%27s_method>
+<http://greweb.me/2012/02/bezier-curve-based-easing-functions-from-concept-to-implementation/>
+
+OR (and I'm not 100% on this one), we could use Cardano's method:
+
+as explained here:
+<https://stackoverflow.com/questions/51879836/cubic-bezier-curves-get-y-for-given-x-special-case-where-x-of-control-points/51883347#51883347>
+
+-}
+
+
+
+-- findAtX : CubicSpline2d.CubicSpline2d Pixels.Pixels Pixels.Pixels -> Float -> Float -> Float -> Float -> Float -> { x : Float, y : Float }
+
+
+findAtX spline desiredX tolerance jumpSize t depth =
+    let
+        point =
+            CubicSpline2d.pointOn spline t
+
+        p =
+            point
+                |> Point2d.toUnitless
+    in
+    if depth == 10 then
+        { point = point
+        , t = t
+        }
+
+    else if within tolerance p.x desiredX then
+        { point = point
+        , t = t
+        }
+
+    else if p.x > desiredX then
+        findAtX spline desiredX tolerance (jumpSize / 2) (t - jumpSize) (depth + 1)
+
+    else
+        findAtX spline desiredX tolerance (jumpSize / 2) (t + jumpSize) (depth + 1)
+
+
+within : Float -> Float -> Float -> Bool
+within tolerance anchor at =
+    let
+        low =
+            anchor - tolerance
+
+        high =
+            anchor + tolerance
+    in
+    at >= low && at <= high
 
 
 bezier : Float -> Float -> Float -> Float -> Float -> Float
@@ -427,7 +661,7 @@ velocityBetween one oneTime two twoTime =
     distance |> Quantity.per duration
 
 
-color : (event -> Color.Color) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase Color.Color -> Color.Color
+color : (event -> Color.Color) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase event Color.Color -> Color.Color
 color lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead phase =
     case phase of
         Timeline.Start ->
@@ -436,8 +670,14 @@ color lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead ph
         Timeline.After state ->
             lookup target
 
-        Timeline.TransitioningTo progress state ->
+        Timeline.TransitioningTo previous now state ->
             let
+                progress =
+                    Time.progress
+                        (Timeline.endTime previous)
+                        targetTime
+                        now
+
                 one =
                     Color.toRgba state
 
@@ -445,10 +685,10 @@ color lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead ph
                     Color.toRgba (lookup target)
             in
             Color.rgba
-                (average one.red two.red progress.percent)
-                (average one.green two.green progress.percent)
-                (average one.blue two.blue progress.percent)
-                (average one.alpha two.alpha progress.percent)
+                (average one.red two.red progress)
+                (average one.green two.green progress)
+                (average one.blue two.blue progress)
+                (average one.alpha two.alpha progress)
 
         Timeline.Resting restingDuration state ->
             lookup target

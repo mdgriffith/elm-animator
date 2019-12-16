@@ -425,14 +425,14 @@ toHousePositionFastStartSlowFinish event =
     case event of
         Hufflepuff ->
             Animator.to 100
-                |> Animator.withDepartSpeed 0.4
+                |> Animator.leave Animator.slowly
 
         Griffyndor ->
             Animator.to 400
 
         Slytherin ->
             Animator.to 700
-                |> Animator.withArriveSpeed 0.2
+                |> Animator.arrive Animator.verySlowly
 
         Ravenclaw ->
             Animator.to 1000

@@ -7,9 +7,10 @@ module Animator exposing
     , queue, interrupt, update
     , float, move, color
     , xy, xyz, to, Movement
+    , leave, arrive, slowly, verySlowly
+    , leaveLate, arriveEarly
     , oscillate, wave, wrap, zigzag
     , pause, shift
-    , withArriveSpeed, withDepartSpeed
     )
 
 {-|
@@ -35,6 +36,10 @@ module Animator exposing
 @docs float, move, color
 
 @docs xy, xyz, to, Movement
+
+@docs Portion, leave, arrive, slowly, verySlowly
+
+@docs leaveLate, arriveEarly
 
 
 # Oscillators
@@ -339,22 +344,75 @@ to =
     Interpolate.Position Interpolate.defaultDeparture Interpolate.defaultArrival
 
 
-withDepartSpeed s movement =
+
+{- PERSONALITY -}
+
+
+{-| It's super useful to have a number between `0` and `1`!
+
+This is an alias for a `Float` that you should keep between `0` and `1`.
+
+Behind the scenes it will be clamped at those values.
+
+-}
+type alias Portion =
+    Float
+
+
+{-| -}
+slowly : Portion
+slowly =
+    0.4
+
+
+{-| -}
+verySlowly : Portion
+verySlowly =
+    0.8
+
+
+{-| -}
+leaveLate : Portion -> Movement -> Movement
+leaveLate p movement =
     case movement of
         Interpolate.Position dep arrival pos ->
-            Interpolate.Position { dep | speed = s } arrival pos
+            Interpolate.Position { dep | late = p } arrival pos
 
-        Interpolate.Oscillate _ _ ->
+        Interpolate.Oscillate dep arrival _ _ ->
             movement
 
 
-withArriveSpeed s movement =
+{-| -}
+arriveEarly : Portion -> Movement -> Movement
+arriveEarly p movement =
     case movement of
         Interpolate.Position dep arrival pos ->
-            Interpolate.Position dep { arrival | speed = s } pos
+            Interpolate.Position dep { arrival | early = p } pos
 
-        Interpolate.Oscillate _ _ ->
-            movement
+        Interpolate.Oscillate dep arrival dur fn ->
+            Interpolate.Oscillate dep { arrival | early = p } dur fn
+
+
+{-| -}
+leave : Portion -> Movement -> Movement
+leave s movement =
+    case movement of
+        Interpolate.Position dep arrival pos ->
+            Interpolate.Position { dep | slowly = s } arrival pos
+
+        Interpolate.Oscillate dep arrival dur fn ->
+            Interpolate.Oscillate { dep | slowly = s } arrival dur fn
+
+
+{-| -}
+arrive : Portion -> Movement -> Movement
+arrive s movement =
+    case movement of
+        Interpolate.Position dep arrival pos ->
+            Interpolate.Position dep { arrival | slowly = s } pos
+
+        Interpolate.Oscillate dep arrival dur fn ->
+            Interpolate.Oscillate dep { arrival | slowly = s } dur fn
 
 
 {-| -}
@@ -476,7 +534,10 @@ oscillate activeDuration (Oscillator pauses osc) =
         fn u =
             withPause u u pauses
     in
-    Interpolate.Oscillate totalDuration fn
+    Interpolate.Oscillate Interpolate.defaultDeparture
+        Interpolate.defaultArrival
+        totalDuration
+        fn
 
 
 {-| Shift an oscillator over by a certain amount.
@@ -509,7 +570,11 @@ pause forDuration at (Oscillator pauses osc) =
 
 orbit : { duration : Duration, toPosition : Float -> Float } -> Movement
 orbit config =
-    Interpolate.Oscillate config.duration config.toPosition
+    Interpolate.Oscillate
+        Interpolate.defaultDeparture
+        Interpolate.defaultArrival
+        config.duration
+        config.toPosition
 
 
 {-| Start at one number and move linearly to another. At th end, wrap to the first.

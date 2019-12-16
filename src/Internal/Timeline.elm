@@ -4,7 +4,7 @@ module Internal.Timeline exposing
     , Schedule(..), Event(..)
     , after, between
     , foldp, update, needsUpdate
-    , Line(..), Phase(..), Timetable(..), addToDwell, extendEventDwell, mapPhase
+    , Line(..), Phase(..), Timetable(..), addToDwell, endTime, extendEventDwell, mapPhase
     )
 
 {-|
@@ -290,6 +290,16 @@ afterEvent checkpoint (Occurring ev time maybeDwell) maybeCheckpointTime =
             ( Occurring (Time.thisAfterThat time checkpointAt) time maybeDwell
             , maybeCheckpointTime
             )
+
+
+endTime : Occurring event -> Time.Absolute
+endTime (Occurring _ time maybeDwell) =
+    case maybeDwell of
+        Nothing ->
+            time
+
+        Just dwell ->
+            Time.advanceBy dwell time
 
 
 {-| -}
@@ -689,8 +699,8 @@ overEvents now maybeInterruption lookup mobilize _ cursor =
 When we get an interruption, we want to skip all events.
 
 -}
-getPhase : Occurring event -> Occurring event -> Time.Absolute -> Maybe Time.Absolute -> state -> ( Status, Phase state )
-getPhase (Occurring prev prevTime maybePrevDwell) (Occurring event eventTime maybeDwell) now maybeInterruption state =
+getPhase : Occurring event -> Occurring event -> Time.Absolute -> Maybe Time.Absolute -> state -> ( Status, Phase event state )
+getPhase ((Occurring prev prevTime maybePrevDwell) as previousEvent) (Occurring event eventTime maybeDwell) now maybeInterruption state =
     let
         eventEndTime =
             case maybeDwell of
@@ -712,26 +722,11 @@ getPhase (Occurring prev prevTime maybePrevDwell) (Occurring event eventTime may
         let
             interruptionTime =
                 Maybe.withDefault now maybeInterruption
-
-            prevEventEndTime =
-                case maybePrevDwell of
-                    Nothing ->
-                        prevTime
-
-                    Just dwell ->
-                        Time.advanceBy dwell prevTime
-
-            progressToNewEvent =
-                Time.progress
-                    prevEventEndTime
-                    eventTime
-                    interruptionTime
         in
         ( Interrupted
         , TransitioningTo
-            { percent = progressToNewEvent
-            , previousTime = prevEventEndTime
-            }
+            previousEvent
+            interruptionTime
             state
         )
 
@@ -746,31 +741,15 @@ getPhase (Occurring prev prevTime maybePrevDwell) (Occurring event eventTime may
         ( Finished, Resting dwellDuration state )
 
     else
-        let
-            prevEventEndTime =
-                case maybePrevDwell of
-                    Nothing ->
-                        prevTime
-
-                    Just dwell ->
-                        Time.advanceBy dwell prevTime
-
-            progressToNewEvent =
-                Time.progress
-                    prevEventEndTime
-                    eventTime
-                    now
-        in
         ( Finished
         , TransitioningTo
-            { percent = progressToNewEvent
-            , previousTime = prevEventEndTime
-            }
+            previousEvent
+            now
             state
         )
 
 
-mapPhase : (a -> b) -> Phase a -> Phase b
+mapPhase : (a -> b) -> Phase ev a -> Phase ev b
 mapPhase fn phase =
     case phase of
         Start ->
@@ -779,19 +758,19 @@ mapPhase fn phase =
         After a ->
             After (fn a)
 
-        TransitioningTo progress a ->
-            TransitioningTo progress (fn a)
+        TransitioningTo prev t a ->
+            TransitioningTo prev t (fn a)
 
         Resting dur a ->
             Resting dur (fn a)
 
 
-type Phase state
+type Phase event state
     = Start
       -- give me the state after the target event is finished
     | After state
-      -- give me the state while transiting to the target event
-    | TransitioningTo Progress state
+      -- previous event, current time, previous state.
+    | TransitioningTo (Previous event) Time.Absolute state
       -- give me the state while the current event is ongoing
     | Resting Time.Duration state
 
@@ -800,11 +779,9 @@ type alias Interpolator event anchor state =
     (event -> anchor)
     -> Occurring event
     -> Maybe (Occurring event)
-    -> Phase state
+    -> Phase event state
     -> state
 
 
-type alias Progress =
-    { percent : Float
-    , previousTime : Time.Absolute
-    }
+type alias Previous event =
+    Occurring event
