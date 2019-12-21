@@ -160,10 +160,10 @@ startMovingXy lookup start =
     }
 
 
-xy : (event -> XY Movement) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase event (XY State) -> XY State
-xy lookup current maybeLookAhead phase =
-    { x = move (lookup >> .x) current maybeLookAhead (Timeline.mapPhase .x phase)
-    , y = move (lookup >> .y) current maybeLookAhead (Timeline.mapPhase .y phase)
+xy : (event -> XY Movement) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> XY State -> XY State
+xy lookup prev current maybeLookAhead phase state =
+    { x = move (lookup >> .x) prev current maybeLookAhead phase state.x
+    , y = move (lookup >> .y) prev current maybeLookAhead phase state.y
     }
 
 
@@ -182,11 +182,11 @@ startMovingXyz lookup start =
     }
 
 
-xyz : (event -> XYZ Movement) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase event (XYZ State) -> XYZ State
-xyz lookup current maybeLookAhead phase =
-    { x = move (lookup >> .x) current maybeLookAhead (Timeline.mapPhase .x phase)
-    , y = move (lookup >> .y) current maybeLookAhead (Timeline.mapPhase .y phase)
-    , z = move (lookup >> .z) current maybeLookAhead (Timeline.mapPhase .z phase)
+xyz : (event -> XYZ Movement) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> XYZ State -> XYZ State
+xyz lookup prev current maybeLookAhead phase state =
+    { x = move (lookup >> .x) prev current maybeLookAhead phase state.x
+    , y = move (lookup >> .y) prev current maybeLookAhead phase state.y
+    , z = move (lookup >> .z) prev current maybeLookAhead phase state.z
     }
 
 
@@ -224,8 +224,8 @@ startMoving lookup (Timeline.Occurring start startTime _) =
         - or while the target event has been active
 
 -}
-move : (event -> Movement) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase event State -> State
-move lookup ((Timeline.Occurring target targetTime maybeDwell) as targetOccurring) maybeLookAhead phase =
+move : (event -> Movement) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> State -> State
+move lookup previous ((Timeline.Occurring target targetTime maybeDwell) as targetOccurring) maybeLookAhead phase state =
     let
         targetPosition =
             case lookup target of
@@ -236,12 +236,24 @@ move lookup ((Timeline.Occurring target targetTime maybeDwell) as targetOccurrin
                     Pixels.pixels x
     in
     case phase of
-        Timeline.Start ->
+        Timeline.Start Timeline.AfterStart ->
             { position = targetPosition
             , velocity = Pixels.pixelsPerSecond 0
             }
 
-        Timeline.After previous state ->
+        Timeline.Start (Timeline.RestingAtStart restingDuration) ->
+            case lookup target of
+                Position _ _ pos ->
+                    { position = Pixels.pixels pos
+                    , velocity = Pixels.pixelsPerSecond 0
+                    }
+
+                Oscillate _ _ period toX ->
+                    { position = Pixels.pixels (toX (wrapUnitAfter period restingDuration))
+                    , velocity = derivativeOfEasing toX period (wrapUnitAfter period restingDuration)
+                    }
+
+        Timeline.After ->
             -- position,velocity after this event completely,
             -- including full dwell time if there is any.
             { position =
@@ -283,7 +295,7 @@ move lookup ((Timeline.Occurring target targetTime maybeDwell) as targetOccurrin
                                 Pixels.pixelsPerSecond 0
             }
 
-        Timeline.TransitioningTo previous now state ->
+        Timeline.TransitioningTo now ->
             let
                 departure =
                     getLeave lookup previous
@@ -347,7 +359,7 @@ move lookup ((Timeline.Occurring target targetTime maybeDwell) as targetOccurrin
             else
                 interpolateBetween lookup targetOccurring maybeLookAhead previous now state
 
-        Timeline.Resting previous restingDuration state ->
+        Timeline.Resting restingDuration ->
             case lookup target of
                 Position _ _ pos ->
                     { position = Pixels.pixels pos
@@ -736,16 +748,16 @@ startColoring lookup (Timeline.Occurring start startTime _) =
     lookup start
 
 
-color : (event -> Color.Color) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase event Color.Color -> Color.Color
-color lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead phase =
+color : (event -> Color.Color) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Color.Color -> Color.Color
+color lookup previous (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead phase state =
     case phase of
-        Timeline.Start ->
+        Timeline.Start _ ->
             lookup target
 
-        Timeline.After _ state ->
+        Timeline.After ->
             lookup target
 
-        Timeline.TransitioningTo previous now state ->
+        Timeline.TransitioningTo now ->
             let
                 progress =
                     Time.progress
@@ -765,7 +777,7 @@ color lookup (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead ph
                 (average one.blue two.blue progress)
                 (average one.alpha two.alpha progress)
 
-        Timeline.Resting _ restingDuration state ->
+        Timeline.Resting restingDuration ->
             lookup target
 
 

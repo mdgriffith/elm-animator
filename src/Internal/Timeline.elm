@@ -4,7 +4,7 @@ module Internal.Timeline exposing
     , Schedule(..), Event(..)
     , after, between
     , foldp, update, needsUpdate
-    , Line(..), Phase(..), Timetable(..), addToDwell, endTime, extendEventDwell, mapPhase
+    , Line(..), Phase(..), StartPhase(..), Timetable(..), addToDwell, endTime, extendEventDwell
     )
 
 {-|
@@ -694,7 +694,7 @@ overEvents beginning now maybeInterruption lookup interpolate _ cursor =
                     case getPhase beginning cursor.previous target now maybeInterruption cursor.state of
                         ( status, phase ) ->
                             { state =
-                                interpolate lookup target (List.head remaining) phase
+                                interpolate lookup cursor.previous target (List.head remaining) phase cursor.state
                             , events = remaining
                             , previous = target
                             , status = status
@@ -713,7 +713,7 @@ overEvents beginning now maybeInterruption lookup interpolate _ cursor =
 When we get an interruption, we want to skip all events.
 
 -}
-getPhase : Beginning -> Occurring event -> Occurring event -> Time.Absolute -> Maybe Time.Absolute -> state -> ( Status, Phase event state )
+getPhase : Beginning -> Occurring event -> Occurring event -> Time.Absolute -> Maybe Time.Absolute -> state -> ( Status, Phase )
 getPhase beginning ((Occurring prev prevTime maybePrevDwell) as previousEvent) (Occurring event eventTime maybeDwell) now maybeInterruption state =
     let
         eventEndTime =
@@ -734,10 +734,22 @@ getPhase beginning ((Occurring prev prevTime maybePrevDwell) as previousEvent) (
     in
     case beginning of
         Beginning ->
-            ( NotDone
-              -- or Finished
-            , Start
-            )
+            -- either `After` or `Resting`
+            if Time.thisAfterThat now eventEndTime then
+                ( NotDone
+                  -- or Finished
+                , Start AfterStart
+                )
+
+            else
+                let
+                    dwellDuration =
+                        Time.duration eventTime now
+                in
+                ( NotDone
+                  -- or Finished
+                , Start (RestingAtStart dwellDuration)
+                )
 
         Continuing ->
             if interrupted then
@@ -746,55 +758,38 @@ getPhase beginning ((Occurring prev prevTime maybePrevDwell) as previousEvent) (
                         Maybe.withDefault now maybeInterruption
                 in
                 ( Interrupted
-                , TransitioningTo
-                    previousEvent
-                    interruptionTime
-                    state
+                , TransitioningTo interruptionTime
                 )
 
             else if Time.thisAfterThat now eventEndTime then
-                ( NotDone, After previousEvent state )
+                ( NotDone, After )
 
             else if Time.thisAfterThat now eventTime then
                 let
                     dwellDuration =
                         Time.duration eventTime now
                 in
-                ( Finished, Resting previousEvent dwellDuration state )
+                ( Finished, Resting dwellDuration )
 
             else
                 ( Finished
-                , TransitioningTo
-                    previousEvent
-                    now
-                    state
+                , TransitioningTo now
                 )
 
 
-mapPhase : (a -> b) -> Phase ev a -> Phase ev b
-mapPhase fn phase =
-    case phase of
-        Start ->
-            Start
-
-        After prev a ->
-            After prev (fn a)
-
-        TransitioningTo prev t a ->
-            TransitioningTo prev t (fn a)
-
-        Resting prev dur a ->
-            Resting prev dur (fn a)
-
-
-type Phase event state
-    = Start
+type Phase
+    = Start StartPhase
       -- give me the state after the target event is finished
-    | After (Previous event) state
-      -- previous event, current time, previous state.
-    | TransitioningTo (Previous event) Time.Absolute state
+    | After
+      -- Time of the transition
+    | TransitioningTo Time.Absolute
       -- give me the state while the current event is ongoing
-    | Resting (Previous event) Time.Duration state
+    | Resting Time.Duration
+
+
+type StartPhase
+    = AfterStart
+    | RestingAtStart Time.Duration
 
 
 type alias Starter event anchor state =
@@ -806,10 +801,8 @@ type alias Starter event anchor state =
 type alias Interpolator event anchor state =
     (event -> anchor)
     -> Occurring event
+    -> Occurring event
     -> Maybe (Occurring event)
-    -> Phase event state
+    -> Phase
     -> state
-
-
-type alias Previous event =
-    Occurring event
+    -> state
