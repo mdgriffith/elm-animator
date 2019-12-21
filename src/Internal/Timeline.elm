@@ -578,8 +578,8 @@ And we have some type aliases to capture how to create each one of those values.
     `Interpolator` is a function that maps linearly between two `motions`.
 
 -}
-foldp : (event -> anchor) -> Interpolator event anchor motion -> Timeline event -> motion
-foldp lookup mobilize ((Timeline timelineDetails) as timeline) =
+foldp : (event -> anchor) -> Starter event anchor motion -> Interpolator event anchor motion -> Timeline event -> motion
+foldp lookup starter interpolate ((Timeline timelineDetails) as timeline) =
     case timelineDetails.events of
         Timetable timetable ->
             let
@@ -595,18 +595,31 @@ foldp lookup mobilize ((Timeline timelineDetails) as timeline) =
                             start
 
                 startingCursor =
-                    mobilize lookup startingEvent maybeNextEvent Start
+                    -- interpolate lookup startingEvent maybeNextEvent Start
+                    starter lookup startingEvent
             in
-            foldOverLines lookup mobilize timelineDetails startingCursor timetable
+            foldOverLines Beginning lookup interpolate timelineDetails startingCursor timetable
 
 
-foldOverLines : (event -> anchor) -> Interpolator event anchor motion -> TimelineDetails event -> motion -> List (Line event) -> motion
-foldOverLines lookup mobilize timeline startingCursor lines =
+{-| There's some subtlty to starting the fold over timelines.
+
+We always want a `previous event` to be available because it's important to a lot of calculations that involve adjusting the timeline last minute.
+
+SO, how do we start everything?
+
+-}
+type Beginning
+    = Beginning
+    | Continuing
+
+
+foldOverLines : Beginning -> (event -> anchor) -> Interpolator event anchor motion -> TimelineDetails event -> motion -> List (Line event) -> motion
+foldOverLines beginning lookup interpolate timeline startingCursor lines =
     case lines of
         [] ->
             -- Generally, this shouldn't be reachable because we require an event on initialization
             -- likely we'll want to change events to `(start, [remaining])` at some point in the future
-            -- mobilize lookup (Occurring timeline.initial timeline.now Nothing) Nothing Start
+            -- interpolate lookup (Occurring timeline.initial timeline.now Nothing) Nothing Start
             startingCursor
 
         (Line startAt startingEvent events) :: remaining ->
@@ -621,7 +634,7 @@ foldOverLines lookup mobilize timeline startingCursor lines =
 
                 cursor =
                     List.foldl
-                        (overEvents timeline.now maybeInterruption lookup mobilize)
+                        (overEvents beginning timeline.now maybeInterruption lookup interpolate)
                         { state = startingCursor
                         , events = events
                         , previous = startingEvent
@@ -632,13 +645,13 @@ foldOverLines lookup mobilize timeline startingCursor lines =
                             else
                                 NotDone
                         }
-                        events
+                        (startingEvent :: events)
             in
             if cursor.status == Finished then
                 cursor.state
 
             else
-                foldOverLines lookup mobilize timeline cursor.state remaining
+                foldOverLines Continuing lookup interpolate timeline cursor.state remaining
 
 
 type alias Cursor event state =
@@ -656,14 +669,15 @@ type Status
 
 
 overEvents :
-    Time.Absolute
+    Beginning
+    -> Time.Absolute
     -> Maybe Time.Absolute
     -> (event -> anchor)
     -> Interpolator event anchor motion
     -> Occurring event
     -> Cursor event motion
     -> Cursor event motion
-overEvents now maybeInterruption lookup mobilize _ cursor =
+overEvents beginning now maybeInterruption lookup interpolate _ cursor =
     case cursor.status of
         Finished ->
             cursor
@@ -677,10 +691,10 @@ overEvents now maybeInterruption lookup mobilize _ cursor =
                     cursor
 
                 target :: remaining ->
-                    case getPhase cursor.previous target now maybeInterruption cursor.state of
+                    case getPhase beginning cursor.previous target now maybeInterruption cursor.state of
                         ( status, phase ) ->
                             { state =
-                                mobilize lookup target (List.head remaining) phase
+                                interpolate lookup target (List.head remaining) phase
                             , events = remaining
                             , previous = target
                             , status = status
@@ -699,8 +713,8 @@ overEvents now maybeInterruption lookup mobilize _ cursor =
 When we get an interruption, we want to skip all events.
 
 -}
-getPhase : Occurring event -> Occurring event -> Time.Absolute -> Maybe Time.Absolute -> state -> ( Status, Phase event state )
-getPhase ((Occurring prev prevTime maybePrevDwell) as previousEvent) (Occurring event eventTime maybeDwell) now maybeInterruption state =
+getPhase : Beginning -> Occurring event -> Occurring event -> Time.Absolute -> Maybe Time.Absolute -> state -> ( Status, Phase event state )
+getPhase beginning ((Occurring prev prevTime maybePrevDwell) as previousEvent) (Occurring event eventTime maybeDwell) now maybeInterruption state =
     let
         eventEndTime =
             case maybeDwell of
@@ -718,35 +732,43 @@ getPhase ((Occurring prev prevTime maybePrevDwell) as previousEvent) (Occurring 
                 Just interruptTime ->
                     Time.thisBeforeThat interruptTime now
     in
-    if interrupted then
-        let
-            interruptionTime =
-                Maybe.withDefault now maybeInterruption
-        in
-        ( Interrupted
-        , TransitioningTo
-            previousEvent
-            interruptionTime
-            state
-        )
+    case beginning of
+        Beginning ->
+            ( NotDone
+              -- or Finished
+            , Start
+            )
 
-    else if Time.thisAfterThat now eventEndTime then
-        ( NotDone, After state )
+        Continuing ->
+            if interrupted then
+                let
+                    interruptionTime =
+                        Maybe.withDefault now maybeInterruption
+                in
+                ( Interrupted
+                , TransitioningTo
+                    previousEvent
+                    interruptionTime
+                    state
+                )
 
-    else if Time.thisAfterThat now eventTime then
-        let
-            dwellDuration =
-                Time.duration eventTime now
-        in
-        ( Finished, Resting dwellDuration state )
+            else if Time.thisAfterThat now eventEndTime then
+                ( NotDone, After previousEvent state )
 
-    else
-        ( Finished
-        , TransitioningTo
-            previousEvent
-            now
-            state
-        )
+            else if Time.thisAfterThat now eventTime then
+                let
+                    dwellDuration =
+                        Time.duration eventTime now
+                in
+                ( Finished, Resting previousEvent dwellDuration state )
+
+            else
+                ( Finished
+                , TransitioningTo
+                    previousEvent
+                    now
+                    state
+                )
 
 
 mapPhase : (a -> b) -> Phase ev a -> Phase ev b
@@ -755,24 +777,30 @@ mapPhase fn phase =
         Start ->
             Start
 
-        After a ->
-            After (fn a)
+        After prev a ->
+            After prev (fn a)
 
         TransitioningTo prev t a ->
             TransitioningTo prev t (fn a)
 
-        Resting dur a ->
-            Resting dur (fn a)
+        Resting prev dur a ->
+            Resting prev dur (fn a)
 
 
 type Phase event state
     = Start
       -- give me the state after the target event is finished
-    | After state
+    | After (Previous event) state
       -- previous event, current time, previous state.
     | TransitioningTo (Previous event) Time.Absolute state
       -- give me the state while the current event is ongoing
-    | Resting Time.Duration state
+    | Resting (Previous event) Time.Duration state
+
+
+type alias Starter event anchor state =
+    (event -> anchor)
+    -> Occurring event
+    -> state
 
 
 type alias Interpolator event anchor state =

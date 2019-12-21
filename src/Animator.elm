@@ -279,6 +279,7 @@ float timeline lookup =
 color : Timeline event -> (event -> Color) -> Color
 color timeline lookup =
     Timeline.foldp lookup
+        Interpolate.startColoring
         Interpolate.color
         timeline
 
@@ -293,6 +294,7 @@ xy timeline lookup =
     )
     <|
         Timeline.foldp lookup
+            Interpolate.startMovingXy
             Interpolate.xy
             timeline
 
@@ -308,6 +310,7 @@ xyz timeline lookup =
     )
     <|
         Timeline.foldp lookup
+            Interpolate.startMovingXyz
             Interpolate.xyz
             timeline
 
@@ -316,6 +319,7 @@ move : Timeline event -> (event -> Movement) -> { position : Float, velocity : F
 move timeline lookup =
     unwrapUnits
         (Timeline.foldp lookup
+            Interpolate.startMoving
             Interpolate.move
             timeline
         )

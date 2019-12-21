@@ -3,7 +3,7 @@ module Internal.Time exposing
     , Absolute, AbsoluteTime(..), Duration, absolute, duration, progress
     , inMilliseconds
     , latest, earliest, toPosix
-    , advanceBy
+    , advanceBy, rollbackBy
     )
 
 {-|
@@ -48,6 +48,11 @@ absolute posix =
 advanceBy : Duration -> Absolute -> Absolute
 advanceBy dur time =
     Quantity.plus time (Quantity.Quantity (Duration.inMilliseconds dur))
+
+
+rollbackBy : Duration -> Absolute -> Absolute
+rollbackBy dur time =
+    time |> Quantity.minus (Quantity.Quantity (Duration.inMilliseconds dur))
 
 
 inMilliseconds : Absolute -> Float
