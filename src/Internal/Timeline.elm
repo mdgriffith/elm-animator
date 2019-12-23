@@ -549,12 +549,16 @@ extendDwell newDwell ((Occurring at ev maybeDwell) as occur) =
 
 addToDwell : Time.Duration -> Maybe Time.Duration -> Maybe Time.Duration
 addToDwell duration maybeDwell =
-    case maybeDwell of
-        Nothing ->
-            Just duration
+    if Duration.inMilliseconds duration == 0 then
+        maybeDwell
 
-        Just existing ->
-            Just (Quantity.plus duration existing)
+    else
+        case maybeDwell of
+            Nothing ->
+                Just duration
+
+            Just existing ->
+                Just (Quantity.plus duration existing)
 
 
 getOccurringTime (Occurring _ t _) =
@@ -595,7 +599,6 @@ foldp lookup starter interpolate ((Timeline timelineDetails) as timeline) =
                             start
 
                 startingCursor =
-                    -- interpolate lookup startingEvent maybeNextEvent Start
                     starter lookup startingEvent
             in
             foldOverLines Beginning lookup interpolate timelineDetails startingCursor timetable
@@ -634,10 +637,11 @@ foldOverLines beginning lookup interpolate timeline startingCursor lines =
 
                 cursor =
                     List.foldl
-                        (overEvents beginning timeline.now maybeInterruption lookup interpolate)
+                        (overEvents timeline.now maybeInterruption lookup interpolate)
                         { state = startingCursor
-                        , events = events
+                        , events = startingEvent :: events
                         , previous = startingEvent
+                        , beginning = beginning
                         , status =
                             if List.isEmpty events then
                                 Finished
@@ -659,6 +663,7 @@ type alias Cursor event state =
     , events : List (Occurring event)
     , previous : Occurring event
     , status : Status
+    , beginning : Beginning
     }
 
 
@@ -669,15 +674,14 @@ type Status
 
 
 overEvents :
-    Beginning
-    -> Time.Absolute
+    Time.Absolute
     -> Maybe Time.Absolute
     -> (event -> anchor)
     -> Interpolator event anchor motion
     -> Occurring event
     -> Cursor event motion
     -> Cursor event motion
-overEvents beginning now maybeInterruption lookup interpolate _ cursor =
+overEvents now maybeInterruption lookup interpolate _ cursor =
     case cursor.status of
         Finished ->
             cursor
@@ -691,13 +695,14 @@ overEvents beginning now maybeInterruption lookup interpolate _ cursor =
                     cursor
 
                 target :: remaining ->
-                    case getPhase beginning cursor.previous target now maybeInterruption cursor.state of
+                    case getPhase cursor.beginning cursor.previous target now maybeInterruption cursor.state of
                         ( status, phase ) ->
                             { state =
                                 interpolate lookup cursor.previous target (List.head remaining) phase cursor.state
                             , events = remaining
                             , previous = target
                             , status = status
+                            , beginning = Continuing
                             }
 
 
@@ -758,33 +763,33 @@ getPhase beginning ((Occurring prev prevTime maybePrevDwell) as previousEvent) (
                         Maybe.withDefault now maybeInterruption
                 in
                 ( Interrupted
-                , TransitioningTo interruptionTime
+                , TransitioningToTarget interruptionTime
                 )
 
             else if Time.thisAfterThat now eventEndTime then
-                ( NotDone, After )
+                ( NotDone, AfterTarget )
 
             else if Time.thisAfterThat now eventTime then
                 let
                     dwellDuration =
                         Time.duration eventTime now
                 in
-                ( Finished, Resting dwellDuration )
+                ( Finished, RestingAtTarget dwellDuration )
 
             else
                 ( Finished
-                , TransitioningTo now
+                , TransitioningToTarget now
                 )
 
 
 type Phase
     = Start StartPhase
       -- give me the state after the target event is finished
-    | After
+    | AfterTarget
       -- Time of the transition
-    | TransitioningTo Time.Absolute
+    | TransitioningToTarget Time.Absolute
       -- give me the state while the current event is ongoing
-    | Resting Time.Duration
+    | RestingAtTarget Time.Duration
 
 
 type StartPhase

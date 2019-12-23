@@ -71,72 +71,73 @@ view model =
     { title = "Elm - Select Harry Potter House"
     , body =
         [ row []
-            [ Help.Plot.timeline
-                { timeline = model.timeline
-                , toMovement = toHousePosition
-                }
-            , Help.Plot.timeline
+            [ -- Help.Plot.timeline
+              -- { timeline = model.timeline
+              -- , toMovement = toHousePosition
+              -- }
+              Help.Plot.timeline
                 { timeline = model.timeline
                 , toMovement = toHousePositionFastStartSlowFinish
                 }
-            , Help.Plot.timeline
-                { timeline = model.timeline
-                , toMovement = toHousePosition
-                }
-            ]
-        , row []
-            [ Help.Plot.easing Ease.linear 0 1
-            ]
-        , row []
-            [ Help.Plot.easing Ease.inQuad 0 1
-            , Help.Plot.easing Ease.outQuad 0 1
-            , Help.Plot.easing Ease.inOutQuad 0 1
-            ]
-        , row []
-            [ Help.Plot.easing Ease.inCubic 0 1
-            , Help.Plot.easing Ease.outCubic 0 1
-            , Help.Plot.easing Ease.inOutCubic 0 1
-            ]
-        , row []
-            [ Help.Plot.easing Ease.inQuart 0 1
-            , Help.Plot.easing Ease.outQuart 0 1
-            , Help.Plot.easing Ease.inOutQuart 0 1
-            ]
-        , row []
-            [ Help.Plot.easing Ease.inQuint 0 1
-            , Help.Plot.easing Ease.outQuint 0 1
-            , Help.Plot.easing Ease.inOutQuint 0 1
-            ]
-        , row []
-            [ Help.Plot.easing Ease.inSine 0 1
-            , Help.Plot.easing Ease.outSine 0 1
-            , Help.Plot.easing Ease.inOutSine 0 1
-            ]
-        , row []
-            [ Help.Plot.easing Ease.inExpo 0 1
-            , Help.Plot.easing Ease.outExpo 0 1
-            , Help.Plot.easing Ease.inOutExpo 0 1
-            ]
-        , row []
-            [ Help.Plot.easing Ease.inCirc 0 1
-            , Help.Plot.easing Ease.outCirc 0 1
-            , Help.Plot.easing Ease.inOutCirc 0 1
-            ]
-        , row []
-            [ Help.Plot.easing Ease.inBack 0 1
-            , Help.Plot.easing Ease.outBack 0 1
-            , Help.Plot.easing Ease.inOutBack 0 1
-            ]
-        , row []
-            [ Help.Plot.easing Ease.inElastic 0 1
-            , Help.Plot.easing Ease.outElastic 0 1
-            , Help.Plot.easing Ease.inOutElastic 0 1
-            ]
-        , row []
-            [ Help.Plot.easing sin 0 (2 * pi) --(\i -> sin (turns i))
-            , Help.Plot.easing (\i -> sin (turns i)) 0 1
+
+            -- , Help.Plot.timeline
+            --     { timeline = model.timeline
+            --     , toMovement = toHousePosition
+            --     }
             ]
 
+        -- , row []
+        --     [ Help.Plot.easing Ease.linear 0 1
+        --     ]
+        -- , row []
+        --     [ Help.Plot.easing Ease.inQuad 0 1
+        --     , Help.Plot.easing Ease.outQuad 0 1
+        --     , Help.Plot.easing Ease.inOutQuad 0 1
+        --     ]
+        -- , row []
+        --     [ Help.Plot.easing Ease.inCubic 0 1
+        --     , Help.Plot.easing Ease.outCubic 0 1
+        --     , Help.Plot.easing Ease.inOutCubic 0 1
+        --     ]
+        -- , row []
+        --     [ Help.Plot.easing Ease.inQuart 0 1
+        --     , Help.Plot.easing Ease.outQuart 0 1
+        --     , Help.Plot.easing Ease.inOutQuart 0 1
+        --     ]
+        -- , row []
+        --     [ Help.Plot.easing Ease.inQuint 0 1
+        --     , Help.Plot.easing Ease.outQuint 0 1
+        --     , Help.Plot.easing Ease.inOutQuint 0 1
+        --     ]
+        -- , row []
+        --     [ Help.Plot.easing Ease.inSine 0 1
+        --     , Help.Plot.easing Ease.outSine 0 1
+        --     , Help.Plot.easing Ease.inOutSine 0 1
+        --     ]
+        -- , row []
+        --     [ Help.Plot.easing Ease.inExpo 0 1
+        --     , Help.Plot.easing Ease.outExpo 0 1
+        --     , Help.Plot.easing Ease.inOutExpo 0 1
+        --     ]
+        -- , row []
+        --     [ Help.Plot.easing Ease.inCirc 0 1
+        --     , Help.Plot.easing Ease.outCirc 0 1
+        --     , Help.Plot.easing Ease.inOutCirc 0 1
+        --     ]
+        -- , row []
+        --     [ Help.Plot.easing Ease.inBack 0 1
+        --     , Help.Plot.easing Ease.outBack 0 1
+        --     , Help.Plot.easing Ease.inOutBack 0 1
+        --     ]
+        -- , row []
+        --     [ Help.Plot.easing Ease.inElastic 0 1
+        --     , Help.Plot.easing Ease.outElastic 0 1
+        --     , Help.Plot.easing Ease.inOutElastic 0 1
+        --     ]
+        -- , row []
+        --     [ Help.Plot.easing sin 0 (2 * pi) --(\i -> sin (turns i))
+        --     , Help.Plot.easing (\i -> sin (turns i)) 0 1
+        --     ]
         -- -- noWobble
         -- , Html.span [] [ Html.text "noWobble" ]
         -- , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
