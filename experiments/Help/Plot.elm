@@ -71,6 +71,65 @@ update msg model =
             { model | hovering = hovering }
 
 
+earliest : Time.Posix -> Time.Posix -> Time.Posix
+earliest one two =
+    let
+        oneMs =
+            Time.posixToMillis one
+
+        twoMs =
+            Time.posixToMillis two
+    in
+    if oneMs < twoMs then
+        one
+
+    else
+        two
+
+
+latest : Time.Posix -> Time.Posix -> Time.Posix
+latest one two =
+    let
+        oneMs =
+            Time.posixToMillis one
+
+        twoMs =
+            Time.posixToMillis two
+    in
+    if oneMs > twoMs then
+        one
+
+    else
+        two
+
+
+getStartAndEnd events =
+    List.foldl
+        (\( time, ev ) maybeBounds ->
+            case maybeBounds of
+                Nothing ->
+                    Just
+                        ( time, time )
+
+                Just ( low, high ) ->
+                    Just
+                        ( earliest low time
+                        , latest high time
+                        )
+        )
+        Nothing
+        events
+        |> Maybe.withDefault ( Time.millisToPosix 0, Time.millisToPosix 1500 )
+
+
+addMs add posix =
+    let
+        ms =
+            Time.posixToMillis posix
+    in
+    Time.millisToPosix (ms + add)
+
+
 
 -- VIEW
 
@@ -82,12 +141,18 @@ timeline :
     -> Svg msg
 timeline config =
     let
+        events =
+            Internal.Timeline.getEvents config.timeline
+
+        ( start, end ) =
+            getStartAndEnd events
+
         rendered =
             render config.timeline
                 config.toMovement
-                { framesPerSecond = 30
-                , start = Time.millisToPosix 0
-                , end = Time.millisToPosix 1500
+                { framesPerSecond = 60
+                , start = start
+                , end = addMs 1000 end
                 }
 
         points =
@@ -110,9 +175,6 @@ timeline config =
 
         acceleration =
             calcAcceleration rendered
-
-        events =
-            renderEvents (Internal.Timeline.getEvents config.timeline)
     in
     Html.div
         [ class "container" ]
@@ -134,7 +196,7 @@ timeline config =
             [ LineChart.line Color.purple Dots.none "Position" points
             , LineChart.line Color.blue Dots.none "Velocity" velocities
             , LineChart.line Color.orange Dots.none "Accel" acceleration
-            , LineChart.line Color.green Dots.plus "Events" events
+            , LineChart.line Color.green Dots.plus "Events" (renderEvents events)
             ]
         ]
 

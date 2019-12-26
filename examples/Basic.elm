@@ -11,6 +11,45 @@ import Internal.Timeline
 import Time
 
 
+singleEvent =
+    Animator.init (Time.millisToPosix 0) Hufflepuff
+
+
+doubleEvent =
+    singleEvent
+        |> Animator.queue
+            [ Animator.event (Animator.seconds 1) Slytherin
+            ]
+        |> Animator.update (Time.millisToPosix 0)
+        |> Animator.update (Time.millisToPosix 1409)
+
+
+fourContinuous =
+    singleEvent
+        |> Animator.queue
+            [ Animator.event (Animator.seconds 1) Gryffindor
+            , Animator.event (Animator.seconds 1) Slytherin
+            , Animator.event (Animator.seconds 1) Ravenclaw
+            ]
+        |> Animator.update (Time.millisToPosix 0)
+        |> Animator.update (Time.millisToPosix 1409)
+
+
+fourCWithPause =
+    singleEvent
+        |> Animator.queue
+            [ Animator.wait (Animator.seconds 1)
+            , Animator.event (Animator.seconds 1) Gryffindor
+            , Animator.wait (Animator.seconds 1)
+            , Animator.event (Animator.seconds 1) Slytherin
+            , Animator.wait (Animator.seconds 1)
+            , Animator.event (Animator.seconds 1) Ravenclaw
+            , Animator.wait (Animator.seconds 1)
+            ]
+        |> Animator.update (Time.millisToPosix 0)
+        |> Animator.update (Time.millisToPosix 1409)
+
+
 main =
     Browser.document
         { init =

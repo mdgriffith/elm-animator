@@ -12,6 +12,45 @@ import Internal.Timeline
 import Time
 
 
+singleEvent =
+    Animator.init (Time.millisToPosix 0) Hufflepuff
+
+
+doubleEvent =
+    singleEvent
+        |> Animator.queue
+            [ Animator.event (Animator.seconds 1) Griffyndor
+            ]
+        |> Animator.update (Time.millisToPosix 0)
+        |> Animator.update (Time.millisToPosix 1409)
+
+
+fourContinuous =
+    singleEvent
+        |> Animator.queue
+            [ Animator.event (Animator.seconds 1) Griffyndor
+            , Animator.event (Animator.seconds 1) Slytherin
+            , Animator.event (Animator.seconds 1) Ravenclaw
+            ]
+        |> Animator.update (Time.millisToPosix 0)
+        |> Animator.update (Time.millisToPosix 3409)
+
+
+fourWithPause =
+    singleEvent
+        |> Animator.queue
+            [ Animator.wait (Animator.seconds 1)
+            , Animator.event (Animator.seconds 1) Griffyndor
+            , Animator.wait (Animator.seconds 1)
+            , Animator.event (Animator.seconds 1) Slytherin
+            , Animator.wait (Animator.seconds 1)
+            , Animator.event (Animator.seconds 1) Ravenclaw
+            , Animator.wait (Animator.seconds 1)
+            ]
+        |> Animator.update (Time.millisToPosix 0)
+        |> Animator.update (Time.millisToPosix 3409)
+
+
 main =
     Browser.document
         { init =
@@ -66,24 +105,97 @@ row attrs =
         )
 
 
+column attrs =
+    Html.div
+        ([ Attr.style "display" "flex"
+         , Attr.style "flex-direction" "column"
+         , Attr.style "align-items" "center"
+         ]
+            ++ attrs
+        )
+
+
+viewTimelineGroup title timelines =
+    column
+        []
+        [ Html.h2 [] [ Html.text title ]
+        , row [] (List.map viewTimeline timelines)
+        ]
+
+
+viewTimeline { name, timeline, move } =
+    column []
+        [ Html.h3 [] [ Html.text name ]
+        , Help.Plot.timeline
+            { timeline = timeline
+            , toMovement = move
+            }
+        ]
+
+
 view : Model -> Browser.Document Msg
 view model =
+    let
+        _ =
+            Animator.move fourWithPause oscillators
+    in
     { title = "Elm - Select Harry Potter House"
     , body =
-        [ row []
-            [ -- Help.Plot.timeline
-              -- { timeline = model.timeline
-              -- , toMovement = toHousePosition
-              -- }
-              Help.Plot.timeline
-                { timeline = model.timeline
-                , toMovement = toHousePositionFastStartSlowFinish
-                }
-
-            -- , Help.Plot.timeline
-            --     { timeline = model.timeline
-            --     , toMovement = toHousePosition
-            --     }
+        [ viewTimelineGroup "Single Event"
+            [ { name = "Pos"
+              , timeline = singleEvent
+              , move = toHousePosition
+              }
+            , { name = "Oscillator"
+              , timeline = singleEvent
+              , move = oscillators
+              }
+            , { name = "Pos -> Oscillators"
+              , timeline = singleEvent
+              , move = posThenOscillators
+              }
+            ]
+        , viewTimelineGroup "Double Event"
+            [ { name = "Pos"
+              , timeline = doubleEvent
+              , move = toHousePosition
+              }
+            , { name = "Oscillator"
+              , timeline = doubleEvent
+              , move = oscillators
+              }
+            , { name = "Pos -> Oscillators"
+              , timeline = doubleEvent
+              , move = posThenOscillators
+              }
+            ]
+        , viewTimelineGroup "Four Continuous"
+            [ { name = "Pos"
+              , timeline = fourContinuous
+              , move = toHousePosition
+              }
+            , { name = "Oscillator"
+              , timeline = fourContinuous
+              , move = oscillators
+              }
+            , { name = "Pos -> Oscillators"
+              , timeline = fourContinuous
+              , move = posThenOscillators
+              }
+            ]
+        , viewTimelineGroup "Four with Pause"
+            [ { name = "Pos"
+              , timeline = fourWithPause
+              , move = toHousePosition
+              }
+            , { name = "Oscillator"
+              , timeline = fourWithPause
+              , move = oscillators
+              }
+            , { name = "Pos -> Oscillators"
+              , timeline = fourWithPause
+              , move = posThenOscillators
+              }
             ]
 
         -- , row []
@@ -422,18 +534,54 @@ toHousePosition event =
             Animator.to 1000
 
 
+oscillators event =
+    case event of
+        Hufflepuff ->
+            Animator.wave 190 210
+                |> Animator.loop (Animator.millis 200)
+
+        Griffyndor ->
+            Animator.wave 390 410
+                |> Animator.loop (Animator.millis 300)
+
+        Slytherin ->
+            Animator.wave 590 610
+                |> Animator.loop (Animator.millis 400)
+
+        Ravenclaw ->
+            Animator.wave 690 710
+                |> Animator.loop (Animator.millis 500)
+
+
+posThenOscillators event =
+    case event of
+        Hufflepuff ->
+            Animator.to 100
+
+        Griffyndor ->
+            Animator.wave 390 410
+                |> Animator.loop (Animator.millis 200)
+
+        Slytherin ->
+            Animator.to 600
+
+        Ravenclaw ->
+            Animator.wave 690 710
+                |> Animator.loop (Animator.millis 400)
+
+
 toHousePositionFastStartSlowFinish event =
     case event of
         Hufflepuff ->
             Animator.to 100
-                |> Animator.leave Animator.slowly
+                |> Animator.leave Animator.smooth
 
         Griffyndor ->
             Animator.to 400
 
         Slytherin ->
             Animator.to 700
-                |> Animator.arrive Animator.verySlowly
+                |> Animator.arrive Animator.verySmooth
 
         Ravenclaw ->
             Animator.to 1000
@@ -447,7 +595,7 @@ toHousePositionWithOrbit event =
 
         Griffyndor ->
             Animator.wave 390 410
-                |> Animator.oscillate (Animator.millis 400)
+                |> Animator.loop (Animator.millis 400)
 
         Slytherin ->
             Animator.to 700
