@@ -7,9 +7,9 @@ module Animator exposing
     , queue, interrupt, update
     , float, move, color
     , xy, xyz, to, Movement
-    , leave, arrive, slowly, verySlowly
+    , leave, arrive, linear, smooth, verySmooth
     , leaveLate, arriveEarly
-    , oscillate, wave, wrap, zigzag
+    , loop, wave, wrap, zigzag
     , pause, shift
     )
 
@@ -37,14 +37,14 @@ module Animator exposing
 
 @docs xy, xyz, to, Movement
 
-@docs Portion, leave, arrive, slowly, verySlowly
+@docs Portion, leave, arrive, linear, smooth, verySmooth
 
 @docs leaveLate, arriveEarly
 
 
 # Oscillators
 
-@docs oscillate, wave, wrap, zigzag
+@docs loop, wave, wrap, zigzag
 
 @docs pause, shift
 
@@ -280,6 +280,7 @@ color : Timeline event -> (event -> Color) -> Color
 color timeline lookup =
     Timeline.foldp lookup
         Interpolate.startColoring
+        Nothing
         Interpolate.color
         timeline
 
@@ -295,6 +296,7 @@ xy timeline lookup =
     <|
         Timeline.foldp lookup
             Interpolate.startMovingXy
+            Nothing
             Interpolate.xy
             timeline
 
@@ -311,6 +313,7 @@ xyz timeline lookup =
     <|
         Timeline.foldp lookup
             Interpolate.startMovingXyz
+            Nothing
             Interpolate.xyz
             timeline
 
@@ -320,6 +323,7 @@ move timeline lookup =
     unwrapUnits
         (Timeline.foldp lookup
             Interpolate.startMoving
+            (Just Interpolate.adjustTiming)
             Interpolate.move
             timeline
         )
@@ -364,14 +368,20 @@ type alias Portion =
 
 
 {-| -}
-slowly : Portion
-slowly =
+linear : Portion
+linear =
+    0
+
+
+{-| -}
+smooth : Portion
+smooth =
     0.4
 
 
 {-| -}
-verySlowly : Portion
-verySlowly =
+verySmooth : Portion
+verySmooth =
     0.8
 
 
@@ -458,8 +468,8 @@ pauseValue (Pause _ v) =
 
 
 {-| -}
-oscillate : Duration -> Oscillator -> Movement
-oscillate activeDuration (Oscillator pauses osc) =
+loop : Duration -> Oscillator -> Movement
+loop activeDuration (Oscillator pauses osc) =
     let
         -- total duration of the oscillation (active + pauses)
         totalDuration =
@@ -562,7 +572,7 @@ wrapToUnit x =
 
 {-| When the oscillator is at a certain point, pause.
 
-This pause time will be added to the time you specify using `oscillate`, so that you can adjust the pause without disturbing the original duration of the oscillator.
+This pause time will be added to the time you specify using `loop`, so that you can adjust the pause without disturbing the original duration of the oscillator.
 
 -}
 pause : Duration -> Float -> Oscillator -> Oscillator

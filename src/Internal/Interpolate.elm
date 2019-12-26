@@ -2,7 +2,7 @@ module Internal.Interpolate exposing
     ( color
     , Movement(..), move, xy, xyz
     , derivativeOfEasing
-    , defaultArrival, defaultDeparture, startColoring, startMoving, startMovingXy, startMovingXyz
+    , adjustTiming, defaultArrival, defaultDeparture, startColoring, startMoving, startMovingXy, startMovingXyz
     )
 
 {-|
@@ -42,7 +42,7 @@ type Movement
 defaultDeparture : Departure
 defaultDeparture =
     { late = 0
-    , slowly = 0
+    , slowly = 0.4
     }
 
 
@@ -50,7 +50,7 @@ defaultArrival : Arrival
 defaultArrival =
     { wobbliness = 0
     , early = 0
-    , slowly = 0
+    , slowly = 0.8
     }
 
 
@@ -88,39 +88,7 @@ type alias Departure =
     }
 
 
-
-{- Possible characteristics
-
-
-   We can't leave early or arrive late because that violates our bounds.  Doesn't seem to be an issue.
-
-
-
-
-   Arrival ->
-       Wobbly Float
-       Early
-       ~Late~
-       ?Quickly
-
-
-   Departure ->
-       Quickly
-       Late
-       ~Early~
-
-    - Arrive Wobbly, Float
-    - Leave Late (Linger before departing)
-    - Depart quickly
-    - Arrive Early
-    -
-
-
-
-
--}
-
-
+wrapUnitAfter : Duration.Duration -> Duration.Duration -> Float
 wrapUnitAfter dur total =
     let
         duration =
@@ -160,10 +128,10 @@ startMovingXy lookup start =
     }
 
 
-xy : (event -> XY Movement) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> XY State -> XY State
-xy lookup prev current maybeLookAhead phase state =
-    { x = move (lookup >> .x) prev current maybeLookAhead phase state.x
-    , y = move (lookup >> .y) prev current maybeLookAhead phase state.y
+xy : (event -> XY Movement) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> XY State -> XY State
+xy lookup prev current maybeLookAhead phase now state =
+    { x = move (lookup >> .x) prev current maybeLookAhead phase now state.x
+    , y = move (lookup >> .y) prev current maybeLookAhead phase now state.y
     }
 
 
@@ -182,11 +150,11 @@ startMovingXyz lookup start =
     }
 
 
-xyz : (event -> XYZ Movement) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> XYZ State -> XYZ State
-xyz lookup prev current maybeLookAhead phase state =
-    { x = move (lookup >> .x) prev current maybeLookAhead phase state.x
-    , y = move (lookup >> .y) prev current maybeLookAhead phase state.y
-    , z = move (lookup >> .z) prev current maybeLookAhead phase state.z
+xyz : (event -> XYZ Movement) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> XYZ State -> XYZ State
+xyz lookup prev current maybeLookAhead phase now state =
+    { x = move (lookup >> .x) prev current maybeLookAhead phase now state.x
+    , y = move (lookup >> .y) prev current maybeLookAhead phase now state.y
+    , z = move (lookup >> .z) prev current maybeLookAhead phase now state.z
     }
 
 
@@ -217,155 +185,90 @@ startMoving lookup (Timeline.Occurring start startTime _) =
     }
 
 
+adjustTiming : Movement -> Timeline.Adjustment
+adjustTiming moving =
+    case moving of
+        Oscillate departure arrival _ _ ->
+            { arrivingEarly = arrival.early
+            , leavingLate = departure.late
+            }
+
+        Position departure arrival _ ->
+            { arrivingEarly = arrival.early
+            , leavingLate = departure.late
+            }
+
+
+zeroDuration : Duration.Duration
 zeroDuration =
     Duration.milliseconds 0
 
 
-{-|
-
-    `phase` captures if we are looking for the state:
-        - transitioning to the target event
-        - or while the target event has been active
-
--}
-move : (event -> Movement) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> State -> State
-move lookup previous ((Timeline.Occurring target targetTime maybeDwell) as targetOccurring) maybeLookAhead phase state =
-    let
-        targetPosition =
-            case lookup target of
-                Oscillate _ _ _ toX ->
-                    Pixels.pixels (toX 0)
-
-                Position _ _ x ->
-                    Pixels.pixels x
-
-        departure =
-            getLeave lookup previous
-
-        arrival =
-            getArrival lookup targetOccurring
-
-        timing =
-            getTimes (Timeline.endTime previous) targetTime departure arrival
-    in
+{-| -}
+move : (event -> Movement) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> State -> State
+move lookup previous target maybeLookAhead phase now state =
     case phase of
-        Timeline.Start (Timeline.RestingAtStart restingDuration) ->
-            dwellFor (lookup target) restingDuration zeroDuration
-
-        Timeline.Start Timeline.AfterStart ->
-            { position = targetPosition
-            , velocity = Pixels.pixelsPerSecond 0
-            }
-
-        Timeline.AfterTarget ->
-            -- We're completely passed this event, dwell and all.
-            -- we need to capture the state that we'd be at at the very end of this event.
-            -- things of note:
-            --    early arrival at target can affect the dwell phase
-            --    If we're dwelling
-            --       -> velocity is either calculated from the oscillator
-            --       -> or 0
-            ---   else if we're just passing through,
-            --       ->
-            --
-            -- there's some amount of early arrival, calc a new dwell
+        Timeline.Start ->
+            -- because we're starting,
+            -- we know that `now` is *after* targetTime
+            -- also, we don't care about `previous`
             let
-                extendedDwell =
-                    Timeline.addToDwell (Time.duration timing.transitionEndTime targetTime) maybeDwell
+                endTime =
+                    case maybeLookAhead of
+                        Nothing ->
+                            now
+
+                        Just lookAhead ->
+                            Time.earliest
+                                (Timeline.endTime target)
+                                now
             in
-            { position =
-                case lookup target of
-                    Oscillate depart arrive period toX ->
-                        case extendedDwell of
-                            Nothing ->
-                                -- we havent had time to oscillate if there is no dwell time.
-                                Pixels.pixels (toX 0)
+            dwellFor (lookup (Timeline.getEvent target))
+                (Time.duration (Timeline.startTime target) endTime)
 
-                            Just dwell ->
-                                Pixels.pixels (toX (wrapUnitAfter period dwell))
-
-                    Position _ _ x ->
-                        Pixels.pixels x
-            , velocity =
-                velocityAtEndOfTransition lookup targetOccurring maybeLookAhead
-            }
-
-        Timeline.TransitioningToTarget now ->
-            -- Algorithim:
-            -- calculate times
-            -- if arrivingEarly
-            --        -> dwellFor previousDwell (early - now )
-            -- else if waitingForLateDeparture
-            --        -> dwellFor targetDwell (early - now)
-            -- else
-            --  interpolateBetween
-            let
-                totalDuration =
-                    Time.duration (Timeline.endTime previous) targetTime
-
-                waitingForLateDeparture =
-                    (departure.late /= 0)
-                        && Time.thisBeforeThat now timing.transitionStartTime
-
-                arrivedEarly =
-                    (arrival.early /= 0)
-                        && Time.thisAfterThat now timing.transitionEndTime
-            in
-            if waitingForLateDeparture then
+        Timeline.Transitioning ->
+            -- we're somewhere between prev and target.
+            if Time.thisBeforeThat now (Timeline.endTime previous) then
+                -- we're dwelling at prev
+                -- dwell till `now`
                 let
-                    departureDuration =
-                        Time.duration (Timeline.endTime previous) now
+                    endTime =
+                        Time.earliest
+                            (Timeline.endTime previous)
+                            now
                 in
-                case lookup target of
-                    Position _ _ pos ->
-                        { position = Pixels.pixels pos
-                        , velocity = Pixels.pixelsPerSecond 0
-                        }
+                dwellFor (lookup (Timeline.getEvent previous))
+                    (Time.duration (Timeline.startTime previous) endTime)
 
-                    Oscillate _ _ period toX ->
-                        { position = Pixels.pixels (toX (wrapUnitAfter period departureDuration))
-                        , velocity = derivativeOfEasing toX period (wrapUnitAfter period departureDuration)
-                        }
+            else if Time.thisBeforeThat now (Timeline.startTime target) then
+                -- we're transitioning between 1 and 2
+                -- dwell till `transitionStart`
+                -- then transition till now
+                -- with a target velocity based on lookahead
+                interpolateBetween lookup previous target maybeLookAhead now state
 
-            else if arrivedEarly then
-                let
-                    arrivalDuration =
-                        Time.duration timing.transitionEndTime now
-                in
-                case lookup target of
-                    Position _ _ pos ->
-                        { position = Pixels.pixels pos
-                        , velocity = Pixels.pixelsPerSecond 0
-                        }
-
-                    Oscillate _ _ period toX ->
-                        { position = Pixels.pixels (toX (wrapUnitAfter period arrivalDuration))
-                        , velocity = derivativeOfEasing toX period (wrapUnitAfter period arrivalDuration)
-                        }
+            else if Timeline.hasDwell target then
+                dwellFor (lookup (Timeline.getEvent target))
+                    (Time.duration
+                        (Timeline.startTime target)
+                        (Time.earliest now (Timeline.endTime target))
+                    )
 
             else
-                interpolateBetween lookup targetOccurring maybeLookAhead previous now state
+                { position =
+                    case lookup (Timeline.getEvent target) of
+                        Oscillate depart arrive period toX ->
+                            Pixels.pixels (toX 0)
 
-        Timeline.RestingAtTarget restingDuration ->
-            case lookup target of
-                Position _ _ pos ->
-                    { position = Pixels.pixels pos
-                    , velocity = Pixels.pixelsPerSecond 0
-                    }
-
-                Oscillate _ _ period toX ->
-                    let
-                        restingDurationWithEarlyArrival =
-                            -- Quantity.plus arrival.
-                            Debug.todo "Calculate when we have prev"
-                    in
-                    { position = Pixels.pixels (toX (wrapUnitAfter period restingDurationWithEarlyArrival))
-                    , velocity = derivativeOfEasing toX period (wrapUnitAfter period restingDurationWithEarlyArrival)
-                    }
+                        Position _ _ x ->
+                            Pixels.pixels x
+                , velocity =
+                    velocityAtTarget lookup target maybeLookAhead
+                }
 
 
-dwellFor : Movement -> Time.Duration -> Time.Duration -> State
-dwellFor movement duration offset =
+dwellFor : Movement -> Time.Duration -> State
+dwellFor movement duration =
     case movement of
         Position _ _ pos ->
             { position = Pixels.pixels pos
@@ -378,43 +281,7 @@ dwellFor movement duration offset =
             }
 
 
-getTimes :
-    Time.Absolute
-    -> Time.Absolute
-    -> Departure
-    -> Arrival
-    ->
-        { transitionStartTime : Time.Absolute
-        , transitionEndTime : Time.Absolute
-        }
-getTimes previousEndTime targetTime previousDeparture targetArrival =
-    let
-        totalDuration =
-            Time.duration previousEndTime targetTime
-
-        totalPortions =
-            max
-                (previousDeparture.late + targetArrival.early)
-                1
-
-        correctedLateDeparture =
-            Quantity.multiplyBy
-                (previousDeparture.late / totalPortions)
-                totalDuration
-
-        correctedEarlyArrival =
-            Quantity.multiplyBy
-                (targetArrival.early / totalPortions)
-                totalDuration
-    in
-    { transitionStartTime =
-        Time.advanceBy correctedLateDeparture previousEndTime
-    , transitionEndTime =
-        Time.rollbackBy correctedLateDeparture previousEndTime
-    }
-
-
-interpolateBetween lookup ((Timeline.Occurring target targetTime maybeTargetDwell) as targetOccurring) maybeLookAhead previous currentTime state =
+interpolateBetween lookup previous ((Timeline.Occurring target targetTime maybeTargetDwell) as targetOccurring) maybeLookAhead currentTime state =
     let
         targetPosition =
             case lookup target of
@@ -438,7 +305,7 @@ interpolateBetween lookup ((Timeline.Occurring target targetTime maybeTargetDwel
                 , end = Point2d.unitless targetTimeInMs (Pixels.inPixels targetPosition)
                 , endVelocity =
                     Vector2d.unitless 1000
-                        (Pixels.inPixelsPerSecond (velocityAtEndOfTransition lookup targetOccurring maybeLookAhead))
+                        (Pixels.inPixelsPerSecond (velocityAtTarget lookup targetOccurring maybeLookAhead))
                 , arrival = getArrival lookup targetOccurring
                 }
 
@@ -467,72 +334,52 @@ interpolateBetween lookup ((Timeline.Occurring target targetTime maybeTargetDwel
     }
 
 
-velocityAtEndOfTransition lookup (Timeline.Occurring target targetTime maybeTargetDwell) maybeLookAhead =
+velocityAtTarget lookup (Timeline.Occurring target targetTime maybeTargetDwell) maybeLookAhead =
     -- This is the velocity we're shooting for.
     case maybeTargetDwell of
         Nothing ->
-            let
-                departingFromTargetLate =
+            case maybeLookAhead of
+                Nothing ->
                     case lookup target of
-                        Position depart arriving _ ->
-                            depart.late /= 0
+                        Position _ _ _ ->
+                            Pixels.pixelsPerSecond 0
 
-                        Oscillate depart arriving _ _ ->
-                            depart.late /= 0
-            in
-            if departingFromTargetLate then
-                -- If we're leaving target late, that means we need to hang out there for
-                -- some amount of time, so we need to slow down.
-                case lookup target of
-                    Position _ _ _ ->
-                        Pixels.pixelsPerSecond 0
+                        Oscillate _ _ period toX ->
+                            -- if there's no dwell and no lookahead,
+                            -- then we're approaching the last event
+                            -- which will "dwell" automatically
+                            -- until something happens
+                            derivativeOfEasing toX period 0
 
-                    Oscillate _ _ period toX ->
-                        derivativeOfEasing toX period 0
+                Just (Timeline.Occurring lookAhead aheadTime maybeLookAheadDwell) ->
+                    let
+                        targetPosition =
+                            case lookup target of
+                                Oscillate _ _ _ toX ->
+                                    Pixels.pixels (toX 0)
 
-            else
-                case maybeLookAhead of
-                    Nothing ->
-                        case lookup target of
-                            Position _ arriving _ ->
-                                Pixels.pixelsPerSecond 0
+                                Position _ _ x ->
+                                    Pixels.pixels x
+                    in
+                    case lookup lookAhead of
+                        Position _ _ aheadPosition ->
+                            -- our target velocity is the linear velocity between target and lookahead
+                            velocityBetween targetPosition targetTime (Pixels.pixels aheadPosition) aheadTime
 
-                            Oscillate depart arriving period toX ->
-                                -- if there's no dwell and no lookahead,
-                                -- then we're approaching the last event
-                                -- which will "dwell" automatically
-                                -- until something happens
-                                derivativeOfEasing toX period 0
+                        Oscillate _ _ period toX ->
+                            case maybeLookAheadDwell of
+                                Nothing ->
+                                    velocityBetween targetPosition targetTime (Pixels.pixels (toX 0)) aheadTime
 
-                    Just (Timeline.Occurring lookAhead aheadTime maybeLookAheadDwell) ->
-                        let
-                            targetPosition =
-                                case lookup target of
-                                    Oscillate _ _ _ toX ->
-                                        Pixels.pixels (toX 0)
-
-                                    Position _ _ x ->
-                                        Pixels.pixels x
-                        in
-                        case lookup lookAhead of
-                            Position _ arriving aheadPosition ->
-                                -- our target velocity is the linear velocity between target and lookahead
-                                velocityBetween targetPosition targetTime (Pixels.pixels aheadPosition) aheadTime
-
-                            Oscillate depart arriving period toX ->
-                                case maybeLookAheadDwell of
-                                    Nothing ->
-                                        velocityBetween targetPosition targetTime (Pixels.pixels (toX 0)) aheadTime
-
-                                    Just _ ->
-                                        derivativeOfEasing toX period 0
+                                Just _ ->
+                                    derivativeOfEasing toX period 0
 
         Just dwell ->
             case lookup target of
-                Position _ arriving _ ->
+                Position _ _ _ ->
                     Pixels.pixelsPerSecond 0
 
-                Oscillate depart arriving period toX ->
+                Oscillate _ _ period toX ->
                     derivativeOfEasing toX period 0
 
 
@@ -704,41 +551,42 @@ linear start end percent =
     `period` -> how long is one cycle?  We're only looking at one cycle, so this could also be named "totalDuration"
     `target` -> Where do we want to calculate a derivative?
 
-In order to calcualte the derivative, we take 3 evenly spaced samples, spaced 16ms apart.
+In order to calculate the derivative, we take 3 evenly spaced samples, spaced 16ms apart.
 16ms seems like a good choice because if the period is faster than that, the position will simply skip around randomly and not be smooth.
 
 -}
 derivativeOfEasing : (Float -> Float) -> Time.Duration -> Float -> PixelsPerSecond
 derivativeOfEasing ease period target =
-    if Duration.inMilliseconds period < 48 then
-        Pixels.pixelsPerSecond 0
+    let
+        sampleSize =
+            16
 
-    else
-        let
-            sampleSize =
-                16
+        -- a full easing cycle is 0-1 over the period
+        -- a delta sample is how big in the 0-1 space, is a 16ms chunk
+        deltaSample =
+            sampleSize
+                / Duration.inMilliseconds period
 
-            -- a full easing cycle is 0-1 over the period
-            --  a delta sample is how big in the 0-1 space, is a 16ms chunk
-            deltaSample =
-                sampleSize / Duration.inMilliseconds period
+        targetPixels =
+            Pixels.pixels (ease target)
 
-            targetPixels =
-                Pixels.pixels (ease target)
+        prev =
+            Pixels.pixels (ease (target - deltaSample))
 
-            prev =
-                Pixels.pixels (ease (target - deltaSample))
+        next =
+            Pixels.pixels (ease (target + deltaSample))
 
-            next =
-                Pixels.pixels (ease (target + deltaSample))
+        dx1 =
+            targetPixels |> Quantity.minus prev
 
-            dx =
-                Quantity.plus
-                    (targetPixels |> Quantity.minus prev)
-                    (next |> Quantity.minus targetPixels)
-                    |> Quantity.divideBy 2
-        in
-        dx |> Quantity.per (Duration.milliseconds sampleSize)
+        dx2 =
+            next |> Quantity.minus targetPixels
+
+        dx =
+            Quantity.plus dx1 dx2
+                |> Quantity.divideBy 2
+    in
+    dx |> Quantity.per (Duration.milliseconds sampleSize)
 
 
 type alias Pixels =
@@ -753,7 +601,7 @@ velocityBetween : Pixels -> Time.Absolute -> Pixels -> Time.Absolute -> PixelsPe
 velocityBetween one oneTime two twoTime =
     let
         distance =
-            one |> Quantity.minus two
+            two |> Quantity.minus one
 
         duration =
             Time.duration oneTime twoTime
@@ -766,37 +614,39 @@ startColoring lookup (Timeline.Occurring start startTime _) =
     lookup start
 
 
-color : (event -> Color.Color) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Color.Color -> Color.Color
-color lookup previous (Timeline.Occurring target targetTime maybeDwell) maybeLookAhead phase state =
+color : (event -> Color.Color) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> Color.Color -> Color.Color
+color lookup previous ((Timeline.Occurring target targetTime maybeDwell) as targetOccurring) maybeLookAhead phase now state =
     case phase of
-        Timeline.Start _ ->
+        Timeline.Start ->
             lookup target
 
-        Timeline.AfterTarget ->
-            lookup target
-
-        Timeline.TransitioningToTarget now ->
+        Timeline.Transitioning ->
             let
-                progress =
-                    Time.progress
-                        (Timeline.endTime previous)
-                        targetTime
-                        now
-
-                one =
-                    Color.toRgba state
-
-                two =
-                    Color.toRgba (lookup target)
+                eventEndTime =
+                    Timeline.endTime targetOccurring
             in
-            Color.rgba
-                (average one.red two.red progress)
-                (average one.green two.green progress)
-                (average one.blue two.blue progress)
-                (average one.alpha two.alpha progress)
+            if Time.thisAfterThat now eventEndTime || Time.thisAfterThat now targetTime then
+                lookup target
 
-        Timeline.RestingAtTarget restingDuration ->
-            lookup target
+            else
+                let
+                    progress =
+                        Time.progress
+                            (Timeline.endTime previous)
+                            targetTime
+                            now
+
+                    one =
+                        Color.toRgba state
+
+                    two =
+                        Color.toRgba (lookup target)
+                in
+                Color.rgba
+                    (average one.red two.red progress)
+                    (average one.green two.green progress)
+                    (average one.blue two.blue progress)
+                    (average one.alpha two.alpha progress)
 
 
 average : Float -> Float -> Float -> Float

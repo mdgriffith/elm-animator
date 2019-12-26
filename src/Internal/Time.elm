@@ -62,7 +62,7 @@ inMilliseconds (Quantity.Quantity ms) =
 
 duration : Absolute -> Absolute -> Duration
 duration one two =
-    Duration.milliseconds (abs (inMilliseconds two - inMilliseconds one))
+    Duration.milliseconds (max 0 (inMilliseconds two - inMilliseconds one))
 
 
 progress : Absolute -> Absolute -> Absolute -> Float

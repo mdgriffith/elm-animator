@@ -4,7 +4,7 @@ module Internal.Timeline exposing
     , Schedule(..), Event(..)
     , after, between
     , foldp, update, needsUpdate
-    , Line(..), Phase(..), StartPhase(..), Timetable(..), addToDwell, endTime, extendEventDwell
+    , Adjustment, Line(..), Phase(..), Timetable(..), addToDwell, endTime, extendEventDwell, getEvent, hasDwell, startTime
     )
 
 {-|
@@ -292,6 +292,21 @@ afterEvent checkpoint (Occurring ev time maybeDwell) maybeCheckpointTime =
             )
 
 
+getEvent : Occurring event -> event
+getEvent (Occurring ev _ _) =
+    ev
+
+
+hasDwell : Occurring event -> Bool
+hasDwell (Occurring _ _ maybeDwell) =
+    maybeDwell /= Nothing
+
+
+startTime : Occurring event -> Time.Absolute
+startTime (Occurring _ time maybeDwell) =
+    time
+
+
 endTime : Occurring event -> Time.Absolute
 endTime (Occurring _ time maybeDwell) =
     case maybeDwell of
@@ -404,10 +419,10 @@ getLastEventTime lines =
         Nothing ->
             Nothing
 
-        Just (Line startTime startEvent trailing) ->
+        Just (Line start startEvent trailing) ->
             case List.reverse trailing of
                 [] ->
-                    Just startTime
+                    Just start
 
                 (Occurring _ at maybeDwell) :: _ ->
                     Just at
@@ -582,8 +597,14 @@ And we have some type aliases to capture how to create each one of those values.
     `Interpolator` is a function that maps linearly between two `motions`.
 
 -}
-foldp : (event -> anchor) -> Starter event anchor motion -> Interpolator event anchor motion -> Timeline event -> motion
-foldp lookup starter interpolate ((Timeline timelineDetails) as timeline) =
+foldp :
+    (event -> anchor)
+    -> Starter event anchor motion
+    -> Maybe (TimeAdjustor anchor)
+    -> Interpolator event anchor motion
+    -> Timeline event
+    -> motion
+foldp lookup starter maybeAdjustTiming interpolate ((Timeline timelineDetails) as timeline) =
     case timelineDetails.events of
         Timetable timetable ->
             let
@@ -601,7 +622,7 @@ foldp lookup starter interpolate ((Timeline timelineDetails) as timeline) =
                 startingCursor =
                     starter lookup startingEvent
             in
-            foldOverLines Beginning lookup interpolate timelineDetails startingCursor timetable
+            foldOverLines Beginning lookup maybeAdjustTiming interpolate timelineDetails startingCursor timetable
 
 
 {-| There's some subtlty to starting the fold over timelines.
@@ -616,8 +637,16 @@ type Beginning
     | Continuing
 
 
-foldOverLines : Beginning -> (event -> anchor) -> Interpolator event anchor motion -> TimelineDetails event -> motion -> List (Line event) -> motion
-foldOverLines beginning lookup interpolate timeline startingCursor lines =
+foldOverLines :
+    Beginning
+    -> (event -> anchor)
+    -> Maybe (TimeAdjustor anchor)
+    -> Interpolator event anchor motion
+    -> TimelineDetails event
+    -> motion
+    -> List (Line event)
+    -> motion
+foldOverLines beginning lookup maybeAdjustor interpolate timeline startingCursor lines =
     case lines of
         [] ->
             -- Generally, this shouldn't be reachable because we require an event on initialization
@@ -637,17 +666,25 @@ foldOverLines beginning lookup interpolate timeline startingCursor lines =
 
                 cursor =
                     List.foldl
-                        (overEvents timeline.now maybeInterruption lookup interpolate)
+                        (overEvents timeline.now maybeInterruption lookup maybeAdjustor interpolate)
                         { state = startingCursor
                         , events = startingEvent :: events
                         , previous = startingEvent
                         , beginning = beginning
                         , status =
-                            if List.isEmpty events then
-                                Finished
+                            NotDone
+                        , previousAdjustment =
+                            case maybeAdjustor of
+                                Nothing ->
+                                    Nothing
 
-                            else
-                                NotDone
+                                Just adjustment ->
+                                    -- Just
+                                    --     { previousEventTime = startTime startingEvent
+                                    --     , applied = adjustment
+                                    --     }
+                                    -- TODO
+                                    Nothing
                         }
                         (startingEvent :: events)
             in
@@ -655,7 +692,13 @@ foldOverLines beginning lookup interpolate timeline startingCursor lines =
                 cursor.state
 
             else
-                foldOverLines Continuing lookup interpolate timeline cursor.state remaining
+                foldOverLines cursor.beginning
+                    lookup
+                    maybeAdjustor
+                    interpolate
+                    timeline
+                    cursor.state
+                    remaining
 
 
 type alias Cursor event state =
@@ -664,6 +707,11 @@ type alias Cursor event state =
     , previous : Occurring event
     , status : Status
     , beginning : Beginning
+    , previousAdjustment :
+        Maybe
+            { previousEventTime : Time.Absolute
+            , applied : Adjustment
+            }
     }
 
 
@@ -677,11 +725,12 @@ overEvents :
     Time.Absolute
     -> Maybe Time.Absolute
     -> (event -> anchor)
+    -> Maybe (TimeAdjustor anchor)
     -> Interpolator event anchor motion
     -> Occurring event
     -> Cursor event motion
     -> Cursor event motion
-overEvents now maybeInterruption lookup interpolate _ cursor =
+overEvents now maybeInterruption lookup maybeAdjustor interpolate _ cursor =
     case cursor.status of
         Finished ->
             cursor
@@ -695,15 +744,132 @@ overEvents now maybeInterruption lookup interpolate _ cursor =
                     cursor
 
                 target :: remaining ->
-                    case getPhase cursor.beginning cursor.previous target now maybeInterruption cursor.state of
-                        ( status, phase ) ->
+                    let
+                        lookAhead =
+                            List.head remaining
+
+                        adjustedLookAhead =
+                            Maybe.map applyLookAheadAdjustment lookAhead
+
+                        applyLookAheadAdjustment ahead =
+                            case maybeAdjustment of
+                                Nothing ->
+                                    ahead
+
+                                Just targetAdjustment ->
+                                    case maybeAdjustor of
+                                        Nothing ->
+                                            ahead
+
+                                        Just adjustor ->
+                                            Tuple.first
+                                                (applyAdjustment lookup
+                                                    adjustor
+                                                    { previousEventTime = endTime target
+                                                    , applied = targetAdjustment
+                                                    }
+                                                    ahead
+                                                    Nothing
+                                                )
+
+                        ( adjustedTarget, maybeAdjustment ) =
+                            case maybeAdjustor of
+                                Nothing ->
+                                    ( target, Nothing )
+
+                                Just adjustor ->
+                                    case cursor.previousAdjustment of
+                                        Nothing ->
+                                            ( target, Nothing )
+
+                                        Just previousAdjustment ->
+                                            applyAdjustment lookup adjustor previousAdjustment target lookAhead
+                    in
+                    case getPhase cursor.beginning cursor.previous adjustedTarget now maybeInterruption cursor.state of
+                        ( status, phase, currentTime ) ->
                             { state =
-                                interpolate lookup cursor.previous target (List.head remaining) phase cursor.state
+                                interpolate
+                                    lookup
+                                    cursor.previous
+                                    adjustedTarget
+                                    adjustedLookAhead
+                                    phase
+                                    currentTime
+                                    cursor.state
                             , events = remaining
-                            , previous = target
+                            , previous = adjustedTarget
                             , status = status
                             , beginning = Continuing
+                            , previousAdjustment =
+                                case maybeAdjustment of
+                                    Nothing ->
+                                        Nothing
+
+                                    Just adjustment ->
+                                        Just
+                                            { previousEventTime = endTime target
+                                            , applied = adjustment
+                                            }
                             }
+
+
+zeroDuration : Duration.Duration
+zeroDuration =
+    Duration.milliseconds 0
+
+
+{-|
+
+    if target.arriveEarly then
+        adjust time earlier
+        extend dwell (add dwell if none)
+    if target.leaveLate
+        extend dwell even further
+
+-}
+applyAdjustment lookup adjustor { previousEventTime, applied } ((Occurring event time maybeDwell) as target) maybeLookAhead =
+    let
+        targetAdjustments =
+            adjustor (lookup event)
+
+        totalDuration =
+            Time.duration previousEventTime time
+
+        totalPortions =
+            max
+                (applied.leavingLate + targetAdjustments.arrivingEarly)
+                1
+
+        earlyBy =
+            Quantity.multiplyBy
+                (targetAdjustments.arrivingEarly / totalPortions)
+                totalDuration
+
+        lateBy =
+            case maybeLookAhead of
+                Nothing ->
+                    zeroDuration
+
+                Just lookAhead ->
+                    let
+                        lookAheadAdjustments =
+                            adjustor (lookup (getEvent lookAhead))
+
+                        totalLookAheadDuration =
+                            Time.duration (endTime target) (startTime lookAhead)
+
+                        totalLookAheadPortions =
+                            max
+                                (targetAdjustments.leavingLate + lookAheadAdjustments.arrivingEarly)
+                                1
+                    in
+                    Quantity.multiplyBy
+                        (targetAdjustments.leavingLate / totalLookAheadPortions)
+                        totalLookAheadDuration
+    in
+    ( Occurring event (Time.rollbackBy earlyBy time) (addToDwell (Quantity.plus earlyBy lateBy) maybeDwell)
+    , Just targetAdjustments
+    )
 
 
 {-|
@@ -718,83 +884,46 @@ overEvents now maybeInterruption lookup interpolate _ cursor =
 When we get an interruption, we want to skip all events.
 
 -}
-getPhase : Beginning -> Occurring event -> Occurring event -> Time.Absolute -> Maybe Time.Absolute -> state -> ( Status, Phase )
-getPhase beginning ((Occurring prev prevTime maybePrevDwell) as previousEvent) (Occurring event eventTime maybeDwell) now maybeInterruption state =
-    let
-        eventEndTime =
-            case maybeDwell of
-                Nothing ->
-                    eventTime
-
-                Just dwell ->
-                    Time.advanceBy dwell eventTime
-
-        interrupted =
-            case maybeInterruption of
-                Nothing ->
-                    False
-
-                Just interruptTime ->
-                    Time.thisBeforeThat interruptTime now
-    in
+getPhase : Beginning -> Occurring event -> Occurring event -> Time.Absolute -> Maybe Time.Absolute -> state -> ( Status, Phase, Time.Absolute )
+getPhase beginning previousEvent target now maybeInterruption state =
     case beginning of
         Beginning ->
-            -- either `After` or `Resting`
-            if Time.thisAfterThat now eventEndTime then
-                ( NotDone
-                  -- or Finished
-                , Start AfterStart
-                )
-
-            else
-                let
-                    dwellDuration =
-                        Time.duration eventTime now
-                in
-                ( NotDone
-                  -- or Finished
-                , Start (RestingAtStart dwellDuration)
-                )
+            ( NotDone
+              -- TODO: or Finished
+            , Start
+            , now
+            )
 
         Continuing ->
+            let
+                interrupted =
+                    case maybeInterruption of
+                        Nothing ->
+                            False
+
+                        Just interruptTime ->
+                            Time.thisBeforeThat interruptTime now
+            in
             if interrupted then
                 let
                     interruptionTime =
                         Maybe.withDefault now maybeInterruption
                 in
                 ( Interrupted
-                , TransitioningToTarget interruptionTime
+                , Transitioning
+                , interruptionTime
                 )
 
-            else if Time.thisAfterThat now eventEndTime then
-                ( NotDone, AfterTarget )
-
-            else if Time.thisAfterThat now eventTime then
-                let
-                    dwellDuration =
-                        Time.duration eventTime now
-                in
-                ( Finished, RestingAtTarget dwellDuration )
+            else if Time.thisAfterThat now (endTime target) then
+                ( NotDone, Transitioning, now )
 
             else
-                ( Finished
-                , TransitioningToTarget now
-                )
+                ( Finished, Transitioning, now )
 
 
 type Phase
-    = Start StartPhase
-      -- give me the state after the target event is finished
-    | AfterTarget
-      -- Time of the transition
-    | TransitioningToTarget Time.Absolute
-      -- give me the state while the current event is ongoing
-    | RestingAtTarget Time.Duration
-
-
-type StartPhase
-    = AfterStart
-    | RestingAtStart Time.Duration
+    = Start
+    | Transitioning
 
 
 type alias Starter event anchor state =
@@ -809,5 +938,16 @@ type alias Interpolator event anchor state =
     -> Occurring event
     -> Maybe (Occurring event)
     -> Phase
+    -> Time.Absolute
     -> state
     -> state
+
+
+type alias Adjustment =
+    { arrivingEarly : Float
+    , leavingLate : Float
+    }
+
+
+type alias TimeAdjustor anchor =
+    anchor -> Adjustment
