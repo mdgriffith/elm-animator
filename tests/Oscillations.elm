@@ -19,10 +19,10 @@ oscillations =
                 let
                     osc =
                         Animator.wave 0 1
-                            |> Animator.oscillate (Animator.millis 100)
+                            |> Animator.loop (Animator.millis 100)
                 in
                 case osc of
-                    Interpolate.Oscillate dir fn ->
+                    Interpolate.Oscillate _ _ dir fn ->
                         Expect.all
                             [ \f ->
                                 Expect.within (Absolute 0.01)

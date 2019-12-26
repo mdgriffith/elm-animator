@@ -15,18 +15,42 @@ oneSecond =
     Duration.seconds 1
 
 
+halfSecond =
+    Duration.seconds 0.5
+
+
 sinInterpolation x =
-    sin (2 * pi * x)
+    sin (turns x)
 
 
 cosInterpolation x =
-    cos (2 * pi * x)
+    cos (turns x)
 
 
 easingDerivatives : Test
 easingDerivatives =
     describe "Calc Derivative of Easing Fn"
-        [ test "deriv of sin(0) == cos(0)" <|
+        [ test "deriv of a linear fn is constant" <|
+            \_ ->
+                let
+                    dx =
+                        Interpolate.derivativeOfEasing identity oneSecond 0.5
+                            |> Pixels.inPixelsPerSecond
+                in
+                Expect.within (Absolute 0.01) dx 1
+
+        {- Soooooo, the derivative of sin is cos. great
+
+           But we also want to use `sin` as our easing function.
+
+           So, the domain is 0-1 instead of 0-2pi
+
+           That means we both need to feed `turns` to `cos`, but also scale our output by `2 * pi`
+
+           (think about it, if we squish a sin function, then the slopes get steeper.)
+
+        -}
+        , test "deriv of sin(0) == cos(0)" <|
             \_ ->
                 let
                     dx =
@@ -34,12 +58,20 @@ easingDerivatives =
                             |> Pixels.inPixelsPerSecond
                 in
                 Expect.within
-                    (Absolute 0.01)
-                    -- we divide by 2pi here because we're squishing our sin function into an easing 0-1 range.
-                    -- when it is normally 0-2pi
-                    -- we care because we're using cosine as our checking function
-                    (dx / (2 * pi))
-                    (cos 0)
+                    (Absolute 0.1)
+                    dx
+                    (cos (turns 0) * 2 * pi)
+        , test "deriv of sin(1) == cos(1)" <|
+            \_ ->
+                let
+                    dx =
+                        Interpolate.derivativeOfEasing sinInterpolation oneSecond 1
+                            |> Pixels.inPixelsPerSecond
+                in
+                Expect.within
+                    (Absolute 0.1)
+                    dx
+                    (cos (turns 1) * 2 * pi)
         , fuzz Fuzz.percentage "fuzz deriv of sin(0) == cos(0)" <|
             \x ->
                 let
@@ -48,12 +80,9 @@ easingDerivatives =
                             |> Pixels.inPixelsPerSecond
                 in
                 Expect.within
-                    (Absolute 0.001)
-                    -- we divide by 2pi here because we're squishing our sin function into an easing 0-1 range.
-                    -- when it is normally 0-2pi
-                    -- we care because we're using cosine as our checking function
+                    (Absolute 0.01)
                     (dx / (2 * pi))
-                    (cos x)
+                    (cos (turns x))
         ]
 
 
@@ -117,7 +146,7 @@ timeline =
                     --     Debug.log "deriv" ( time, expected, one.velocity )
                 in
                 Expect.within
-                    (Absolute 1)
+                    (Absolute 5)
                     one.velocity
                     expected
         ]
@@ -141,7 +170,7 @@ toPosition event =
 
         Griffyndor ->
             Animator.wave 390 410
-                |> Animator.oscillate (Animator.millis 200)
+                |> Animator.loop (Animator.millis 200)
 
         Slytherin ->
             Animator.to 700

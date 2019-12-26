@@ -27,12 +27,11 @@ timeline =
 
 
 scheduling =
-    only <|
-        describe "Interruptions and"
-            [ queueing
+    describe "Interruptions and"
+        [ queueing
 
-            -- , interruptions
-            ]
+        -- , interruptions
+        ]
 
 
 qty =
