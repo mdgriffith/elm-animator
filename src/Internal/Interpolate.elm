@@ -254,6 +254,13 @@ move lookup previous target maybeLookAhead phase now state =
                         (Time.earliest now (Timeline.endTime target))
                     )
 
+            else if maybeLookAhead == Nothing then
+                dwellFor (lookup (Timeline.getEvent target))
+                    (Time.duration
+                        (Timeline.startTime target)
+                        now
+                    )
+
             else
                 { position =
                     case lookup (Timeline.getEvent target) of
