@@ -288,6 +288,7 @@ dwellFor movement duration =
             }
 
 
+interpolateBetween : (event -> Movement) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Time.Absolute -> State -> State
 interpolateBetween lookup previous ((Timeline.Occurring target targetTime maybeTargetDwell) as targetOccurring) maybeLookAhead currentTime state =
     let
         targetPosition =
@@ -304,6 +305,9 @@ interpolateBetween lookup previous ((Timeline.Occurring target targetTime maybeT
         startTimeInMs =
             Time.inMilliseconds (Timeline.endTime previous)
 
+        targetVelocity =
+            Pixels.inPixelsPerSecond (velocityAtTarget lookup targetOccurring maybeLookAhead)
+
         curve =
             createSpline
                 { start = Point2d.unitless startTimeInMs (Pixels.inPixels state.position)
@@ -312,7 +316,7 @@ interpolateBetween lookup previous ((Timeline.Occurring target targetTime maybeT
                 , end = Point2d.unitless targetTimeInMs (Pixels.inPixels targetPosition)
                 , endVelocity =
                     Vector2d.unitless 1000
-                        (Pixels.inPixelsPerSecond (velocityAtTarget lookup targetOccurring maybeLookAhead))
+                        targetVelocity
                 , arrival = getArrival lookup targetOccurring
                 }
 
@@ -327,6 +331,9 @@ interpolateBetween lookup previous ((Timeline.Occurring target targetTime maybeT
                 0.5
                 -- depth
                 0
+
+        firstDerivative =
+            CubicSpline2d.firstDerivative curve current.t
     in
     { position =
         current.point
@@ -334,13 +341,17 @@ interpolateBetween lookup previous ((Timeline.Occurring target targetTime maybeT
             |> Quantity.toFloat
             |> Pixels.pixels
     , velocity =
-        CubicSpline2d.firstDerivative curve current.t
-            |> Vector2d.yComponent
-            |> Quantity.toFloat
+        -- rescale velocity so that it's pixels/second
+        -- `createSpline` scales this vector sometimes, we need to ensure it's the right size.
+        (Quantity.toFloat (Vector2d.yComponent firstDerivative)
+            / Quantity.toFloat (Vector2d.xComponent firstDerivative)
+        )
+            |> (*) 1000
             |> Pixels.pixelsPerSecond
     }
 
 
+velocityAtTarget : (event -> Movement) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> PixelsPerSecond
 velocityAtTarget lookup (Timeline.Occurring target targetTime maybeTargetDwell) maybeLookAhead =
     -- This is the velocity we're shooting for.
     case maybeTargetDwell of
@@ -482,7 +493,7 @@ as explained here:
 
 
 
--- findAtX : CubicSpline2d.CubicSpline2d Pixels.Pixels Pixels.Pixels -> Float -> Float -> Float -> Float -> Float -> { x : Float, y : Float }
+--findAtX : CubicSpline2d.CubicSpline2d Pixels.Pixels Pixels.Pixels -> Float -> Float -> Float -> Float -> Float -> { x : Float, y : Float }
 
 
 findAtX spline desiredX tolerance jumpSize t depth =
