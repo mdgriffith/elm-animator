@@ -544,12 +544,12 @@ spring cfg =
                 (\i ( motion, steps ) ->
                     let
                         new =
-                            Spring.step 16
+                            Spring.step motion.target
                                 { stiffness = cfg.stiffness
                                 , damping = cfg.damping
                                 , mass = cfg.mass
                                 }
-                                motion.target
+                                16
                                 { velocity = motion.velocity
                                 , position = motion.position
                                 }

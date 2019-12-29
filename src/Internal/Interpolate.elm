@@ -260,10 +260,22 @@ move lookup previous target maybeLookAhead phase now state =
 
             else if log "lerp" <| Time.thisBeforeThat now (Timeline.startTime target) then
                 -- we're transitioning between 1 and 2
-                -- dwell till `transitionStart`
-                -- then transition till now
+                -- transition till now
                 -- with a target velocity based on lookahead
-                interpolateBetween lookup previous target maybeLookAhead now state
+                let
+                    wobble =
+                        case lookup (Timeline.getEvent target) of
+                            Oscillate _ arrival _ _ ->
+                                arrival.wobbliness
+
+                            Position _ arrival _ ->
+                                arrival.wobbliness
+                in
+                if maybeLookAhead == Nothing && wobble /= 0 then
+                    springInterpolation lookup previous target now state
+
+                else
+                    interpolateBetween lookup previous target maybeLookAhead now state
 
             else if log "dwell - target" <| Timeline.hasDwell target then
                 dwellFor (lookup (Timeline.getEvent target))
@@ -309,6 +321,45 @@ dwellFor movement duration =
             { position = Pixels.pixels (toX (wrapUnitAfter period duration))
             , velocity = derivativeOfEasing toX period (wrapUnitAfter period duration)
             }
+
+
+{-| -}
+springInterpolation : (event -> Movement) -> Timeline.Occurring event -> Timeline.Occurring event -> Time.Absolute -> State -> State
+springInterpolation lookup previous target now state =
+    let
+        wobble =
+            case lookup (Timeline.getEvent target) of
+                Oscillate _ arrival _ _ ->
+                    arrival.wobbliness
+
+                Position _ arrival _ ->
+                    arrival.wobbliness
+
+        targetPos =
+            case lookup (Timeline.getEvent target) of
+                Oscillate _ _ _ toX ->
+                    toX 0
+
+                Position _ _ x ->
+                    x
+
+        duration =
+            Time.duration (Timeline.endTime previous) (Timeline.startTime target)
+
+        params =
+            Spring.select wobble duration
+
+        new =
+            Spring.stepOver duration
+                params
+                targetPos
+                { position = Pixels.inPixels state.position
+                , velocity = Pixels.inPixelsPerSecond state.velocity
+                }
+    in
+    { position = Pixels.pixels new.position
+    , velocity = Pixels.pixelsPerSecond new.velocity
+    }
 
 
 interpolateBetween : (event -> Movement) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Time.Absolute -> State -> State
