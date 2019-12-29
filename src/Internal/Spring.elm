@@ -4,6 +4,7 @@ module Internal.Spring exposing
     , select
     , settlesAt
     , step
+    , stepOver
     , wobble2Damping
     )
 
@@ -71,11 +72,7 @@ Differential equations with bounding conditions!
 -}
 step :
     Float
-    ->
-        { stiffness : Float
-        , damping : Float
-        , mass : Float
-        }
+    -> SpringParams
     -> Float
     ->
         { velocity : Float
@@ -85,7 +82,7 @@ step :
         { velocity : Float
         , position : Float
         }
-step dtms { stiffness, damping, mass } target motion =
+step target { stiffness, damping, mass } dtms motion =
     let
         dt =
             dtms / 1000
@@ -111,6 +108,36 @@ step dtms { stiffness, damping, mass } target motion =
     { position = newPos
     , velocity = newVelocity
     }
+
+
+stepOver :
+    Time.Duration
+    -> SpringParams
+    -> Float
+    ->
+        { velocity : Float
+        , position : Float
+        }
+    ->
+        { velocity : Float
+        , position : Float
+        }
+stepOver duration params target state =
+    let
+        durMS =
+            Duration.inMilliseconds duration
+
+        remainder =
+            durMS - toFloat (floor durMS)
+
+        steps =
+            if remainder > 0 then
+                remainder :: List.repeat (floor durMS // 16) 16
+
+            else
+                List.repeat (floor durMS // 16) 16
+    in
+    List.foldl (step target params) state steps
 
 
 type alias SpringParams =

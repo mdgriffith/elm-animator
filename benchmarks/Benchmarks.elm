@@ -28,13 +28,13 @@ springs =
             \_ ->
                 List.foldl
                     (\_ ->
-                        Spring.step 16
+                        Spring.step 300
                             { stiffness = 180
                             , damping = 12
                             }
+                            16
                     )
-                    { target = 300
-                    , velocity = 300
+                    { velocity = 300
                     , position = 0
                     }
                     steps
