@@ -16,6 +16,7 @@ module Help.Plot exposing
 import Animator
 import Browser
 import Color
+import Duration
 import Html exposing (Html, div, h1, node, p, text)
 import Html.Attributes exposing (class)
 import Internal.Spring as Spring
@@ -173,8 +174,15 @@ timeline config =
                 )
                 rendered
 
+        calcVelocities =
+            calcDerivative rendered
+                (.time >> Time.posixToMillis)
+                (.value >> .position)
+
         acceleration =
-            calcAcceleration rendered
+            calcDerivative rendered
+                (.time >> Time.posixToMillis)
+                (.value >> .velocity)
     in
     Html.div
         [ class "container" ]
@@ -193,10 +201,12 @@ timeline config =
             , line = Line.default
             , dots = Dots.default
             }
-            [ LineChart.line Color.purple Dots.none "Position" points
-            , LineChart.line Color.blue Dots.none "Velocity" velocities
-            , LineChart.line Color.orange Dots.none "Accel" acceleration
-            , LineChart.line Color.green Dots.plus "Events" (renderEvents events)
+            [ LineChart.line Color.green Dots.plus "Events" (renderEvents events)
+            , LineChart.line Color.purple Dots.none "Position" points
+            , LineChart.dash Color.blue Dots.none "Velocity" [ 4, 2 ] velocities
+
+            -- , LineChart.line Color.red Dots.none "Calc - Velocity" calcVelocities
+            -- , LineChart.line Color.orange Dots.none "Accel" acceleration
             ]
         ]
 
@@ -325,7 +335,7 @@ avgTime t1 t2 =
     Time.millisToPosix (start + round (abs (toFloat t1InMs - toFloat t2InMs) / 2))
 
 
-calcAcceleration points =
+calcDerivative points toMs toVal =
     case points of
         [] ->
             []
@@ -335,21 +345,24 @@ calcAcceleration points =
                 (\point ( prev, accels ) ->
                     let
                         t1InMs =
-                            Time.posixToMillis prev.time
+                            toMs prev
 
                         t2InMs =
-                            Time.posixToMillis point.time
+                            toMs point
 
                         dt =
-                            abs (toFloat t1InMs - toFloat t2InMs) / 2
+                            (toFloat t2InMs - toFloat t1InMs) / 1000
 
                         newPoint =
-                            { time = toFloat (Time.posixToMillis (avgTime prev.time point.time))
+                            { time =
+                                -- time is given in ms
+                                toFloat (t2InMs + t1InMs) / 2
                             , value =
-                                10
-                                    * ((prev.value.velocity - point.value.velocity)
-                                        / dt
-                                      )
+                                -- 10
+                                --     *
+                                -- this value should be val/second
+                                (toVal point - toVal prev)
+                                    / dt
                             }
                     in
                     ( point, newPoint :: accels )
@@ -501,6 +514,7 @@ spring :
     { initialPosition : Float
     , initialVelocity : Float
     , stiffness : Float
+    , mass : Float
     , damping : Float
     }
     -> Html.Html msg
@@ -511,6 +525,7 @@ spring cfg =
                 Spring.settlesAt
                     { stiffness = cfg.stiffness
                     , damping = cfg.damping
+                    , mass = cfg.mass
                     }
             , position = 1
             , target = 1
@@ -532,15 +547,16 @@ spring cfg =
                             Spring.step 16
                                 { stiffness = cfg.stiffness
                                 , damping = cfg.damping
+                                , mass = cfg.mass
                                 }
-                                { target = motion.target
-                                , velocity = motion.velocity
+                                motion.target
+                                { velocity = motion.velocity
                                 , position = motion.position
                                 }
 
                         newWithTime =
                             { time = motion.time + 16
-                            , target = new.target
+                            , target = motion.target
                             , velocity = new.velocity
                             , position = new.position
                             }
@@ -632,6 +648,45 @@ damping { kMin, kMax } =
         ]
 
 
+
+{- At what duration does 0 wobble become overdamped
+
+-}
+-- wobbleBounds wobble =
+--     let
+--     in
+--     LineChart.viewCustom
+--         { y =
+--             -- Axis.default 300 "Settling" .settling
+--             Axis.picky 600
+--                 "Settling"
+--                 .settling
+--                 [ 0
+--                 , 200
+--                 , 400
+--                 , 600
+--                 , 1000
+--                 , 2000
+--                 , 3000
+--                 , 4000
+--                 ]
+--         , x =
+--             Axis.default 1200 "Stiffness" .stiffness
+--         , container = Container.styled "line-chart-3" [ ( "font-family", "monospace" ) ]
+--         , interpolation = Interpolation.default
+--         , intersection = Intersection.default
+--         , legends = Legends.default
+--         , events =
+--             Events.default
+--         , junk = Junk.default
+--         , grid = Grid.default
+--         , area = Area.default
+--         , line = Line.default
+--         , dots = Dots.default
+--         }
+--         points
+
+
 settlingTime :
     { kMin : Float
     , kMax : Float
@@ -656,7 +711,8 @@ settlingTime { kMin, kMax, wobbles } =
                                 , settling =
                                     Spring.settlesAt
                                         { stiffness = kMin
-                                        , damping = Spring.wobble2Damping wobb kMin 1
+                                        , damping = Spring.wobble2Damping wobb kMin 1 (Duration.seconds 1)
+                                        , mass = 1.5
                                         }
                                 }
                         in
@@ -671,7 +727,8 @@ settlingTime { kMin, kMax, wobbles } =
                                         , settling =
                                             Spring.settlesAt
                                                 { stiffness = k
-                                                , damping = Spring.wobble2Damping wobb k 1
+                                                , damping = Spring.wobble2Damping wobb k 1 (Duration.seconds 1)
+                                                , mass = 1.5
                                                 }
                                         }
                                 in

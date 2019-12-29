@@ -39,6 +39,35 @@ type Movement
     | Position Departure Arrival Float
 
 
+{-| Number betwen 0 and 1
+-}
+type alias Proportion =
+    Float
+
+
+{-| Arrival parameters:
+
+  - early [0-1]:
+    how early should we arrive to this state?
+    This is a Proportion of the entire duration of the transition.
+
+  - slowly [0-1]: actually smoothness.
+    How far do we scale the bezier curve. 0, nothing, 1 == full length of curve.
+
+-}
+type alias Arrival =
+    { wobbliness : Proportion
+    , early : Proportion
+    , slowly : Proportion
+    }
+
+
+type alias Departure =
+    { late : Proportion
+    , slowly : Proportion
+    }
+
+
 defaultDeparture : Departure
 defaultDeparture =
     { late = 0
@@ -66,25 +95,6 @@ nullArrival =
     { wobbliness = 0
     , early = 0
     , slowly = 0
-    }
-
-
-{-| Number betwen 0 and 1
--}
-type alias Proportion =
-    Float
-
-
-type alias Arrival =
-    { wobbliness : Proportion
-    , early : Proportion
-    , slowly : Proportion
-    }
-
-
-type alias Departure =
-    { late : Proportion
-    , slowly : Proportion
     }
 
 
@@ -204,6 +214,14 @@ zeroDuration =
     Duration.milliseconds 0
 
 
+log str val =
+    val
+
+
+
+-- Debug.log str val
+
+
 {-| -}
 move : (event -> Movement) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> State -> State
 move lookup previous target maybeLookAhead phase now state =
@@ -228,7 +246,7 @@ move lookup previous target maybeLookAhead phase now state =
 
         Timeline.Transitioning ->
             -- we're somewhere between prev and target.
-            if Time.thisBeforeThat now (Timeline.endTime previous) then
+            if log "dwell-prev" <| Time.thisBeforeThat now (Timeline.endTime previous) then
                 -- we're dwelling at prev
                 -- dwell till `now`
                 let
@@ -240,21 +258,21 @@ move lookup previous target maybeLookAhead phase now state =
                 dwellFor (lookup (Timeline.getEvent previous))
                     (Time.duration (Timeline.startTime previous) endTime)
 
-            else if Time.thisBeforeThat now (Timeline.startTime target) then
+            else if log "lerp" <| Time.thisBeforeThat now (Timeline.startTime target) then
                 -- we're transitioning between 1 and 2
                 -- dwell till `transitionStart`
                 -- then transition till now
                 -- with a target velocity based on lookahead
                 interpolateBetween lookup previous target maybeLookAhead now state
 
-            else if Timeline.hasDwell target then
+            else if log "dwell - target" <| Timeline.hasDwell target then
                 dwellFor (lookup (Timeline.getEvent target))
                     (Time.duration
                         (Timeline.startTime target)
                         (Time.earliest now (Timeline.endTime target))
                     )
 
-            else if maybeLookAhead == Nothing then
+            else if log "auto dwell" <| maybeLookAhead == Nothing then
                 dwellFor (lookup (Timeline.getEvent target))
                     (Time.duration
                         (Timeline.startTime target)
@@ -262,16 +280,21 @@ move lookup previous target maybeLookAhead phase now state =
                     )
 
             else
-                { position =
-                    case lookup (Timeline.getEvent target) of
-                        Oscillate depart arrive period toX ->
-                            Pixels.pixels (toX 0)
+                let
+                    _ =
+                        log "after" target
+                in
+                log "after target"
+                    { position =
+                        case lookup (Timeline.getEvent target) of
+                            Oscillate depart arrive period toX ->
+                                Pixels.pixels (toX 0)
 
-                        Position _ _ x ->
-                            Pixels.pixels x
-                , velocity =
-                    velocityAtTarget lookup target maybeLookAhead
-                }
+                            Position _ _ x ->
+                                Pixels.pixels x
+                    , velocity =
+                        velocityAtTarget lookup target maybeLookAhead
+                    }
 
 
 dwellFor : Movement -> Time.Duration -> State
@@ -352,7 +375,7 @@ interpolateBetween lookup previous ((Timeline.Occurring target targetTime maybeT
 
 
 velocityAtTarget : (event -> Movement) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> PixelsPerSecond
-velocityAtTarget lookup (Timeline.Occurring target targetTime maybeTargetDwell) maybeLookAhead =
+velocityAtTarget lookup ((Timeline.Occurring target targetTime maybeTargetDwell) as t) maybeLookAhead =
     -- This is the velocity we're shooting for.
     case maybeTargetDwell of
         Nothing ->

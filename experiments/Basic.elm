@@ -3,11 +3,14 @@ module Basic exposing (main, subscriptions, update, view)
 import Animator
 import Browser
 import Color
+import Duration
 import Ease
 import Help.Plot
 import Html
 import Html.Attributes as Attr
 import Html.Events as Events
+import Internal.Interpolate as Interpolate
+import Internal.Spring as Spring
 import Internal.Timeline
 import Time
 
@@ -19,10 +22,11 @@ singleEvent =
 doubleEvent =
     singleEvent
         |> Animator.queue
-            [ Animator.event (Animator.seconds 1) Griffyndor
+            [ Animator.wait (Animator.seconds 1)
+            , Animator.event (Animator.seconds 1) Griffyndor
             ]
         |> Animator.update (Time.millisToPosix 0)
-        |> Animator.update (Time.millisToPosix 1409)
+        |> Animator.update (Time.millisToPosix 2250)
 
 
 fourContinuous =
@@ -33,7 +37,7 @@ fourContinuous =
             , Animator.event (Animator.seconds 1) Ravenclaw
             ]
         |> Animator.update (Time.millisToPosix 0)
-        |> Animator.update (Time.millisToPosix 3409)
+        |> Animator.update (Time.millisToPosix 1200)
 
 
 fourWithPause =
@@ -135,10 +139,14 @@ viewTimeline { name, timeline, move } =
 
 view : Model -> Browser.Document Msg
 view model =
-    let
-        _ =
-            Animator.move fourWithPause oscillators
-    in
+    -- let
+    --     _ =
+    --         Animator.move fourContinuous posThenOscillators
+    --             |> Debug.log "******** end pos/osc"
+    --     _ =
+    --         Animator.move fourContinuous oscillators
+    --             |> Debug.log "******* end osc "
+    -- in
     { title = "Elm - Select Harry Potter House"
     , body =
         [ viewTimelineGroup "Single Event"
@@ -250,118 +258,143 @@ view model =
         --     [ Help.Plot.easing sin 0 (2 * pi) --(\i -> sin (turns i))
         --     , Help.Plot.easing (\i -> sin (turns i)) 0 1
         --     ]
-        -- -- noWobble
-        -- , Html.span [] [ Html.text "noWobble" ]
-        -- , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
-        --     [ Help.Plot.spring
-        --         { stiffness = 170
-        --         , damping = 26
-        --         , initialPosition = 0
-        --         , initialVelocity = 0
-        --         }
-        --     , Help.Plot.spring
-        --         { stiffness = 170
-        --         , damping = 26
-        --         , initialPosition = -10
-        --         , initialVelocity = 0
-        --         }
-        --     , Help.Plot.spring
-        --         { stiffness = 170
-        --         , damping = 26
-        --         , initialPosition = 0
-        --         , initialVelocity = 500
-        --         }
-        --     ]
-        -- -- stiff
-        -- , Html.span [] [ Html.text "stiff" ]
-        -- , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
-        --     [ Help.Plot.spring
-        --         { stiffness = 210
-        --         , damping = 20
-        --         , initialPosition = 0
-        --         , initialVelocity = 0
-        --         }
-        --     , Help.Plot.spring
-        --         { stiffness = 210
-        --         , damping = 20
-        --         , initialPosition = -10
-        --         , initialVelocity = 0
-        --         }
-        --     , Help.Plot.spring
-        --         { stiffness = 210
-        --         , damping = 20
-        --         , initialPosition = 0
-        --         , initialVelocity = 500
-        --         }
-        --     ]
-        -- -- gentle
-        -- , Html.span [] [ Html.text "gentle" ]
-        -- , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
-        --     [ Help.Plot.spring
-        --         { stiffness = 120
-        --         , damping = 14
-        --         , initialPosition = 0
-        --         , initialVelocity = 0
-        --         }
-        --     , Help.Plot.spring
-        --         { stiffness = 120
-        --         , damping = 14
-        --         , initialPosition = -10
-        --         , initialVelocity = 0
-        --         }
-        --     , Help.Plot.spring
-        --         { stiffness = 120
-        --         , damping = 14
-        --         , initialPosition = 0
-        --         , initialVelocity = 500
-        --         }
-        --     ]
-        -- -- wobbly
-        -- , Html.span [] [ Html.text "wobbly" ]
-        -- , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
-        --     [ Help.Plot.spring
-        --         { stiffness = 180
-        --         , damping = 12
-        --         , initialPosition = 0
-        --         , initialVelocity = 0
-        --         }
-        --     , Help.Plot.spring
-        --         { stiffness = 180
-        --         , damping = 12
-        --         , initialPosition = -10
-        --         , initialVelocity = 0
-        --         }
-        --     , Help.Plot.spring
-        --         { stiffness = 180
-        --         , damping = 12
-        --         , initialPosition = 0
-        --         , initialVelocity = 500
-        --         }
-        --     ]
-        -- , Html.span [] [ Html.text "Critical Damping vs K" ]
-        -- , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
-        --     [ Help.Plot.damping
-        --         { kMin = 10
-        --         , kMax = 300
-        --         }
-        --     ]
-        -- , Html.span [] [ Html.text "Wobles, K vs Settling Time" ]
-        -- , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
-        --     [ Help.Plot.settlingTime
-        --         { kMin = 10
-        --         , kMax = 600
-        --         , wobbles =
-        --             [ 0
-        --             , 0.1
-        --             , 0.25
-        --             , 0.5
-        --             , 75
-        --             , 1
-        --             ]
-        --         }
-        --     ]
+        -- noWobble
+        , viewSpringVariations "noWobble"
+            { stiffness = 170
+            , damping = 26
+            , mass = 1
+            }
+
+        -- stiff
+        , viewSpringVariations "stiff"
+            { stiffness = 210
+            , damping = 20
+            , mass = 1
+            }
+
+        -- gentle
+        , viewSpringVariations "gentle"
+            { stiffness = 120
+            , damping = 14
+            , mass = 1
+            }
+
+        -- wobbly
+        , viewSpringVariations "wobbly"
+            { stiffness = 180
+            , damping = 12
+            , mass = 1
+            }
+
+        -- standard stiffness
+        , viewSpringVariations "standard stiffness, no wobble - 10"
+            { stiffness = 150
+            , damping = 10
+            , mass = 1
+            }
+
+        -- standard stiffness
+        , viewSpringVariations "standard stiffness, no wobble - 12"
+            { stiffness = 150
+            , damping = 12
+            , mass = 1
+            }
+
+        -- standard stiffness
+        , viewSpringVariations "standard stiffness, no wobble - 15"
+            { stiffness = 150
+            , damping = 15
+            , mass = 1
+            }
+
+        -- standard stiffness
+        , viewSpringVariations "standard stiffness, no wobble - 19"
+            { stiffness = 150
+            , damping = 19
+            , mass = 1
+            }
+        , viewSpringVariations "standard stiffness, full wobble"
+            { stiffness = 150
+            , damping = 22
+            , mass = 1
+            }
+        , let
+            mostWobble =
+                Spring.select 1 (Duration.seconds 0.75)
+          in
+          viewSpringVariations "Selected Spring, full wobble"
+            mostWobble
+        , let
+            leastWobble =
+                Spring.select 0 (Duration.seconds 0.75)
+          in
+          viewSpringVariations "Selected Spring, no wobble, short duration"
+            leastWobble
+        , let
+            -- _ =
+            --     Debug.log "critical dampings"
+            --         { base = Spring.criticalDamping 150 1
+            --         , high = Spring.criticalDamping 150 1.5
+            --         , low = Spring.criticalDamping 150 0.5
+            --         }
+            leastWobble =
+                Spring.select 0 (Duration.seconds 0.25)
+          in
+          viewSpringVariations "Selected Spring, most wobble"
+            leastWobble
+        , Html.span [] [ Html.text "Critical Damping vs K" ]
+        , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
+            [ Help.Plot.damping
+                { kMin = 10
+                , kMax = 300
+                }
+            ]
+        , Html.span [] [ Html.text "Wobles, K vs Settling Time" ]
+        , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
+            [ Help.Plot.settlingTime
+                { kMin = 120
+                , kMax = 210
+                , wobbles =
+                    [ 0
+                    , 0.1
+                    , 0.25
+                    , 0.5
+                    , 75
+                    , 1
+                    ]
+                }
+            ]
         ]
     }
+
+
+viewSpringVariations label params =
+    Html.div []
+        [ Html.span [] [ Html.text label ]
+        , Html.div [ Attr.style "display" "flex", Attr.style "direction" "flex-row" ]
+            [ Help.Plot.spring
+                { stiffness = params.stiffness
+                , damping = params.damping
+                , mass = params.mass
+                , initialPosition = 0
+                , initialVelocity = 0
+                }
+            , Help.Plot.spring
+                { stiffness = params.stiffness
+                , damping = params.damping
+                , mass = params.mass
+                , initialPosition = -10
+                , initialVelocity = 0
+                }
+            , Help.Plot.spring
+                { stiffness = params.stiffness
+                , damping = params.damping
+                , mass = params.mass
+                , initialPosition = 0
+                , initialVelocity = 500
+                }
+            ]
+        ]
 
 
 renderEvents events =
@@ -537,7 +570,7 @@ toHousePosition event =
 oscillators event =
     case event of
         Hufflepuff ->
-            Animator.wave 190 210
+            Animator.wave 90 110
                 |> Animator.loop (Animator.millis 200)
 
         Griffyndor ->
@@ -545,11 +578,11 @@ oscillators event =
                 |> Animator.loop (Animator.millis 300)
 
         Slytherin ->
-            Animator.wave 590 610
+            Animator.wave 690 710
                 |> Animator.loop (Animator.millis 400)
 
         Ravenclaw ->
-            Animator.wave 690 710
+            Animator.wave 990 1010
                 |> Animator.loop (Animator.millis 500)
 
 
@@ -560,14 +593,14 @@ posThenOscillators event =
 
         Griffyndor ->
             Animator.wave 390 410
-                |> Animator.loop (Animator.millis 200)
+                |> Animator.loop (Animator.millis 300)
 
         Slytherin ->
-            Animator.to 600
+            Animator.to 700
 
         Ravenclaw ->
-            Animator.wave 690 710
-                |> Animator.loop (Animator.millis 400)
+            Animator.wave 990 1010
+                |> Animator.loop (Animator.millis 500)
 
 
 toHousePositionFastStartSlowFinish event =

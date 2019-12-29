@@ -1,9 +1,15 @@
 module Internal.Spring exposing
-    ( criticalDamping
+    ( SpringParams
+    , criticalDamping
+    , select
     , settlesAt
     , step
     , wobble2Damping
     )
+
+import Duration
+import Internal.Time as Time
+
 
 {-| Whew, math. Exciting isn't it?
 
@@ -63,45 +69,35 @@ Differential equations with bounding conditions!
 <https://en.wikipedia.org/wiki/Cauchy_boundary_condition>
 
 -}
-
-
-tolerance =
-    0.1
-
-
-vTolerance =
-    0.01
-
-
 step :
     Float
     ->
         { stiffness : Float
         , damping : Float
+        , mass : Float
         }
+    -> Float
     ->
-        { target : Float
-        , velocity : Float
+        { velocity : Float
         , position : Float
         }
     ->
-        { target : Float
-        , velocity : Float
+        { velocity : Float
         , position : Float
         }
-step dtms { stiffness, damping } motion =
+step dtms { stiffness, damping, mass } target motion =
     let
         dt =
             dtms / 1000
 
         fspring =
-            stiffness * (motion.target - motion.position)
+            stiffness * (target - motion.position)
 
         fdamper =
             (-1 * damping) * motion.velocity
 
         a =
-            fspring + fdamper
+            (fspring + fdamper) / mass
 
         newVelocity =
             motion.velocity + (a * dt)
@@ -110,19 +106,26 @@ step dtms { stiffness, damping } motion =
             motion.position + (newVelocity * dt)
 
         dx =
-            abs (motion.target - newPos)
+            abs (target - newPos)
     in
-    if dx < tolerance && abs newVelocity < vTolerance then
-        { motion
-            | position = motion.target
-            , velocity = 0.0
-        }
+    { position = newPos
+    , velocity = newVelocity
+    }
 
-    else
-        { motion
-            | position = newPos
-            , velocity = newVelocity
-        }
+
+type alias SpringParams =
+    { stiffness : Float
+    , damping : Float
+    , mass : Float
+    }
+
+
+toleranceForSpringSettleTimeCalculation : Float
+toleranceForSpringSettleTimeCalculation =
+    -- this is about 4 for 2%
+    -- however, we want a smaller tolerance
+    -- this is 0.5% tolerance
+    -1 * logBase e 0.005
 
 
 {-|
@@ -135,8 +138,8 @@ step dtms { stiffness, damping } motion =
     https://electronics.stackexchange.com/questions/296567/over-and-critically-damped-systems-settling-time
 
 -}
-settlesAt : { stiffness : Float, damping : Float } -> Float
-settlesAt { stiffness, damping } =
+settlesAt : SpringParams -> Float
+settlesAt { stiffness, damping, mass } =
     let
         k =
             stiffness
@@ -148,7 +151,7 @@ settlesAt { stiffness, damping } =
             criticalDamping k m
 
         m =
-            1
+            mass
 
         springAspect =
             sqrt (k / m)
@@ -164,35 +167,87 @@ settlesAt { stiffness, damping } =
         -- overdamped
         -- *NOTE* this branch is definitely not correct.
         -- this equation only applies to underdamped springs
+        -- as far as I understand, this calculation for overdamped springs gets much more complicated
         -- However, I'm not sure how useful overdamped springs are in animation
         -- so we can prevent this branch by constraining the API.
         let
             dampingAspect =
                 -- c / sqrt (m * k)
                 c / cCritical
-
-            toleranceForEquation =
-                -- this is about 4 for 2%
-                -1 * logBase e 0.005
         in
-        1000 * (toleranceForEquation / (dampingAspect * springAspect))
+        1000 * (toleranceForSpringSettleTimeCalculation / (dampingAspect * springAspect))
 
     else
         -- underdamped
+        -- meaning it's wobbly
         let
             dampingAspect =
                 -- c / sqrt (m * k)
                 c / cCritical
-
-            toleranceForEquation =
-                -- this is about 4 for 2%
-                -- however, we want a smaller tolerance
-                -- this is 0.5% tolerance
-                -1 * logBase e 0.005
         in
-        1000 * (toleranceForEquation / (dampingAspect * springAspect))
+        1000
+            * (toleranceForSpringSettleTimeCalculation
+                / (dampingAspect * springAspect)
+              )
 
 
+{-| We need to select a spring based on wobbliness and desired settling time.
+
+    wobbliness + settling -> { stiffness, mass (though 1 is nice)}
+
+    stiffness: 120 - 210
+
+        as stiffness increases, settling time shrinks
+        between this number, the settling time is roughly linearly proportional to stiffness.
+        We're going to keep this at 150 because changing it doesn't change the personality of the curve much.
+
+
+    mass: ~1
+        linearly related to settle time
+
+    damping:
+        calculabe from stiffness + mass + wobbliness
+
+
+    wobbliness + stiffness + mass -> damping
+
+
+    overdampening happens when the duration is short and the wobble is low.
+
+-}
+select : Float -> Time.Duration -> SpringParams
+select wobbliness duration =
+    let
+        -- instead of worrying about varying stiffness
+        -- we're just choosing a constant
+        k =
+            150
+
+        damping =
+            wobble2Damping wobbliness k 1 duration
+
+        initiallySettlesAt =
+            settlesAt
+                { stiffness = k
+                , damping = damping
+                , mass = 1
+                }
+
+        newCritical =
+            criticalDamping k (durMS / initiallySettlesAt)
+
+        durMS =
+            Duration.inMilliseconds duration
+    in
+    { stiffness = k
+    , damping = damping
+
+    -- we use the mass to scale the settling time to the desired duration
+    , mass = durMS / initiallySettlesAt
+    }
+
+
+criticalDamping : Float -> Float -> Float
 criticalDamping k m =
     2 * sqrt (k * m)
 
@@ -211,31 +266,55 @@ criticalDamping k m =
 -}
 
 
-wobble2Damping wobble k m =
-    wobble2Ratio wobble * criticalDamping k m
+{-| Wobble is essentally a damping ratio, but clamped to a certain range of values that are nice.
+
+We take in the expected settlign time of the spring because at low settling times,
+the range of the nice values changes
+
+-}
+wobble2Damping : Float -> Float -> Float -> Time.Duration -> Float
+wobble2Damping wobble k m duration =
+    wobble2Ratio wobble duration * criticalDamping k m
 
 
 {-| wobble:
-0 -> no wobble
-0.5 -> some wobble
-1 -> all the wobble
+
+    0 -> no wobble
+    0.5 -> some wobble
+    1 -> all the wobble
 
 ratio:
-1 -> nowobble
 
-    0.4 -> max wobble (arbitrarily chosen)
+    0.8 -> basically no wobble
+    0.43 -> max wobble (arbitrarily chosen)
+
+
+    overdampening happens when the duration is short and the wobble is low.
+
+    if duration is below 350ms, then a high ratio can lead to overdamping, which we don't want.
+
+    So, we linearly scale the top bound if the duration is below 350ms.
 
 -}
-wobble2Ratio wobble =
+wobble2Ratio : Float -> Time.Duration -> Float
+wobble2Ratio wobble duration =
     let
         bounded =
             wobble
                 |> max 0
                 |> min 1
+
+        ms =
+            Duration.inMilliseconds duration
+
+        scalingBelowDur =
+            ms / 350
+
+        top =
+            max 0.43 (0.8 * min 1 scalingBelowDur)
     in
-    1
-        - bounded
-        |> mapToRange 0.3 1
+    (1 - bounded)
+        |> mapToRange 0.43 top
 
 
 mapToRange minimum maximum x =
@@ -248,6 +327,11 @@ mapToRange minimum maximum x =
 
 
 {-
+
+
+    stiffness: 120 - 210
+    damping : 12 - 26
+
       // borrowed from react motion for the moment
      export default {
        noWobble: [170, 26], // the default
@@ -296,6 +380,7 @@ mapToRange minimum maximum x =
 
 
     f(0) = 0; f'(0) = 0; f''(t) = -180(f(t) - 1) - 12f'(t)
+
 
 
    -- 0,0
