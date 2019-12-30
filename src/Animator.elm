@@ -37,7 +37,7 @@ module Animator exposing
 
 @docs xy, xyz, to, Movement
 
-@docs Portion, leave, arrive, linear, smooth, verySmooth
+@docs Proportion, leave, arrive, linear, smooth, verySmooth
 
 @docs leaveLate, arriveEarly
 
@@ -356,77 +356,97 @@ to =
 {- PERSONALITY -}
 
 
-{-| It's super useful to have a number between `0` and `1`!
-
-This is an alias for a `Float` that you should keep between `0` and `1`.
+{-| This is an alias for a `Float` between `0` and `1`.
 
 Behind the scenes it will be clamped at those values.
 
 -}
-type alias Portion =
+type alias Proportion =
     Float
 
 
 {-| -}
-linear : Portion
+wobble : Movement -> Movement
+wobble movement =
+    case movement of
+        Interpolate.Position dep arrival pos ->
+            Interpolate.Position dep { arrival | wobbliness = 0.8 } pos
+
+        Interpolate.Oscillate dep arrival dur fn ->
+            Interpolate.Oscillate dep { arrival | wobbliness = 0.8 } dur fn
+
+
+{-| -}
+withWobble : Proportion -> Movement -> Movement
+withWobble p movement =
+    case movement of
+        Interpolate.Position dep arrival pos ->
+            Interpolate.Position dep { arrival | wobbliness = clamp 0 1 p } pos
+
+        Interpolate.Oscillate dep arrival dur fn ->
+            Interpolate.Oscillate dep { arrival | wobbliness = clamp 0 1 p } dur fn
+
+
+{-| -}
+linear : Proportion
 linear =
     0
 
 
 {-| -}
-smooth : Portion
+smooth : Proportion
 smooth =
     0.4
 
 
 {-| -}
-verySmooth : Portion
+verySmooth : Proportion
 verySmooth =
     0.8
 
 
 {-| -}
-leaveLate : Portion -> Movement -> Movement
+leaveLate : Proportion -> Movement -> Movement
 leaveLate p movement =
     case movement of
         Interpolate.Position dep arrival pos ->
-            Interpolate.Position { dep | late = p } arrival pos
+            Interpolate.Position { dep | late = clamp 0 1 p } arrival pos
 
-        Interpolate.Oscillate dep arrival _ _ ->
-            movement
+        Interpolate.Oscillate dep arrival dur fn ->
+            Interpolate.Oscillate { dep | late = clamp 0 1 p } arrival dur fn
 
 
 {-| -}
-arriveEarly : Portion -> Movement -> Movement
+arriveEarly : Proportion -> Movement -> Movement
 arriveEarly p movement =
     case movement of
         Interpolate.Position dep arrival pos ->
-            Interpolate.Position dep { arrival | early = p } pos
+            Interpolate.Position dep { arrival | early = clamp 0 1 p } pos
 
         Interpolate.Oscillate dep arrival dur fn ->
-            Interpolate.Oscillate dep { arrival | early = p } dur fn
+            Interpolate.Oscillate dep { arrival | early = clamp 0 1 p } dur fn
 
 
 {-| -}
-leave : Portion -> Movement -> Movement
+leave : Proportion -> Movement -> Movement
 leave s movement =
     case movement of
         Interpolate.Position dep arrival pos ->
-            Interpolate.Position { dep | slowly = s } arrival pos
+            Interpolate.Position { dep | slowly = clamp 0 1 s } arrival pos
 
         Interpolate.Oscillate dep arrival dur fn ->
-            Interpolate.Oscillate { dep | slowly = s } arrival dur fn
+            Interpolate.Oscillate { dep | slowly = clamp 0 1 s } arrival dur fn
 
 
 {-| -}
-arrive : Portion -> Movement -> Movement
+arrive : Proportion -> Movement -> Movement
 arrive s movement =
     case movement of
         Interpolate.Position dep arrival pos ->
-            Interpolate.Position dep { arrival | slowly = s } pos
+            Interpolate.Position dep { arrival | slowly = clamp 0 1 s } pos
 
         Interpolate.Oscillate dep arrival dur fn ->
-            Interpolate.Oscillate dep { arrival | slowly = s } dur fn
+            Interpolate.Oscillate dep { arrival | slowly = clamp 0 1 s } dur fn
 
 
 {-| -}
