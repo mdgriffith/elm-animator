@@ -1,10 +1,12 @@
 module Benchmarks exposing (main)
 
+import Animator
 import Array
 import Benchmark exposing (..)
 import Benchmark.Runner exposing (BenchmarkProgram, program)
 import Internal.Spring as Spring
 import Random
+import Time
 
 
 main : BenchmarkProgram
@@ -13,6 +15,7 @@ main =
         Benchmark.describe "Animator benchmarks"
             [ springs
             , randomness
+            , basicInterpolation
             ]
 
 
@@ -31,6 +34,7 @@ springs =
                         Spring.step 300
                             { stiffness = 180
                             , damping = 12
+                            , mass = 1
                             }
                             16
                     )
@@ -55,8 +59,7 @@ fract x =
     x - toFloat (floor x)
 
 
-{-| It can be really nice to introduce some randomness to an animation.
--}
+{-| -}
 randomness : Benchmark
 randomness =
     describe "Random number generator"
@@ -77,3 +80,50 @@ randomness =
                 in
                 (fract (sin seed * 100000.0) + 1.5707) / 3.1415
         ]
+
+
+{-| -}
+basicInterpolation : Benchmark
+basicInterpolation =
+    let
+        timeline =
+            Animator.init (Time.millisToPosix 0) Hufflepuff
+                |> Animator.queue
+                    [ Animator.wait (Animator.seconds 1)
+                    , Animator.event (Animator.seconds 1) Griffyndor
+                    , Animator.wait (Animator.seconds 1)
+                    , Animator.event (Animator.seconds 1) Slytherin
+                    , Animator.wait (Animator.seconds 1)
+                    , Animator.event (Animator.seconds 1) Ravenclaw
+                    , Animator.wait (Animator.seconds 1)
+                    ]
+                |> Animator.update (Time.millisToPosix 0)
+                |> Animator.update (Time.millisToPosix 3400)
+    in
+    describe "Interpolate to a point on a 4 event timeline"
+        [ benchmark "interpolate to position" <|
+            \_ ->
+                Animator.move timeline toPos
+        ]
+
+
+type House
+    = Hufflepuff
+    | Griffyndor
+    | Slytherin
+    | Ravenclaw
+
+
+toPos event =
+    case event of
+        Hufflepuff ->
+            Animator.to 100
+
+        Griffyndor ->
+            Animator.to 400
+
+        Slytherin ->
+            Animator.to 700
+
+        Ravenclaw ->
+            Animator.to 1000
