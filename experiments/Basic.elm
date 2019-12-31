@@ -26,7 +26,7 @@ doubleEvent =
             , Animator.event (Animator.seconds 1) Griffyndor
             ]
         |> Animator.update (Time.millisToPosix 0)
-        |> Animator.update (Time.millisToPosix 2250)
+        |> Animator.update (Time.millisToPosix 1200)
 
 
 fourContinuous =
@@ -141,11 +141,11 @@ view : Model -> Browser.Document Msg
 view model =
     -- let
     --     _ =
-    --         Animator.move fourContinuous posThenOscillators
+    --         Animator.move doubleEvent sortaWobbly
     --             |> Debug.log "******** end pos/osc"
-    --     _ =
-    --         Animator.move fourContinuous oscillators
-    --             |> Debug.log "******* end osc "
+    --     -- _ =
+    --     --     Animator.move fourContinuous oscillators
+    --     --         |> Debug.log "******* end osc "
     -- in
     { title = "Elm - Select Harry Potter House"
     , body =
@@ -162,6 +162,14 @@ view model =
               , timeline = singleEvent
               , move = posThenOscillators
               }
+            , { name = "Sorta Wobbly"
+              , timeline = singleEvent
+              , move = sortaWobbly
+              }
+            , { name = "Wobbly"
+              , timeline = singleEvent
+              , move = wobbly
+              }
             ]
         , viewTimelineGroup "Double Event"
             [ { name = "Pos"
@@ -175,6 +183,14 @@ view model =
             , { name = "Pos -> Oscillators"
               , timeline = doubleEvent
               , move = posThenOscillators
+              }
+            , { name = "Sorta wobbly"
+              , timeline = doubleEvent
+              , move = sortaWobbly
+              }
+            , { name = "Wobbly"
+              , timeline = doubleEvent
+              , move = wobbly
               }
             ]
         , viewTimelineGroup "Four Continuous"
@@ -190,6 +206,14 @@ view model =
               , timeline = fourContinuous
               , move = posThenOscillators
               }
+            , { name = "Sorta Wobbly"
+              , timeline = fourContinuous
+              , move = sortaWobbly
+              }
+            , { name = "Wobbly"
+              , timeline = fourContinuous
+              , move = wobbly
+              }
             ]
         , viewTimelineGroup "Four with Pause"
             [ { name = "Pos"
@@ -203,6 +227,14 @@ view model =
             , { name = "Pos -> Oscillators"
               , timeline = fourWithPause
               , move = posThenOscillators
+              }
+            , { name = "Sorta Wobbly"
+              , timeline = fourWithPause
+              , move = sortaWobbly
+              }
+            , { name = "Wobbly"
+              , timeline = fourWithPause
+              , move = wobbly
               }
             ]
 
@@ -258,7 +290,7 @@ view model =
         --     [ Help.Plot.easing sin 0 (2 * pi) --(\i -> sin (turns i))
         --     , Help.Plot.easing (\i -> sin (turns i)) 0 1
         --     ]
-        -- noWobble
+        --     noWobble
         , viewSpringVariations "noWobble"
             { stiffness = 170
             , damping = 26
@@ -635,3 +667,41 @@ toHousePositionWithOrbit event =
 
         Ravenclaw ->
             Animator.to 1000
+
+
+wobbly event =
+    case event of
+        Hufflepuff ->
+            Animator.to 100
+                |> Animator.withWobble 1
+
+        Griffyndor ->
+            Animator.to 400
+                |> Animator.withWobble 1
+
+        Slytherin ->
+            Animator.to 700
+                |> Animator.withWobble 1
+
+        Ravenclaw ->
+            Animator.to 1000
+                |> Animator.withWobble 1
+
+
+sortaWobbly event =
+    case event of
+        Hufflepuff ->
+            Animator.to 100
+                |> Animator.withWobble 0.5
+
+        Griffyndor ->
+            Animator.to 400
+                |> Animator.withWobble 0.5
+
+        Slytherin ->
+            Animator.to 700
+                |> Animator.withWobble 0.5
+
+        Ravenclaw ->
+            Animator.to 1000
+                |> Animator.withWobble 0.5
