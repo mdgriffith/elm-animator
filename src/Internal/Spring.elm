@@ -101,9 +101,6 @@ step target { stiffness, damping, mass } dtms motion =
 
         newPos =
             motion.position + (newVelocity * dt)
-
-        -- dx =
-        --     abs (target - newPos)
     in
     { position = newPos
     , velocity = newVelocity
