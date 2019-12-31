@@ -386,19 +386,39 @@ interpolateBetween lookup previous ((Timeline.Occurring target targetTime maybeT
             Pixels.inPixelsPerSecond (velocityAtTarget lookup targetOccurring maybeLookAhead)
 
         curve =
-            createSpline
-                { start = Point2d.unitless startTimeInMs (Pixels.inPixels state.position)
-                , startVelocity = Vector2d.unitless 1000 (Pixels.inPixelsPerSecond state.velocity)
+            -- createSpline
+            --     { start = Point2d.unitless startTimeInMs (Pixels.inPixels state.position)
+            --     , startVelocity = Vector2d.unitless 1000 (Pixels.inPixelsPerSecond state.velocity)
+            --     , departure = getLeave lookup previous
+            --     , end = Point2d.unitless targetTimeInMs (Pixels.inPixels targetPosition)
+            --     , endVelocity =
+            --         Vector2d.unitless 1000
+            --             targetVelocity
+            --     , arrival = getArrival lookup targetOccurring
+            --     }
+            createNewSpline
+                { start =
+                    { x = startTimeInMs
+                    , y = Pixels.inPixels state.position
+                    }
+                , startVelocity =
+                    { x = 1000
+                    , y = Pixels.inPixelsPerSecond state.velocity
+                    }
                 , departure = getLeave lookup previous
-                , end = Point2d.unitless targetTimeInMs (Pixels.inPixels targetPosition)
+                , end =
+                    { x = targetTimeInMs
+                    , y = Pixels.inPixels targetPosition
+                    }
                 , endVelocity =
-                    Vector2d.unitless 1000
-                        targetVelocity
+                    { x = 1000
+                    , y = targetVelocity
+                    }
                 , arrival = getArrival lookup targetOccurring
                 }
 
         current =
-            findAtX curve
+            findAtXOnSpline curve
                 (Time.inMilliseconds currentTime)
                 -- tolerance
                 1
@@ -410,19 +430,15 @@ interpolateBetween lookup previous ((Timeline.Occurring target targetTime maybeT
                 0
 
         firstDerivative =
-            CubicSpline2d.firstDerivative curve current.t
+            firstDerivativeOnSpline curve current.t
     in
     { position =
-        current.point
-            |> Point2d.yCoordinate
-            |> Quantity.toFloat
+        current.point.y
             |> Pixels.pixels
     , velocity =
         -- rescale velocity so that it's pixels/second
         -- `createSpline` scales this vector sometimes, we need to ensure it's the right size.
-        (Quantity.toFloat (Vector2d.yComponent firstDerivative)
-            / Quantity.toFloat (Vector2d.xComponent firstDerivative)
-        )
+        (firstDerivative.y / firstDerivative.x)
             |> (*) 1000
             |> Pixels.pixelsPerSecond
     }
@@ -496,6 +512,97 @@ getArrival lookup (Timeline.Occurring event _ _) =
             arrival
 
 
+type Spline
+    = Spline Point Point Point Point
+
+
+zeroPoint : Point
+zeroPoint =
+    { x = 0
+    , y = 0
+    }
+
+
+createNewSpline :
+    { start : Point
+    , startVelocity : Point
+    , departure : Departure
+    , end : Point
+    , endVelocity : Point
+    , arrival : Arrival
+    }
+    -> Spline
+createNewSpline config =
+    let
+        totalX =
+            config.end.x - config.start.x
+
+        startVelocity =
+            if config.departure.slowly == 0 then
+                config.startVelocity
+
+            else if config.startVelocity == zeroPoint then
+                scaleBy (config.departure.slowly * 3)
+                    { x = totalX
+                    , y = 0
+                    }
+
+            else
+                config.startVelocity
+                    |> scaleBy (config.departure.slowly * 3)
+
+        endVelocity =
+            if config.arrival.slowly == 0 then
+                config.endVelocity
+
+            else if config.endVelocity == zeroPoint then
+                scaleBy (config.arrival.slowly * 3)
+                    { x = totalX
+                    , y = 0
+                    }
+
+            else
+                config.endVelocity
+                    |> scaleBy (config.arrival.slowly * 3)
+    in
+    {-
+       the `fromEndpoints` definition from elm-geometry
+
+       fromControlPoints
+               givenStartPoint
+               (givenStartPoint |> Point2d.translateBy (Vector2d.scaleBy (1 / 3) givenStartDerivative))
+               (givenEndPoint |> Point2d.translateBy (Vector2d.scaleBy (-1 / 3) givenEndDerivative))
+               givenEndPoint
+
+
+    -}
+    Spline
+        config.start
+        (config.start |> translateBy (scaleBy (1 / 3) startVelocity))
+        (config.end |> translateBy (scaleBy (-1 / 3) endVelocity))
+        config.end
+
+
+type alias Point =
+    { x : Float
+    , y : Float
+    }
+
+
+scaleBy : Float -> Point -> Point
+scaleBy n { x, y } =
+    { x = x * n
+    , y = y * n
+    }
+
+
+translateBy : Point -> Point -> Point
+translateBy delta { x, y } =
+    { x = x + delta.x
+    , y = y + delta.y
+    }
+
+
 type alias Curve coordinates =
     { start : Point2d.Point2d Quantity.Unitless coordinates
     , startVelocity : Vector2d.Vector2d Quantity.Unitless coordinates
@@ -553,6 +660,281 @@ createSpline config =
         endVelocity
 
 
+interpolatePoints : Point -> Point -> Float -> Point
+interpolatePoints p1 p2 t =
+    if t <= 0.5 then
+        { x = p1.x + t * (p2.x - p1.x)
+        , y = p1.y + t * (p2.y - p1.y)
+        }
+
+    else
+        { x = p2.x + (1 - t) * (p1.x - p2.x)
+        , y = p2.y + (1 - t) * (p1.y - p2.y)
+        }
+
+
+interpolateValue : Float -> Float -> Float -> Float
+interpolateValue start end t =
+    if t <= 0.5 then
+        start + t * (end - start)
+
+    else
+        end + (1 - t) * (start - end)
+
+
+
+{-
+   -- Get the point along a spline at a given parameter value.
+
+   pointOn : CubicSpline2d units coordinates -> Float -> Point2d units coordinates
+   pointOn spline parameterValue =
+       let
+           p1 =
+               firstControlPoint spline
+
+           p2 =
+               secondControlPoint spline
+
+           p3 =
+               thirdControlPoint spline
+
+           p4 =
+               fourthControlPoint spline
+
+           q1 =
+               Point2d.interpolateFrom p1 p2 parameterValue
+
+           q2 =
+               Point2d.interpolateFrom p2 p3 parameterValue
+
+           q3 =
+               Point2d.interpolateFrom p3 p4 parameterValue
+
+           r1 =
+               Point2d.interpolateFrom q1 q2 parameterValue
+
+           r2 =
+               Point2d.interpolateFrom q2 q3 parameterValue
+       in
+       Point2d.interpolateFrom r1 r2 parameterValue
+
+-}
+
+
+pointOn : Spline -> Proportion -> Point
+pointOn (Spline p1 p2 p3 p4) proportion =
+    let
+        q1 =
+            interpolatePoints p1 p2 proportion
+
+        q2 =
+            interpolatePoints p2 p3 proportion
+
+        q3 =
+            interpolatePoints p3 p4 proportion
+
+        r1 =
+            interpolatePoints q1 q2 proportion
+
+        r2 =
+            interpolatePoints q2 q3 proportion
+    in
+    interpolatePoints r1 r2 proportion
+
+
+{-| firstDerivative : CubicSpline2d units coordinates -> Float -> Vector2d units coordinates
+firstDerivative spline parameterValue =
+let
+p1 =
+firstControlPoint spline
+
+        p2 =
+            secondControlPoint spline
+
+        p3 =
+            thirdControlPoint spline
+
+        p4 =
+            fourthControlPoint spline
+
+        x1 =
+            Point2d.xCoordinate p1
+
+        y1 =
+            Point2d.yCoordinate p1
+
+        x2 =
+            Point2d.xCoordinate p2
+
+        y2 =
+            Point2d.yCoordinate p2
+
+        x3 =
+            Point2d.xCoordinate p3
+
+        y3 =
+            Point2d.yCoordinate p3
+
+        x4 =
+            Point2d.xCoordinate p4
+
+        y4 =
+            Point2d.yCoordinate p4
+
+        vx1 =
+            x2 |> Quantity.minus x1
+
+        vy1 =
+            y2 |> Quantity.minus y1
+
+        vx2 =
+            x3 |> Quantity.minus x2
+
+        vy2 =
+            y3 |> Quantity.minus y2
+
+        vx3 =
+            x4 |> Quantity.minus x3
+
+        vy3 =
+            y4 |> Quantity.minus y3
+
+        wx1 =
+            Quantity.interpolateFrom vx1 vx2 parameterValue
+
+        wy1 =
+            Quantity.interpolateFrom vy1 vy2 parameterValue
+
+        wx2 =
+            Quantity.interpolateFrom vx2 vx3 parameterValue
+
+        wy2 =
+            Quantity.interpolateFrom vy2 vy3 parameterValue
+    in
+    Vector2d.xy
+        (Quantity.multiplyBy 3
+            (Quantity.interpolateFrom wx1 wx2 parameterValue)
+        )
+        (Quantity.multiplyBy 3
+            (Quantity.interpolateFrom wy1 wy2 parameterValue)
+        )
+
+-}
+firstDerivativeOnSpline : Spline -> Proportion -> Point
+firstDerivativeOnSpline (Spline p1 p2 p3 p4) proportion =
+    let
+        vx1 =
+            p2.x - p1.x
+
+        vy1 =
+            p2.y - p1.y
+
+        vx2 =
+            p3.x - p2.x
+
+        vy2 =
+            p3.y - p2.y
+
+        vx3 =
+            p4.x - p3.x
+
+        vy3 =
+            p4.y - p3.y
+
+        wx1 =
+            interpolateValue vx1 vx2 proportion
+
+        wy1 =
+            interpolateValue vy1 vy2 proportion
+
+        wx2 =
+            interpolateValue vx2 vx3 proportion
+
+        wy2 =
+            interpolateValue vy2 vy3 proportion
+    in
+    { x =
+        3 * interpolateValue wx1 wx2 proportion
+    , y =
+        3 * interpolateValue wy1 wy2 proportion
+    }
+
+
+
+{-
+
+    Evaluate the second derivative of a spline at a given parameter value.
+
+   secondDerivative : CubicSpline2d units coordinates -> Float -> Vector2d units coordinates
+   secondDerivative spline parameterValue =
+       let
+           p1 =
+               firstControlPoint spline
+
+           p2 =
+               secondControlPoint spline
+
+           p3 =
+               thirdControlPoint spline
+
+           p4 =
+               fourthControlPoint spline
+
+           u1 =
+               Vector2d.from p1 p2
+
+           u2 =
+               Vector2d.from p2 p3
+
+           u3 =
+               Vector2d.from p3 p4
+
+           v1 =
+               u2 |> Vector2d.minus u1
+
+           v2 =
+               u3 |> Vector2d.minus u2
+       in
+       Vector2d.scaleBy 6 (Vector2d.interpolateFrom v1 v2 parameterValue)
+-}
+
+
+secondDerivativeOnSpline : Spline -> Proportion -> Point
+secondDerivativeOnSpline (Spline p1 p2 p3 p4) proportion =
+    let
+        u1 =
+            -- Vector2d.from p1 p2
+            { x = p2.x - p1.x
+            , y = p2.y - p1.y
+            }
+
+        u2 =
+            -- Vector2d.from p2 p3
+            { x = p3.x - p2.x
+            , y = p3.y - p2.y
+            }
+
+        u3 =
+            -- Vector2d.from p3 p4
+            { x = p4.x - p3.x
+            , y = p4.y - p3.y
+            }
+
+        v1 =
+            -- Vector2d.minus u1 u2
+            { x = u2.x - u1.x
+            , y = u2.y - u1.y
+            }
+
+        v2 =
+            --  Vector2d.minus u2 u3
+            { x = u3.x - u2.x
+            , y = u3.y - u2.y
+            }
+    in
+    scaleBy 6 (interpolatePoints v1 v2 proportion)
+
+
 {-| Once we have a bezier curve, we need to find the value of y at a given x.
 
 A simple way to do this is just a binary search, which is what this does.
@@ -567,6 +949,27 @@ as explained here:
 <https://stackoverflow.com/questions/51879836/cubic-bezier-curves-get-y-for-given-x-special-case-where-x-of-control-points/51883347#51883347>
 
 -}
+findAtXOnSpline : Spline -> Float -> Float -> Float -> Float -> Int -> { point : { x : Float, y : Float }, t : Float }
+findAtXOnSpline spline desiredX tolerance jumpSize t depth =
+    let
+        point =
+            pointOn spline t
+    in
+    if depth == 10 then
+        { point = point
+        , t = t
+        }
+
+    else if within tolerance point.x desiredX then
+        { point = point
+        , t = t
+        }
+
+    else if point.x > desiredX then
+        findAtXOnSpline spline desiredX tolerance (jumpSize / 2) (t - jumpSize) (depth + 1)
+
+    else
+        findAtXOnSpline spline desiredX tolerance (jumpSize / 2) (t + jumpSize) (depth + 1)
 
 
 
