@@ -16,6 +16,7 @@ main =
             [ springs
             , randomness
             , basicInterpolation
+            , functionCalling
             ]
 
 
@@ -127,3 +128,51 @@ toPos event =
 
         Ravenclaw ->
             Animator.to 1000
+
+
+functionWithRecord { one, two, three, four, five, six } =
+    one * two * three
+
+
+functionWithArgs one two three four five six =
+    one * two * three
+
+
+functionCalling =
+    let
+        one =
+            5
+
+        two =
+            10
+
+        three =
+            1000
+
+        four =
+            "string"
+
+        five =
+            True
+
+        six =
+            Just 52
+    in
+    describe "Is having arguments as a record significantly different from positional?"
+        -- Normally we shouldnt consider this, but for lib internals, why not?
+        -- records are twice as fast!
+        -- my guess is because they skip the wrapping of functions that elm does for currying.
+        [ benchmark "Function with record arg" <|
+            \_ ->
+                functionWithRecord
+                    { one = one
+                    , two = two
+                    , three = three
+                    , four = four
+                    , five = five
+                    , six = six
+                    }
+        , benchmark "Function with positional" <|
+            \_ ->
+                functionWithArgs one two three four five six
+        ]
