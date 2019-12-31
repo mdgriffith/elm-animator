@@ -219,7 +219,9 @@ log str val =
 
 
 
--- Debug.log str val
+-- Debug.log
+--     str
+--     val
 
 
 {-| -}
@@ -350,7 +352,8 @@ springInterpolation lookup previous target now state =
             Spring.select wobble duration
 
         new =
-            Spring.stepOver duration
+            Spring.stepOver
+                (Time.duration (Timeline.endTime previous) now)
                 params
                 targetPos
                 { position = Pixels.inPixels state.position

@@ -102,8 +102,8 @@ step target { stiffness, damping, mass } dtms motion =
         newPos =
             motion.position + (newVelocity * dt)
 
-        dx =
-            abs (target - newPos)
+        -- dx =
+        --     abs (target - newPos)
     in
     { position = newPos
     , velocity = newVelocity
@@ -127,8 +127,11 @@ stepOver duration params target state =
         durMS =
             Duration.inMilliseconds duration
 
+        frames =
+            durMS / 16
+
         remainder =
-            durMS - toFloat (floor durMS)
+            16 * (frames - toFloat (floor frames))
 
         steps =
             if remainder > 0 then

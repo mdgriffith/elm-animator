@@ -8,7 +8,7 @@ module Animator exposing
     , float, move, color
     , xy, xyz, to, Movement
     , leave, arrive, linear, smooth, verySmooth
-    , leaveLate, arriveEarly
+    , leaveLate, arriveEarly, withWobble, wobble
     , loop, wave, wrap, zigzag
     , pause, shift
     )
@@ -39,7 +39,7 @@ module Animator exposing
 
 @docs Proportion, leave, arrive, linear, smooth, verySmooth
 
-@docs leaveLate, arriveEarly
+@docs leaveLate, arriveEarly, withWobble, wobble
 
 
 # Oscillators
@@ -447,6 +447,10 @@ arrive s movement =
 
         Interpolate.Oscillate dep arrival dur fn ->
             Interpolate.Oscillate dep { arrival | slowly = clamp 0 1 s } dur fn
+
+
+
+{- Some help with randomness -}
 
 
 {-| -}
