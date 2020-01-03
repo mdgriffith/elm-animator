@@ -100,76 +100,90 @@ We want to animate the checked state.
 
 -}
 viewCheckbox checked =
-    div
-        [ Attr.style "display" "flex"
-        , Attr.style "align-items" "center"
-        , Attr.style "cursor" "pointer"
-        , Events.onClick (Check (not (Animator.current checked)))
-        ]
+    div []
         [ div
-            [ Animator.CSS.backgroundColor checked <|
-                \state ->
-                    case state of
-                        True ->
-                            Color.rgb255 255 96 96
-
-                        False ->
-                            Color.white
-            , Animator.CSS.borderColor checked <|
-                \state ->
-                    case state of
-                        True ->
-                            Color.rgb255 255 96 96
-
-                        False ->
-                            Color.black
-            , Attr.style "border-width" "10px"
-            , Attr.style "border-style" "solid"
-            , Attr.style "color" "#000"
-            , Attr.style "width" "160px"
-            , Attr.style "height" "160px"
-            , Attr.style "border-radius" "20px"
-            , Attr.style "user-select" "none"
-            , Attr.style "font-size" "160px"
-            , Attr.style "line-height" "1.0"
-            , Attr.style "text-align" "center"
+            [ Attr.style "display" "flex"
+            , Attr.style "align-items" "center"
+            , Attr.style "cursor" "pointer"
+            , Events.onClick (Check (not (Animator.current checked)))
             ]
             [ div
-                [ Animator.CSS.opacity checked <|
+                [ Animator.CSS.backgroundColor checked <|
                     \state ->
                         case state of
                             True ->
-                                1
+                                Color.rgb255 255 96 96
 
                             False ->
-                                0
-                , Animator.CSS.transform
-                    { position = { x = 0, y = 0 }
-                    , rotate =
-                        Animator.float checked <|
-                            \state ->
-                                case state of
-                                    True ->
-                                        turns 0
+                                Color.white
+                , Animator.CSS.borderColor checked <|
+                    \state ->
+                        case state of
+                            True ->
+                                Color.rgb255 255 96 96
 
-                                    False ->
-                                        turns 0.4
-                    , scale =
-                        Animator.float checked <|
-                            \state ->
-                                case state of
-                                    True ->
-                                        1
-
-                                    False ->
-                                        0
-                    }
+                            False ->
+                                Color.black
+                , Attr.style "border-width" "10px"
+                , Attr.style "border-style" "solid"
+                , Attr.style "color" "#000"
+                , Attr.style "width" "160px"
+                , Attr.style "height" "160px"
+                , Attr.style "border-radius" "20px"
+                , Attr.style "user-select" "none"
+                , Attr.style "font-size" "160px"
+                , Attr.style "line-height" "1.0"
+                , Attr.style "text-align" "center"
                 ]
-                [ text "!" ]
+                [ div
+                    [ Animator.CSS.opacity checked <|
+                        \state ->
+                            case state of
+                                True ->
+                                    1
+
+                                False ->
+                                    0
+                    , Animator.CSS.transform
+                        { position = { x = 0, y = 0 }
+                        , rotate =
+                            Animator.float checked <|
+                                \state ->
+                                    case state of
+                                        True ->
+                                            turns 0
+
+                                        False ->
+                                            turns 0.4
+                        , scale =
+                            Animator.float checked <|
+                                \state ->
+                                    case state of
+                                        True ->
+                                            1
+
+                                        False ->
+                                            0
+                        }
+                    ]
+                    [ text "!" ]
+                ]
+            , span
+                [ Attr.style "margin-left" "32px"
+                , Attr.style "font-size" "190px"
+                ]
+                [ text "Click me" ]
             ]
-        , span
-            [ Attr.style "margin-left" "32px"
-            , Attr.style "font-size" "190px"
+        , div
+            [ Animator.CSS.opacity checked <|
+                \state ->
+                    case state of
+                        True ->
+                            1
+
+                        False ->
+                            0
             ]
-            [ text "Check me" ]
+            [ text "Great job 👍"
+            ]
         ]
