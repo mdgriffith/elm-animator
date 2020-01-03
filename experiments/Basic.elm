@@ -15,8 +15,12 @@ import Internal.Timeline
 import Time
 
 
+
+{- Normal Timelines -}
+
+
 singleEvent =
-    Animator.init (Time.millisToPosix 0) Hufflepuff
+    Animator.init Hufflepuff
 
 
 doubleEvent =
@@ -55,13 +59,40 @@ fourWithPause =
         |> Animator.update (Time.millisToPosix 3409)
 
 
+
+{- Timelines with Interruptions -}
+
+
+doubleInterrupted =
+    doubleEvent
+        |> Animator.interrupt
+            [ Animator.wait (Animator.seconds 1)
+            , Animator.event (Animator.seconds 1) Griffyndor
+            ]
+        |> Animator.update (Time.millisToPosix 1250)
+
+
+fourWithPauseInterrupted =
+    fourWithPause
+        |> Animator.interrupt
+            [ Animator.wait (Animator.seconds 1)
+            , Animator.event (Animator.seconds 1) Griffyndor
+            , Animator.wait (Animator.seconds 1)
+            , Animator.event (Animator.seconds 1) Slytherin
+            , Animator.wait (Animator.seconds 1)
+            , Animator.event (Animator.seconds 1) Ravenclaw
+            , Animator.wait (Animator.seconds 1)
+            ]
+        |> Animator.update (Time.millisToPosix 3450)
+
+
 main =
     Browser.document
         { init =
             \() ->
                 update QueueOne
                     { timeline =
-                        Animator.init (Time.millisToPosix 0) Hufflepuff
+                        Animator.init Hufflepuff
                     , time = Time.millisToPosix 0
                     , house = Hufflepuff
                     , chart = Help.Plot.init
@@ -193,6 +224,28 @@ view model =
               , move = wobbly
               }
             ]
+        , viewTimelineGroup "Interruptions - 1250"
+            [ { name = "Pos"
+              , timeline = doubleInterrupted
+              , move = toHousePosition
+              }
+            , { name = "Oscillator"
+              , timeline = doubleInterrupted
+              , move = oscillators
+              }
+            , { name = "Pos -> Oscillators"
+              , timeline = doubleInterrupted
+              , move = posThenOscillators
+              }
+            , { name = "Sorta wobbly"
+              , timeline = doubleInterrupted
+              , move = sortaWobbly
+              }
+            , { name = "Wobbly"
+              , timeline = doubleInterrupted
+              , move = wobbly
+              }
+            ]
         , viewTimelineGroup "Four Continuous"
             [ { name = "Pos"
               , timeline = fourContinuous
@@ -237,61 +290,35 @@ view model =
               , move = wobbly
               }
             ]
+        , viewTimelineGroup "Interrupted - Four with Pause"
+            [ { name = "Pos"
+              , timeline = fourWithPauseInterrupted
+              , move = toHousePosition
+              }
+            , { name = "Oscillator"
+              , timeline = fourWithPauseInterrupted
+              , move = oscillators
+              }
+            , { name = "Pos -> Oscillators"
+              , timeline = fourWithPauseInterrupted
+              , move = posThenOscillators
+              }
+            , { name = "Sorta Wobbly"
+              , timeline = fourWithPauseInterrupted
+              , move = sortaWobbly
+              }
+            , { name = "Wobbly"
+              , timeline = fourWithPauseInterrupted
+              , move = wobbly
+              }
+            ]
+        ]
+    }
 
-        -- , row []
-        --     [ Help.Plot.easing Ease.linear 0 1
-        --     ]
-        -- , row []
-        --     [ Help.Plot.easing Ease.inQuad 0 1
-        --     , Help.Plot.easing Ease.outQuad 0 1
-        --     , Help.Plot.easing Ease.inOutQuad 0 1
-        --     ]
-        -- , row []
-        --     [ Help.Plot.easing Ease.inCubic 0 1
-        --     , Help.Plot.easing Ease.outCubic 0 1
-        --     , Help.Plot.easing Ease.inOutCubic 0 1
-        --     ]
-        -- , row []
-        --     [ Help.Plot.easing Ease.inQuart 0 1
-        --     , Help.Plot.easing Ease.outQuart 0 1
-        --     , Help.Plot.easing Ease.inOutQuart 0 1
-        --     ]
-        -- , row []
-        --     [ Help.Plot.easing Ease.inQuint 0 1
-        --     , Help.Plot.easing Ease.outQuint 0 1
-        --     , Help.Plot.easing Ease.inOutQuint 0 1
-        --     ]
-        -- , row []
-        --     [ Help.Plot.easing Ease.inSine 0 1
-        --     , Help.Plot.easing Ease.outSine 0 1
-        --     , Help.Plot.easing Ease.inOutSine 0 1
-        --     ]
-        -- , row []
-        --     [ Help.Plot.easing Ease.inExpo 0 1
-        --     , Help.Plot.easing Ease.outExpo 0 1
-        --     , Help.Plot.easing Ease.inOutExpo 0 1
-        --     ]
-        -- , row []
-        --     [ Help.Plot.easing Ease.inCirc 0 1
-        --     , Help.Plot.easing Ease.outCirc 0 1
-        --     , Help.Plot.easing Ease.inOutCirc 0 1
-        --     ]
-        -- , row []
-        --     [ Help.Plot.easing Ease.inBack 0 1
-        --     , Help.Plot.easing Ease.outBack 0 1
-        --     , Help.Plot.easing Ease.inOutBack 0 1
-        --     ]
-        -- , row []
-        --     [ Help.Plot.easing Ease.inElastic 0 1
-        --     , Help.Plot.easing Ease.outElastic 0 1
-        --     , Help.Plot.easing Ease.inOutElastic 0 1
-        --     ]
-        -- , row []
-        --     [ Help.Plot.easing sin 0 (2 * pi) --(\i -> sin (turns i))
-        --     , Help.Plot.easing (\i -> sin (turns i)) 0 1
-        --     ]
-        --     noWobble
-        , viewSpringVariations "noWobble"
+
+viewSprings =
+    Html.div []
+        [ viewSpringVariations "noWobble"
             { stiffness = 170
             , damping = 26
             , mass = 1
@@ -397,7 +424,62 @@ view model =
                 }
             ]
         ]
-    }
+
+
+viewEasings =
+    [ row []
+        [ Help.Plot.easing Ease.linear 0 1
+        ]
+    , row []
+        [ Help.Plot.easing Ease.inQuad 0 1
+        , Help.Plot.easing Ease.outQuad 0 1
+        , Help.Plot.easing Ease.inOutQuad 0 1
+        ]
+    , row []
+        [ Help.Plot.easing Ease.inCubic 0 1
+        , Help.Plot.easing Ease.outCubic 0 1
+        , Help.Plot.easing Ease.inOutCubic 0 1
+        ]
+    , row []
+        [ Help.Plot.easing Ease.inQuart 0 1
+        , Help.Plot.easing Ease.outQuart 0 1
+        , Help.Plot.easing Ease.inOutQuart 0 1
+        ]
+    , row []
+        [ Help.Plot.easing Ease.inQuint 0 1
+        , Help.Plot.easing Ease.outQuint 0 1
+        , Help.Plot.easing Ease.inOutQuint 0 1
+        ]
+    , row []
+        [ Help.Plot.easing Ease.inSine 0 1
+        , Help.Plot.easing Ease.outSine 0 1
+        , Help.Plot.easing Ease.inOutSine 0 1
+        ]
+    , row []
+        [ Help.Plot.easing Ease.inExpo 0 1
+        , Help.Plot.easing Ease.outExpo 0 1
+        , Help.Plot.easing Ease.inOutExpo 0 1
+        ]
+    , row []
+        [ Help.Plot.easing Ease.inCirc 0 1
+        , Help.Plot.easing Ease.outCirc 0 1
+        , Help.Plot.easing Ease.inOutCirc 0 1
+        ]
+    , row []
+        [ Help.Plot.easing Ease.inBack 0 1
+        , Help.Plot.easing Ease.outBack 0 1
+        , Help.Plot.easing Ease.inOutBack 0 1
+        ]
+    , row []
+        [ Help.Plot.easing Ease.inElastic 0 1
+        , Help.Plot.easing Ease.outElastic 0 1
+        , Help.Plot.easing Ease.inOutElastic 0 1
+        ]
+    , row []
+        [ Help.Plot.easing sin 0 (2 * pi) --(\i -> sin (turns i))
+        , Help.Plot.easing (\i -> sin (turns i)) 0 1
+        ]
+    ]
 
 
 viewSpringVariations label params =
