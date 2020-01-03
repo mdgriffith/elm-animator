@@ -1,9 +1,10 @@
 module Animator exposing
     ( Timeline, init, subscription
+    , current
     , Schedule, Event
     , wait, event
     , Duration, millis, seconds, minutes
-    , after, between, rewrite
+    , animator, with, toSubscription
     , queue, interrupt, update
     , float, move, color
     , xy, xyz, to, Movement
@@ -17,6 +18,11 @@ module Animator exposing
 
 @docs Timeline, init, subscription
 
+@docs current
+
+
+# Adding events to a timeline
+
 @docs Schedule, Event
 
 @docs Step, wait, event
@@ -24,9 +30,9 @@ module Animator exposing
 @docs Duration, millis, seconds, minutes
 
 
-# Focusing on Events
+# Animating
 
-@docs after, between, rewrite
+@docs animator, with, toSubscription
 
 @docs queue, interrupt, update
 
@@ -66,28 +72,33 @@ type alias Timeline event =
 
 
 {--}
+update : Time.Posix -> Timeline event -> Timeline event
 update =
     Timeline.update
 
 
 {-| -}
-init : Time.Posix -> event -> Timeline event
-init start first =
+init : event -> Timeline event
+init first =
     Timeline.Timeline
         { initial = first
-        , now = Time.absolute start
+        , now = Time.absolute (Time.millisToPosix 0)
         , events =
-            let
-                firstOccurring =
-                    Timeline.Occurring first (Time.absolute start) Nothing
-            in
-            Timeline.Timetable
-                [ Timeline.Line (Time.absolute start) firstOccurring []
-                ]
+            Timeline.Timetable []
         , queued = Nothing
         , interruption = []
         , running = True
         }
+
+
+{-| -}
+current : Timeline event -> event
+current timeline =
+    Timeline.foldp identity
+        Interpolate.startPass
+        Nothing
+        Interpolate.pass
+        timeline
 
 
 {-| -}
@@ -135,7 +146,8 @@ queue : List (Step event) -> Timeline event -> Timeline event
 queue steps (Timeline.Timeline tl) =
     Timeline.Timeline
         { tl
-            | queued =
+            | running = True
+            , queued =
                 case tl.queued of
                     Nothing ->
                         case initializeSchedule (millis 0) steps of
@@ -155,7 +167,8 @@ interrupt : List (Step event) -> Timeline event -> Timeline event
 interrupt steps (Timeline.Timeline tl) =
     Timeline.Timeline
         { tl
-            | interruption =
+            | running = True
+            , interruption =
                 case initializeSchedule (millis 0) steps of
                     Nothing ->
                         tl.interruption
@@ -227,41 +240,6 @@ type alias Event event =
 {-| -}
 type alias Schedule event =
     Timeline.Schedule event
-
-
-{-| -}
-rewrite : newEvent -> Timeline event -> (event -> Maybe newEvent) -> Timeline newEvent
-rewrite newStart timeline newLookup =
-    -- Timeline.rewrite newStart timeline newLookup
-    Debug.todo "ugh"
-
-
-{-| _NOTE_ this might need a rename, it's really "during this even, and after"
-
-So, a timline of `One`, `Two`, `Three`
-
-that calls `Animator.after Two`
-
-would create `False`, `True`, `True`.
-
--}
-after : event -> Timeline event -> Timeline Bool
-after =
-    Timeline.after
-
-
-{-| _NOTE_ this might need a rename, it's really "during this even, and after"
-
-So, a timline of `One`, `Two`, `Three`
-
-that calls `Animator.after Two`
-
-would create `False`, `True`, `True`.
-
--}
-between : event -> event -> Timeline event -> Timeline Bool
-between =
-    Timeline.between
 
 
 
@@ -711,6 +689,51 @@ subscription toMsg timeline =
         Browser.Events.onAnimationFrame
             (\newTime ->
                 toMsg (Timeline.update newTime timeline)
+            )
+
+    else
+        Sub.none
+
+
+type Animator model msg
+    = Animator (model -> Bool) (Time.Posix -> model -> model) (model -> msg)
+
+
+animator : (model -> msg) -> Animator model msg
+animator toMsg =
+    Animator (always False) (\now model -> model) toMsg
+
+
+type alias Over model event =
+    ( model -> Timeline event, Timeline event -> model -> model )
+
+
+with : (model -> Timeline event) -> (Timeline event -> model -> model) -> Animator model msg -> Animator model msg
+with get set (Animator isRunning updateModel toMsg) =
+    Animator
+        (\model ->
+            if isRunning model then
+                True
+
+            else
+                Timeline.needsUpdate (get model)
+        )
+        (\now model ->
+            let
+                newModel =
+                    updateModel now model
+            in
+            set (update now (get newModel)) newModel
+        )
+        toMsg
+
+
+toSubscription : model -> Animator model msg -> Sub msg
+toSubscription model (Animator isRunning updateModel toMsg) =
+    if isRunning model then
+        Browser.Events.onAnimationFrame
+            (\newTime ->
+                toMsg (updateModel newTime model)
             )
 
     else
