@@ -92,7 +92,7 @@ pointsOnTimeline =
 
 
 harryPotterHouseTimeline =
-    Animator.init (Time.millisToPosix 0) Hufflepuff
+    Animator.init Hufflepuff
         |> Animator.queue
             [ Animator.wait (Animator.seconds 0.5)
             , Animator.event (Animator.seconds 1) Griffyndor

@@ -22,7 +22,7 @@ type Event
 
 
 timeline =
-    Animator.init (Time.millisToPosix 0) Starting
+    Animator.init Starting
         |> Animator.update (Time.millisToPosix 0)
 
 
