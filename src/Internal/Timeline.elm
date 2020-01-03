@@ -2,9 +2,10 @@ module Internal.Timeline exposing
     ( Timeline(..), TimelineDetails, Occurring(..), getEvents
     , Interpolator
     , Schedule(..), Event(..)
-    , after, between
     , foldp, update, needsUpdate
-    , Adjustment, Line(..), Phase(..), Timetable(..), addToDwell, endTime, extendEventDwell, getEvent, hasDwell, startTime
+    , startTime, endTime, getEvent, extendEventDwell, hasDwell
+    , addToDwell
+    , Phase(..), Adjustment, Line(..), Timetable(..)
     )
 
 {-|
@@ -15,9 +16,13 @@ module Internal.Timeline exposing
 
 @docs Schedule, Event
 
-@docs rewrite, after, between
-
 @docs foldp, update, needsUpdate
+
+@docs startTime, endTime, getEvent, extendEventDwell, hasDwell
+
+@docs addToDwell
+
+@docs Phase, Adjustment, Line, Timetable
 
 -}
 
@@ -36,15 +41,6 @@ type Schedule event
 {-| -}
 type Event event
     = Event Time.Duration event (Maybe Time.Duration)
-
-
-extendEventDwell : Time.Duration -> Event event -> Event event
-extendEventDwell extendBy ((Event at ev maybeDwell) as thisEvent) =
-    if Duration.inMilliseconds extendBy == 0 then
-        thisEvent
-
-    else
-        Event at ev (addToDwell extendBy maybeDwell)
 
 
 {-| -}
@@ -76,6 +72,48 @@ type Timetable event
 {-| -}
 type Line event
     = Line Time.Absolute (Occurring event) (List (Occurring event))
+
+
+{-| When the event occurs, and how long we're dwelling at this event (or no dwelling at all)
+-}
+type Occurring event
+    = Occurring event Time.Absolute (Maybe Time.Duration)
+
+
+
+{- TYPES FOR INTERPOLATION -}
+
+
+type Phase
+    = Start
+    | Transitioning
+
+
+type alias Starter event anchor state =
+    (event -> anchor)
+    -> Occurring event
+    -> state
+
+
+type alias Interpolator event anchor state =
+    (event -> anchor)
+    -> Occurring event
+    -> Occurring event
+    -> Maybe (Occurring event)
+    -> Phase
+    -> Time.Absolute
+    -> state
+    -> state
+
+
+type alias Adjustment =
+    { arrivingEarly : Float
+    , leavingLate : Float
+    }
+
+
+type alias TimeAdjustor anchor =
+    anchor -> Adjustment
 
 
 mapTable : (Occurring a -> Occurring b) -> Timetable a -> Timetable b
@@ -129,12 +167,6 @@ foldLine fn cursor (Line start startingEvent remaining) =
     List.foldl fn cursor (startingEvent :: remaining)
 
 
-{-| When the event occurs, and how long we're dwelling at this event (or no dwelling at all)
--}
-type Occurring event
-    = Occurring event Time.Absolute (Maybe Time.Duration)
-
-
 filterMapOccurring : (event -> Maybe newEvent) -> Occurring event -> Maybe (Occurring newEvent)
 filterMapOccurring fn (Occurring ev time maybeDwell) =
     case fn ev of
@@ -145,156 +177,18 @@ filterMapOccurring fn (Occurring ev time maybeDwell) =
             Just (Occurring newEv time maybeDwell)
 
 
-
--- {-| -}
--- rewrite : newEvent -> Timeline event -> (event -> Maybe newEvent) -> Timeline newEvent
--- rewrite newStart (Timeline tl) newLookup =
---     Timeline
---         { initial = newStart
---         , now = tl.now
---         , running = tl.running
---         , events =
---             Timetable. (List.filterMap (filterMapOccurring newLookup)) tl.events
---         , queued = Nothing
---         }
-
-
-{-| -}
-between : event -> event -> Timeline event -> Timeline Bool
-between start end (Timeline tl) =
-    let
-        isStarted =
-            tl.initial == start
-
-        initialState =
-            if isStarted then
-                -- TODO: pretty sure this should be the starting time of the whole timeline
-                StartedAt (Time.absolute (Time.millisToPosix 0)) Nothing
-
-            else
-                NotStarted
-    in
-    Timeline
-        { initial = isStarted
-        , now = tl.now
-        , running = tl.running
-        , events =
-            Tuple.first
-                (mapTableWith
-                    (betweenEvent start end)
-                    initialState
-                    tl.events
-                )
-        , queued = Nothing -- TODO: carry over queues and interruptions
-        , interruption = []
-        }
-
-
-type Between
-    = NotStarted
-      -- starting time, and ending time.
-    | StartedAt Time.Absolute (Maybe Time.Absolute)
-
-
-betweenEvent : event -> event -> Occurring event -> Between -> ( Occurring Bool, Between )
-betweenEvent startCheckpoint endCheckpoint (Occurring ev time maybeDwell) status =
-    case status of
-        NotStarted ->
-            if startCheckpoint == ev then
-                ( Occurring True time maybeDwell
-                , StartedAt time Nothing
-                )
-
-            else
-                ( Occurring False time maybeDwell
-                , status
-                )
-
-        StartedAt startedAt maybeEnd ->
-            if Time.thisAfterThat time startedAt then
-                case maybeEnd of
-                    Nothing ->
-                        ( Occurring True time maybeDwell
-                        , if ev == endCheckpoint then
-                            StartedAt startedAt (Just time)
-
-                          else
-                            status
-                        )
-
-                    Just end ->
-                        if Time.thisAfterThat time end then
-                            ( Occurring False time maybeDwell
-                            , status
-                            )
-
-                        else
-                            ( Occurring True time maybeDwell
-                            , status
-                            )
-
-            else
-                ( Occurring False time maybeDwell
-                , status
-                )
-
-
-{-| -}
-after : event -> Timeline event -> Timeline Bool
-after ev (Timeline tl) =
-    let
-        isStarted =
-            tl.initial == ev
-
-        initialState =
-            if isStarted then
-                -- TODO: pretty sure this should be the starting time of the whole timeline
-                Just (Time.absolute (Time.millisToPosix 0))
-
-            else
-                Nothing
-    in
-    Timeline
-        { initial = isStarted
-        , now = tl.now
-        , events =
-            Tuple.first
-                (mapTableWith
-                    (afterEvent ev)
-                    initialState
-                    tl.events
-                )
-
-        -- TODO: these should be added
-        , interruption = [] --tl.interruption
-        , queued = Nothing -- tl.queued
-        , running = tl.running
-        }
-
-
-afterEvent : event -> Occurring event -> Maybe Time.Absolute -> ( Occurring Bool, Maybe Time.Absolute )
-afterEvent checkpoint (Occurring ev time maybeDwell) maybeCheckpointTime =
-    case maybeCheckpointTime of
-        Nothing ->
-            if checkpoint == ev then
-                ( Occurring True time maybeDwell
-                , Just time
-                )
-
-            else
-                ( Occurring False time maybeDwell
-                , maybeCheckpointTime
-                )
-
-        Just checkpointAt ->
-            ( Occurring (Time.thisAfterThat time checkpointAt) time maybeDwell
-            , maybeCheckpointTime
-            )
-
-
 getEvent : Occurring event -> event
 getEvent (Occurring ev _ _) =
     ev
+
+
+extendEventDwell : Time.Duration -> Event event -> Event event
+extendEventDwell extendBy ((Event at ev maybeDwell) as thisEvent) =
+    if Duration.inMilliseconds extendBy == 0 then
+        thisEvent
+
+    else
+        Event at ev (addToDwell extendBy maybeDwell)
 
 
 hasDwell : Occurring event -> Bool
@@ -346,10 +240,86 @@ getStart timeline =
 {-| -}
 update : Time.Posix -> Timeline event -> Timeline event
 update now (Timeline timeline) =
-    { timeline | now = Time.absolute now }
-        |> applyQueued
-        |> applyInterruptions
-        |> Timeline
+    if timeline.events == Timetable [] then
+        { timeline
+            | now = Time.absolute now
+            , events =
+                let
+                    firstOccurring =
+                        Occurring timeline.initial (Time.absolute now) Nothing
+                in
+                Timetable
+                    [ Line (Time.absolute now) firstOccurring []
+                    ]
+        }
+            |> applyQueued
+            |> applyInterruptions
+            |> Timeline
+
+    else
+        { timeline | now = Time.absolute now }
+            |> applyQueued
+            |> applyInterruptions
+            |> clean
+            |> Timeline
+
+
+{-| Garbage collect and update `isRunning`
+-}
+clean : TimelineDetails event -> TimelineDetails event
+clean details =
+    let
+        running =
+            case details.events of
+                Timetable events ->
+                    linesAreActive details.now events
+    in
+    { details | running = running }
+
+
+linesAreActive : Time.Absolute -> List (Line event) -> Bool
+linesAreActive now lines =
+    case lines of
+        [] ->
+            False
+
+        (Line startAt startingEvent events) :: remaining ->
+            if Time.thisAfterThat startAt now then
+                True
+
+            else
+                let
+                    maybeLast =
+                        List.reverse events
+                            |> List.head
+
+                    maybeInterruption =
+                        case List.head remaining of
+                            Nothing ->
+                                Nothing
+
+                            Just (Line interruptionTime _ _) ->
+                                Just interruptionTime
+                in
+                case maybeInterruption of
+                    Just interruptTime ->
+                        if Time.thisAfterThat interruptTime now then
+                            True
+
+                        else
+                            linesAreActive now remaining
+
+                    Nothing ->
+                        case maybeLast of
+                            Nothing ->
+                                linesAreActive now remaining
+
+                            Just (Occurring _ time _) ->
+                                if Time.thisAfterThat time now then
+                                    True
+
+                                else
+                                    linesAreActive now remaining
 
 
 applyQueued : TimelineDetails event -> TimelineDetails event
@@ -921,33 +891,107 @@ getPhase beginning previousEvent target now maybeInterruption state =
                 ( Finished, Transitioning, now )
 
 
-type Phase
-    = Start
-    | Transitioning
+
+{- BOOKKEEPING -}
+{- We need some standard way to cleanup a timeline so it doesn't grow out of control.
+
+   What are some ways we could flag events to be removed.
+
+       1. Don't flag them.
+       2. If an event has occurred before, and occurs again, remove the older one if it's not involved in an interruption.
+           - means iterating through the entire timeline, and keeping track of what happened before.
+
+       3. Flag by depth.  timeline can only grow to x number of events.
+           -- Essentially Just `List.take n timeline` on each timeline.
+           -- Can be an issue if we're using `after`, or any sort of folding,
+           -- where we're depending on an event that is chopped.
+
+           -> `After` is important because
+               -> What if we have a modal or a menu that opens
+               -> Then inside of that menu, a bunch of stuff happens.
+               -> The modal open state now needs to be reflected in each one of those tiny animations
 
 
-type alias Starter event anchor state =
-    (event -> anchor)
-    -> Occurring event
-    -> state
+               This seems sorta doable with a nested type.  Such as:
+                   Animator.opacity model.timeline <|
+                       \event ->
+                           case event of
+                               Modal _ ->
+                                   1
+
+                               _ ->
+                                   0
 
 
-type alias Interpolator event anchor state =
-    (event -> anchor)
-    -> Occurring event
-    -> Occurring event
-    -> Maybe (Occurring event)
-    -> Phase
-    -> Time.Absolute
-    -> state
-    -> state
+               But falls apart when we try to implement those animations.  Consider modeling two checkboxes that are being checked.
+
+                   Animator.opacity model.timeline <|
+                       \event ->
+                           case event of
+                               Modal CheckedOne ->
+                                   1
+
+                               _ ->
+                                   0
 
 
-type alias Adjustment =
-    { arrivingEarly : Float
-    , leavingLate : Float
-    }
+                   Animator.opacity model.timeline <|
+                       \event ->
+                           case event of
+                               Modal CheckedTwo ->
+                                   1
+
+                               _ ->
+                                   0
 
 
-type alias TimeAdjustor anchor =
-    anchor -> Adjustment
+               Now, checking one box will "uncheck" the previous ones.  The problem is that we have one timeline, when we need parallel timelines.
+
+
+
+               Using `After`:
+
+                   Animator.opacity (Animator.after (Modal CheckedTwo) model.timeline) <|
+                       \event ->
+                           case event of
+                               True ->
+                                   1
+
+                               False ->
+                                   0
+
+
+               Using `Between`:
+                   Animator.opacity (Animator.between ModalOpen ModalClosed model.timeline) <|
+                       \event ->
+                           case event of
+                               True ->
+                                   1
+
+                               False ->
+                                   0
+
+
+               However, instead!  we could just have a timeline of our states.
+
+               So, we have
+
+               `Animator.Timeline Bool` for our checkbox.
+
+
+
+
+
+
+   # Synced states
+
+   Instead of
+
+       `Animator.rewrite : newEvent -> Timeline event -> (event -> Maybe newEvent) -> Timeline newEvent`
+
+       Where the likely usage would be to recalculate an entire new timeline in the view.
+       It also prevents us from having the flag-by-depth garbage collection, which could be done automatically.
+
+
+
+-}

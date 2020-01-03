@@ -2,7 +2,7 @@ module Internal.Interpolate exposing
     ( color
     , Movement(..), move, xy, xyz
     , derivativeOfEasing
-    , adjustTiming, defaultArrival, defaultDeparture, startColoring, startMoving, startMovingXy, startMovingXyz
+    , adjustTiming, defaultArrival, defaultDeparture, pass, startColoring, startMoving, startMovingXy, startMovingXyz, startPass
     )
 
 {-|
@@ -22,6 +22,16 @@ import Internal.Time as Time
 import Internal.Timeline as Timeline
 import Pixels
 import Quantity
+
+
+startPass : (event -> event) -> Timeline.Occurring event -> event
+startPass lookup (Timeline.Occurring start startTime _) =
+    start
+
+
+pass : (event -> event) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> event -> event
+pass _ _ target _ _ _ _ =
+    Timeline.getEvent target
 
 
 {-|
