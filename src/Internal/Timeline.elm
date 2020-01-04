@@ -352,10 +352,15 @@ applyInterruptionHelper interrupts timeline =
         [] ->
             timeline
 
-        i :: remaining ->
+        inter :: remaining ->
             let
+                delay =
+                    case inter of
+                        Schedule d _ _ ->
+                            d
+
                 newEvents =
-                    interrupt timeline timeline.now i
+                    interrupt timeline (Time.advanceBy delay timeline.now) inter
             in
             applyInterruptionHelper remaining { timeline | events = newEvents }
 
@@ -368,19 +373,19 @@ applyInterruptionHelper interrupts timeline =
 
 -}
 interrupt : TimelineDetails events -> Time.Absolute -> Schedule events -> Timetable events
-interrupt details now ((Schedule delay startingEvent reverseQueued) as scheduled) =
+interrupt details startAt ((Schedule _ startingEvent reverseQueued) as scheduled) =
     case details.events of
         Timetable lines ->
             case getLastEventTime lines of
                 Nothing ->
-                    enqueue details now scheduled
+                    enqueue details startAt scheduled
 
                 Just last ->
-                    if Time.thisAfterThat now last then
-                        enqueue details now scheduled
+                    if Time.thisAfterThat startAt last then
+                        enqueue details startAt scheduled
 
                     else
-                        Timetable (lines ++ [ createLine now scheduled ])
+                        Timetable (lines ++ [ createLine startAt scheduled ])
 
 
 getLastEventTime : List (Line event) -> Maybe Time.Absolute
@@ -441,17 +446,25 @@ addToCurrentLine now scheduled lines =
 
 
 createLine : Time.Absolute -> Schedule events -> Line events
-createLine now (Schedule delay (Event dur startEvent dwell) reverseQueued) =
+createLine now (Schedule _ (Event dur startEvent maybeDwell) reverseQueued) =
     let
         start =
-            Time.advanceBy delay now
+            Time.advanceBy dur now
+
+        startNextEvent =
+            case maybeDwell of
+                Nothing ->
+                    start
+
+                Just dwell ->
+                    Time.advanceBy dwell start
 
         events =
-            List.foldl toOccurring ( start, [] ) (List.reverse reverseQueued)
+            List.foldl toOccurring ( startNextEvent, [] ) (List.reverse reverseQueued)
                 |> Tuple.second
                 |> List.reverse
     in
-    Line now (Occurring startEvent now dwell) events
+    Line now (Occurring startEvent start maybeDwell) events
 
 
 addEventsToLine : Time.Absolute -> Schedule events -> Line events -> Line events

@@ -132,6 +132,8 @@ interruptions =
                     , Animator.event (Animator.seconds 1) One
                     , Animator.wait (Animator.seconds 1.0)
                     , Animator.event (Animator.seconds 1) Two
+
+                    --
                     , Animator.wait (Animator.seconds 1.0)
                     , Animator.event (Animator.seconds 1) Unreachable
                     , Animator.wait (Animator.seconds 1.0)
@@ -143,7 +145,7 @@ interruptions =
                     , Animator.wait (Animator.seconds 1.0)
                     , Animator.event (Animator.seconds 1) Four
                     ]
-                |> Animator.update (Time.millisToPosix 4000)
+                |> Animator.update (Time.millisToPosix 3000)
     in
     describe "Interruptions"
         [ test "Correctly schedules" <|
@@ -159,14 +161,21 @@ interruptions =
                                     , occur Two (qty 4000) (Just (qty 1))
                                     , occur Unreachable (qty 6000) (Just (qty 1))
                                     ]
+
+                                -- we scheduled at 3000
+                                -- but there's a wait for 1000
+                                -- so the new line actually starts at 4000.
                                 , Timeline.Line (qty 4000)
-                                    (occur Three (qty 4000) (Just (qty 1)))
-                                    [ occur Four (qty 6000) Nothing
+                                    -- then take 1 second to transition to Three
+                                    (occur Three (qty 5000) (Just (qty 1)))
+                                    -- we then wait a second
+                                    -- then take a second to transition to Four
+                                    [ occur Four (qty 7000) Nothing
                                     ]
                                 ]
                         , initial = Starting
                         , interruption = []
-                        , now = qty 4000
+                        , now = qty 3000
                         , queued = Nothing
                         , running = True
                         }
@@ -177,7 +186,8 @@ interruptions =
                     [ valueAtEquals 0 0
                     , valueAtEquals 2000 1
                     , valueAtEquals 4000 2
-                    , valueAtEquals 6000 4
+                    , valueAtEquals 5000 3
+                    , valueAtEquals 7000 4
                     ]
                     newTimeline
         , fuzz (Fuzz.intRange 0 6000) "Never reaches unreachable event" <|
