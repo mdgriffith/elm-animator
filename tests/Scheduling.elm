@@ -1,4 +1,4 @@
-module Scheduling exposing (interruptions, queueing)
+module Scheduling exposing (cleaning, interruptions, queueing)
 
 import Animator
 import Duration
@@ -24,14 +24,6 @@ type Event
 timeline =
     Animator.init Starting
         |> Animator.update (Time.millisToPosix 0)
-
-
-scheduling =
-    describe "Interruptions and"
-        [ queueing
-
-        -- , interruptions
-        ]
 
 
 qty =
@@ -198,4 +190,53 @@ interruptions =
                 in
                 Expect.atLeast 0
                     (Animator.float new toVals)
+        ]
+
+
+cleaning =
+    describe "Cleaning"
+        [ test "Marked as running correctly" <|
+            \_ ->
+                let
+                    lines =
+                        [ Timeline.Line
+                            (qty 1578168889621)
+                            (occur False (qty 1578168889621) Nothing)
+                            [ occur True (qty 1578168895231) Nothing
+                            ]
+                        , Timeline.Line
+                            -- same as now
+                            (qty 1578168893838)
+                            -- 1000ms later
+                            (occur False (qty 1578168895838) Nothing)
+                            []
+                        ]
+
+                    now =
+                        qty 1578168893838
+                in
+                Expect.true "This timeline at this time should still be active"
+                    (Timeline.linesAreActive now lines)
+        , test "Marked as running correctly, now after interuption" <|
+            \_ ->
+                let
+                    lines =
+                        [ Timeline.Line
+                            (qty 1578168889621)
+                            (occur False (qty 1578168889621) Nothing)
+                            [ occur True (qty 1578168895231) Nothing
+                            ]
+                        , Timeline.Line
+                            -- same as now
+                            (qty 1578168893838)
+                            -- 1000ms later
+                            (occur False (qty 1578168895838) Nothing)
+                            []
+                        ]
+
+                    now =
+                        qty 1578168893839
+                in
+                Expect.true "This timeline at this time should still be active"
+                    (Timeline.linesAreActive now lines)
         ]
