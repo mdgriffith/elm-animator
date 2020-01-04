@@ -100,12 +100,12 @@ earliest one two =
 
 thisBeforeThat : Absolute -> Absolute -> Bool
 thisBeforeThat this that =
-    this |> Quantity.lessThan that
+    this |> Quantity.lessThanOrEqualTo that
 
 
 thisAfterThat : Absolute -> Absolute -> Bool
 thisAfterThat this that =
-    this |> Quantity.greaterThan that
+    this |> Quantity.greaterThanOrEqualTo that
 
 
 equal : Absolute -> Absolute -> Bool
