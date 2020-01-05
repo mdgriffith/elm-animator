@@ -146,9 +146,34 @@ timeline =
                 Expect.within
                     -- my guess is that this is such a wide margin
                     -- because the method for calculating velocity in this function could be better.
+                    -- my other guess is that it's something else...
                     (Absolute 40)
                     one.velocity
                     expected
+        , let
+            newTimeline =
+                Animator.init Hufflepuff
+                    |> Animator.update (Time.millisToPosix 0)
+                    |> Animator.queue
+                        [ Animator.wait (Animator.seconds 1)
+                        , Animator.event (Animator.seconds 1) Griffyndor
+                        ]
+                    |> Animator.update (Time.millisToPosix 1200)
+                    |> Animator.interrupt
+                        [ Animator.event (Animator.seconds 1) Ravenclaw
+                        ]
+                    |> Animator.update (Time.millisToPosix 1250)
+          in
+          test "Interruptions interpolate correctly" <|
+            \_ ->
+                let
+                    position =
+                        Animator.linear (Animator.update (Time.millisToPosix 1500) newTimeline) toPos
+                in
+                Expect.within
+                    (Absolute 0.001)
+                    position
+                    300
         ]
 
 
@@ -161,6 +186,21 @@ type House
     | Griffyndor
     | Slytherin
     | Ravenclaw
+
+
+toPos event =
+    case event of
+        Hufflepuff ->
+            100
+
+        Griffyndor ->
+            300
+
+        Slytherin ->
+            700
+
+        Ravenclaw ->
+            1000
 
 
 toPosition event =
