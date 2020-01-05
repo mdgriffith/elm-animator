@@ -505,7 +505,9 @@ addEventsToLine now (Schedule delay scheduledStartingEvent reverseQueued) (Line 
         [] ->
             let
                 startingEventWithDwell =
-                    extendDwell delay startingEvent
+                    case startingEvent of
+                        Occurring ev lastEventTime maybeDwell ->
+                            Occurring ev lastEventTime (Just (Time.duration start lastEventTime))
             in
             List.foldl toOccurring ( start, [] ) queued
                 |> Tuple.second
