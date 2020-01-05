@@ -14,32 +14,35 @@ import Time
 
 main =
     Browser.document
-        { init = init
+        { init =
+            \() ->
+                ( { checked = Animator.init False }
+                , Cmd.none
+                )
         , view = view
         , update = update
-        , subscriptions =
-            subscriptions
-
-        -- \model -> Sub.none
+        , subscriptions = subscriptions
         }
 
 
-init () =
-    ( { checked = Animator.init False }
-    , Cmd.none
-    )
+{-| This is the "animator", which is able to get and set each timeline you want animated.
+
+It will turn
+
+-}
+subscriptions model =
+    Animator.animator Tick
+        -- we tell the animator how to get the checked timeline using .checked
+        -- and we tell the animator how to update that timeline with updateChecked
+        |> Animator.with .checked updateChecked
+        |> Animator.toSubscription model
 
 
 updateChecked newChecked model =
     { model | checked = newChecked }
 
 
-subscriptions model =
-    Animator.animator Tick
-        |> Animator.with .checked (\new m -> { m | checked = new })
-        |> Animator.toSubscription model
-
-
+{--}
 type alias Model =
     { checked : Animator.Timeline Bool
     }
@@ -81,6 +84,7 @@ view model =
             , Attr.style "justify-content" "center"
             , Attr.style "width" "100%"
             , Attr.style "height" "1000px"
+            , Attr.style "user-select" "none"
             , Attr.style "font-family" "'Roboto', sans-serif"
             ]
             [ viewCheckbox model.checked
@@ -130,7 +134,6 @@ viewCheckbox checked =
                 , Attr.style "width" "160px"
                 , Attr.style "height" "160px"
                 , Attr.style "border-radius" "20px"
-                , Attr.style "user-select" "none"
                 , Attr.style "font-size" "160px"
                 , Attr.style "line-height" "1.0"
                 , Attr.style "text-align" "center"
