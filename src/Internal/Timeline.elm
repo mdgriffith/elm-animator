@@ -6,7 +6,7 @@ module Internal.Timeline exposing
     , startTime, endTime, getEvent, extendEventDwell, hasDwell
     , addToDwell
     , Phase(..), Adjustment, Line(..), Timetable(..)
-    , Previous(..), linesAreActive, previousEndTime
+    , Description(..), Previous(..), linesAreActive, previousEndTime
     )
 
 {-|
@@ -232,6 +232,17 @@ needsUpdate : Timeline event -> Bool
 needsUpdate (Timeline timeline) =
     (timeline.queued /= Nothing)
         || timeline.running
+
+
+type Description event
+    = DescribeStartTransition Time.Posix
+    | DescribeEvent Time.Posix event
+    | DescribeInterruption
+        { interruption : Time.Posix
+        , target : event
+        , newTarget : event
+        , newTargetTime : Time.Posix
+        }
 
 
 getEvents : Timeline event -> List (List ( Time.Posix, event ))
@@ -937,7 +948,7 @@ getPhase beginning target now maybeInterruption =
                             False
 
                         Just interruptTime ->
-                            Time.thisBeforeThat interruptTime now
+                            Time.thisBeforeThat interruptTime (startTime target)
             in
             if interrupted then
                 let

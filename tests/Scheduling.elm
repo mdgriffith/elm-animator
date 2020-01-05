@@ -257,6 +257,24 @@ interruptions =
                         , running = True
                         }
                     )
+        , test "Correctly folds" <|
+            \_ ->
+                Expect.all
+                    [ valueAtEquals 0 0
+                    , valueAtEquals 2000 1
+                    , valueAtEquals 4000 2
+                    , valueAtEquals 5000 3
+                    , valueAtEquals 7000 4
+                    ]
+                    newTimeline
+        , fuzz (Fuzz.intRange 0 6000) "Never reaches unreachable event" <|
+            \t ->
+                let
+                    new =
+                        Animator.update (Time.millisToPosix t) newTimeline
+                in
+                Expect.atLeast 0
+                    (Animator.float new toVals)
         , test "Correctly schedules when an interruption already occurred" <|
             \_ ->
                 let
@@ -410,24 +428,6 @@ interruptions =
                         , running = True
                         }
                     )
-        , test "Correctly folds" <|
-            \_ ->
-                Expect.all
-                    [ valueAtEquals 0 0
-                    , valueAtEquals 2000 1
-                    , valueAtEquals 4000 2
-                    , valueAtEquals 5000 3
-                    , valueAtEquals 7000 4
-                    ]
-                    newTimeline
-        , fuzz (Fuzz.intRange 0 6000) "Never reaches unreachable event" <|
-            \t ->
-                let
-                    new =
-                        Animator.update (Time.millisToPosix t) newTimeline
-                in
-                Expect.atLeast 0
-                    (Animator.float new toVals)
         ]
 
 

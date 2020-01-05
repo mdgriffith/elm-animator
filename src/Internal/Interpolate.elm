@@ -2,6 +2,7 @@ module Internal.Interpolate exposing
     ( color
     , Movement(..), move, xy, xyz
     , derivativeOfEasing
+    , startDescription, describe
     , adjustTiming, defaultArrival, defaultDeparture, linearly, pass, startColoring, startLinear, startMoving, startMovingXy, startMovingXyz, startPass
     )
 
@@ -12,6 +13,8 @@ module Internal.Interpolate exposing
 @docs Movement, move, xy, xyz
 
 @docs derivativeOfEasing
+
+@docs startDescription, describe
 
 -}
 
@@ -32,6 +35,46 @@ startPass lookup (Timeline.Occurring start startTime _) =
 pass : (event -> event) -> Timeline.Previous event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> event -> event
 pass _ _ target _ _ _ _ =
     Timeline.getEvent target
+
+
+startDescription : (event -> event) -> Timeline.Occurring event -> List (Timeline.Description event)
+startDescription lookup (Timeline.Occurring start startTime _) =
+    []
+
+
+describe :
+    (event -> event)
+    -> Timeline.Previous event
+    -> Timeline.Occurring event
+    -> Maybe (Timeline.Occurring event)
+    -> Timeline.Phase
+    -> Time.Absolute
+    -> List (Timeline.Description event)
+    -> List (Timeline.Description event)
+describe _ previous target _ _ _ events =
+    case target of
+        Timeline.Occurring targetEv targetTime _ ->
+            case previous of
+                Timeline.Previous _ ->
+                    events ++ [ Timeline.DescribeEvent (Time.toPosix targetTime) targetEv ]
+
+                Timeline.PreviouslyInterrupted interruptionTime ->
+                    case List.reverse events of
+                        [] ->
+                            [ Timeline.DescribeEvent (Time.toPosix targetTime) targetEv ]
+
+                        (Timeline.DescribeEvent interruptionTargetTime interruptedEv) :: remaining ->
+                            List.reverse remaining
+                                ++ [ Timeline.DescribeInterruption
+                                        { interruption = Time.toPosix interruptionTime
+                                        , target = interruptedEv
+                                        , newTarget = targetEv
+                                        , newTargetTime = Time.toPosix targetTime
+                                        }
+                                   ]
+
+                        _ ->
+                            events ++ [ Timeline.DescribeEvent (Time.toPosix targetTime) targetEv ]
 
 
 startLinear : (event -> Float) -> Timeline.Occurring event -> Float
