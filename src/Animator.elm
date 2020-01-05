@@ -253,6 +253,17 @@ float timeline lookup =
         move timeline (\ev -> to (lookup ev))
 
 
+{-| Interpolate a float linearly between destinations.
+-}
+linear : Timeline event -> (event -> Float) -> Float
+linear timeline lookup =
+    Timeline.foldp lookup
+        Interpolate.startLinear
+        Nothing
+        Interpolate.linearly
+        timeline
+
+
 {-| -}
 color : Timeline event -> (event -> Color) -> Color
 color timeline lookup =
@@ -365,10 +376,11 @@ withWobble p movement =
             Interpolate.Oscillate dep { arrival | wobbliness = clamp 0 1 p } dur fn
 
 
-{-| -}
-linear : Proportion
-linear =
-    0
+
+-- {-| -}
+-- linear : Proportion
+-- linear =
+--     0
 
 
 {-| -}
