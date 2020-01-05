@@ -6,6 +6,7 @@ module Internal.Timeline exposing
     , startTime, endTime, getEvent, extendEventDwell, hasDwell
     , addToDwell
     , Phase(..), Adjustment, Line(..), Timetable(..)
+    , Previous(..), linesAreActive, linesAreActiveDebug
     )
 
 {-|
@@ -104,6 +105,11 @@ type alias Interpolator event anchor state =
     -> Time.Absolute
     -> state
     -> state
+
+
+type Previous event
+    = Previous (Occurring event)
+    | PreviouslyInterrupted Time.Absolute
 
 
 type alias Adjustment =
@@ -218,13 +224,13 @@ needsUpdate (Timeline timeline) =
         || timeline.running
 
 
-getEvents : Timeline event -> List ( Time.Posix, event )
+getEvents : Timeline event -> List (List ( Time.Posix, event ))
 getEvents (Timeline timeline) =
     case timeline.events of
         Timetable lines ->
             lines
-                |> List.concatMap (\(Line _ start ev) -> start :: ev)
-                |> List.map (\(Occurring evt time maybeDwell) -> ( Time.toPosix time, evt ))
+                |> List.map (\(Line _ start ev) -> start :: ev)
+                |> List.map (List.map (\(Occurring evt time maybeDwell) -> ( Time.toPosix time, evt )))
 
 
 getEnd : Timeline event -> Time.Posix
@@ -254,6 +260,7 @@ update now (Timeline timeline) =
         }
             |> applyQueued
             |> applyInterruptions
+            |> clean
             |> Timeline
 
     else
@@ -303,11 +310,21 @@ linesAreActive now lines =
                 in
                 case maybeInterruption of
                     Just interruptTime ->
+                        -- interuption hasn't happened yet, so we need to continue till it does
                         if Time.thisAfterThat interruptTime now then
                             True
 
                         else
-                            linesAreActive now remaining
+                            case maybeLast of
+                                Nothing ->
+                                    linesAreActive now remaining
+
+                                Just (Occurring _ time _) ->
+                                    if Time.thisAfterThat time now then
+                                        True
+
+                                    else
+                                        linesAreActive now remaining
 
                     Nothing ->
                         case maybeLast of
@@ -563,7 +580,14 @@ getOccurringTime (Occurring _ t _) =
     t
 
 
-{-| Ok, we have a few subtle concepts here.
+{-| This is a "Fold from the past", just like foldl is "fold from the left".
+
+It's named as a nod to Elm's original foldp when `Signal`s were still a thing!
+<https://package.elm-lang.org/packages/elm-lang/core/3.0.0/Signal>
+
+However, this foldp is a bit different.
+
+Ok, we have a few subtle concepts here.
 
 1.  `event` is the event type provided by the user.
     _Example_ `ShowModal`
@@ -605,7 +629,7 @@ foldp lookup starter maybeAdjustTiming interpolate ((Timeline timelineDetails) a
                 startingCursor =
                     starter lookup startingEvent
             in
-            foldOverLines Beginning lookup maybeAdjustTiming interpolate timelineDetails startingCursor timetable
+            foldOverLines Beginning lookup maybeAdjustTiming interpolate timelineDetails startingCursor timetable Nothing
 
 
 {-| There's some subtlty to starting the fold over timelines.
@@ -628,14 +652,15 @@ foldOverLines :
     -> TimelineDetails event
     -> motion
     -> List (Line event)
+    -> Maybe (Cursor event motion)
     -> motion
-foldOverLines beginning lookup maybeAdjustor interpolate timeline startingCursor lines =
+foldOverLines beginning lookup maybeAdjustor interpolate timeline startingState lines existingCursor =
     case lines of
         [] ->
             -- Generally, this shouldn't be reachable because we require an event on initialization
             -- likely we'll want to change events to `(start, [remaining])` at some point in the future
             -- interpolate lookup (Occurring timeline.initial timeline.now Nothing) Nothing Start
-            startingCursor
+            startingState
 
         (Line startAt startingEvent events) :: remaining ->
             let
@@ -650,25 +675,37 @@ foldOverLines beginning lookup maybeAdjustor interpolate timeline startingCursor
                 cursor =
                     List.foldl
                         (overEvents timeline.now maybeInterruption lookup maybeAdjustor interpolate)
-                        { state = startingCursor
-                        , events = startingEvent :: events
-                        , previous = startingEvent
-                        , beginning = beginning
-                        , status =
-                            NotDone
-                        , previousAdjustment =
-                            case maybeAdjustor of
-                                Nothing ->
-                                    Nothing
+                        (case existingCursor of
+                            Nothing ->
+                                { state = startingState
+                                , events = startingEvent :: events
+                                , previous =
+                                    -- Previous
+                                    startingEvent
+                                , beginning = beginning
+                                , status =
+                                    NotDone
+                                , previousAdjustment =
+                                    case maybeAdjustor of
+                                        Nothing ->
+                                            Nothing
 
-                                Just adjustment ->
-                                    -- Just
-                                    --     { previousEventTime = startTime startingEvent
-                                    --     , applied = adjustment
-                                    --     }
-                                    -- TODO
-                                    Nothing
-                        }
+                                        Just adjustment ->
+                                            -- Just
+                                            --     { previousEventTime = startTime startingEvent
+                                            --     , applied = adjustment
+                                            --     }
+                                            -- TODO
+                                            Nothing
+                                }
+
+                            Just existing ->
+                                { existing
+                                    | events = startingEvent :: events
+                                    , status =
+                                        NotDone
+                                }
+                        )
                         (startingEvent :: events)
             in
             if cursor.status == Finished then
@@ -682,6 +719,7 @@ foldOverLines beginning lookup maybeAdjustor interpolate timeline startingCursor
                     timeline
                     cursor.state
                     remaining
+                    (Just cursor)
 
 
 type alias Cursor event state =
@@ -768,7 +806,7 @@ overEvents now maybeInterruption lookup maybeAdjustor interpolate _ cursor =
                                         Just previousAdjustment ->
                                             applyAdjustment lookup adjustor previousAdjustment target lookAhead
                     in
-                    case getPhase cursor.beginning cursor.previous adjustedTarget now maybeInterruption cursor.state of
+                    case getPhase cursor.beginning adjustedTarget now maybeInterruption of
                         ( status, phase, currentTime ) ->
                             { state =
                                 interpolate
@@ -780,7 +818,17 @@ overEvents now maybeInterruption lookup maybeAdjustor interpolate _ cursor =
                                     currentTime
                                     cursor.state
                             , events = remaining
-                            , previous = adjustedTarget
+                            , previous =
+                                -- This is preemptively setting the "previous" target
+                                -- however, if there has been an interruption, our previous doesn't change
+                                case status of
+                                    Interrupted ->
+                                        -- PreviouslyInterrupted
+                                        cursor.previous
+
+                                    _ ->
+                                        -- Previous
+                                        adjustedTarget
                             , status = status
                             , beginning = Continuing
                             , previousAdjustment =
@@ -867,8 +915,8 @@ applyAdjustment lookup adjustor { previousEventTime, applied } ((Occurring event
 When we get an interruption, we want to skip all events.
 
 -}
-getPhase : Beginning -> Occurring event -> Occurring event -> Time.Absolute -> Maybe Time.Absolute -> state -> ( Status, Phase, Time.Absolute )
-getPhase beginning previousEvent target now maybeInterruption state =
+getPhase : Beginning -> Occurring event -> Time.Absolute -> Maybe Time.Absolute -> ( Status, Phase, Time.Absolute )
+getPhase beginning target now maybeInterruption =
     case beginning of
         Beginning ->
             ( NotDone
