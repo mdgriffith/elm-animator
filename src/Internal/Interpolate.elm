@@ -2,7 +2,7 @@ module Internal.Interpolate exposing
     ( color
     , Movement(..), move, xy, xyz
     , derivativeOfEasing
-    , adjustTiming, defaultArrival, defaultDeparture, pass, startColoring, startMoving, startMovingXy, startMovingXyz, startPass
+    , adjustTiming, defaultArrival, defaultDeparture, linearly, pass, startColoring, startLinear, startMoving, startMovingXy, startMovingXyz, startPass
     )
 
 {-|
@@ -32,6 +32,36 @@ startPass lookup (Timeline.Occurring start startTime _) =
 pass : (event -> event) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> event -> event
 pass _ _ target _ _ _ _ =
     Timeline.getEvent target
+
+
+startLinear : (event -> Float) -> Timeline.Occurring event -> Float
+startLinear lookup (Timeline.Occurring start startTime _) =
+    lookup start
+
+
+linearly : (event -> Float) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> Float -> Float
+linearly lookup previous ((Timeline.Occurring target targetTime maybeDwell) as targetOccurring) maybeLookAhead phase now state =
+    case phase of
+        Timeline.Start ->
+            lookup target
+
+        Timeline.Transitioning ->
+            let
+                eventEndTime =
+                    Timeline.endTime targetOccurring
+            in
+            if Time.thisAfterThat now eventEndTime || Time.thisAfterThat now targetTime then
+                lookup target
+
+            else
+                let
+                    progress =
+                        Time.progress
+                            (Timeline.endTime previous)
+                            targetTime
+                            now
+                in
+                linear state (lookup target) progress
 
 
 {-|
