@@ -172,6 +172,69 @@ interruptions =
                         , running = True
                         }
                     )
+        , test "Correctly schedules when an interruption already occurred" <|
+            \_ ->
+                let
+                    doubleInterrupted =
+                        timeline
+                            |> Animator.queue
+                                [ Animator.wait (Animator.seconds 1.0)
+                                , Animator.event (Animator.seconds 1) One
+                                , Animator.wait (Animator.seconds 1.0)
+                                , Animator.event (Animator.seconds 1) Two
+                                , Animator.wait (Animator.seconds 1.0)
+                                , Animator.event (Animator.seconds 1) Unreachable
+                                , Animator.wait (Animator.seconds 1.0)
+                                ]
+                            |> Animator.update (Time.millisToPosix 0)
+                            |> Animator.interrupt
+                                [ Animator.wait (Animator.seconds 1.0)
+                                , Animator.event (Animator.seconds 1) Three
+                                , Animator.wait (Animator.seconds 1.0)
+                                , Animator.event (Animator.seconds 1) Four
+                                ]
+                            |> Animator.update (Time.millisToPosix 3000)
+                            |> Animator.interrupt
+                                [ Animator.event (Animator.seconds 1) Two
+                                , Animator.wait (Animator.seconds 1.0)
+                                , Animator.event (Animator.seconds 1) One
+                                ]
+                            |> Animator.update (Time.millisToPosix 4500)
+                in
+                Expect.equal
+                    doubleInterrupted
+                    (Timeline.Timeline
+                        { events =
+                            Timeline.Timetable
+                                [ Timeline.Line (qty 0)
+                                    (occur Starting (qty 0) (Just (qty 1)))
+                                    [ occur One (qty 2000) (Just (qty 1))
+                                    , occur Two (qty 4000) (Just (qty 1))
+                                    , occur Unreachable (qty 6000) (Just (qty 1))
+                                    ]
+
+                                -- we scheduled at 3000
+                                -- but there's a wait for 1000
+                                -- so the new line actually starts at 4000.
+                                , Timeline.Line (qty 4000)
+                                    -- then take 1 second to transition to Three
+                                    (occur Three (qty 5000) (Just (qty 1)))
+                                    -- we then wait a second
+                                    -- then take a second to transition to Four
+                                    [ occur Four (qty 7000) Nothing
+                                    ]
+                                , Timeline.Line (qty 4500)
+                                    (occur Two (qty 5500) (Just (qty 1)))
+                                    [ occur One (qty 7500) Nothing
+                                    ]
+                                ]
+                        , initial = Starting
+                        , interruption = []
+                        , now = qty 4500
+                        , queued = Nothing
+                        , running = True
+                        }
+                    )
         , test "Correctly folds" <|
             \_ ->
                 Expect.all
