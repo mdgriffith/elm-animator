@@ -29,7 +29,7 @@ startPass lookup (Timeline.Occurring start startTime _) =
     start
 
 
-pass : (event -> event) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> event -> event
+pass : (event -> event) -> Timeline.Previous event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> event -> event
 pass _ _ target _ _ _ _ =
     Timeline.getEvent target
 
@@ -39,7 +39,7 @@ startLinear lookup (Timeline.Occurring start startTime _) =
     lookup start
 
 
-linearly : (event -> Float) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> Float -> Float
+linearly : (event -> Float) -> Timeline.Previous event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> Float -> Float
 linearly lookup previous ((Timeline.Occurring target targetTime maybeDwell) as targetOccurring) maybeLookAhead phase now state =
     case phase of
         Timeline.Start ->
@@ -57,7 +57,7 @@ linearly lookup previous ((Timeline.Occurring target targetTime maybeDwell) as t
                 let
                     progress =
                         Time.progress
-                            (Timeline.endTime previous)
+                            (Timeline.previousEndTime previous)
                             targetTime
                             now
                 in
@@ -175,7 +175,7 @@ startMovingXy lookup start =
     }
 
 
-xy : (event -> XY Movement) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> XY State -> XY State
+xy : (event -> XY Movement) -> Timeline.Previous event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> XY State -> XY State
 xy lookup prev current maybeLookAhead phase now state =
     { x = move (lookup >> .x) prev current maybeLookAhead phase now state.x
     , y = move (lookup >> .y) prev current maybeLookAhead phase now state.y
@@ -197,7 +197,7 @@ startMovingXyz lookup start =
     }
 
 
-xyz : (event -> XYZ Movement) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> XYZ State -> XYZ State
+xyz : (event -> XYZ Movement) -> Timeline.Previous event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> XYZ State -> XYZ State
 xyz lookup prev current maybeLookAhead phase now state =
     { x = move (lookup >> .x) prev current maybeLookAhead phase now state.x
     , y = move (lookup >> .y) prev current maybeLookAhead phase now state.y
@@ -261,8 +261,17 @@ log str val =
 --     val
 
 
+notInterrupted prev =
+    case prev of
+        Timeline.Previous _ ->
+            True
+
+        Timeline.PreviouslyInterrupted _ ->
+            False
+
+
 {-| -}
-move : (event -> Movement) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> State -> State
+move : (event -> Movement) -> Timeline.Previous event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> State -> State
 move lookup previous target maybeLookAhead phase now state =
     case phase of
         Timeline.Start ->
@@ -285,17 +294,39 @@ move lookup previous target maybeLookAhead phase now state =
 
         Timeline.Transitioning ->
             -- we're somewhere between prev and target.
-            if log "dwell-prev" <| Time.thisBeforeThat now (Timeline.endTime previous) then
+            if log "dwell-prev" <| Time.thisBeforeThat now (Timeline.previousEndTime previous) && notInterrupted previous then
                 -- we're dwelling at prev
                 -- dwell till `now`
                 let
+                    previousOccurringEvent =
+                        case previous of
+                            Timeline.Previous p ->
+                                Timeline.getEvent p
+
+                            Timeline.PreviouslyInterrupted _ ->
+                                -- This is incorrect, but this branch is
+                                -- protected by the above if statement
+                                -- sorta awkward
+                                Timeline.getEvent target
+
+                    previousStartTime =
+                        case previous of
+                            Timeline.Previous p ->
+                                Timeline.startTime p
+
+                            Timeline.PreviouslyInterrupted _ ->
+                                -- This is incorrect, but this branch is
+                                -- protected by the above if statement
+                                -- sorta awkward
+                                Timeline.startTime target
+
                     endTime =
                         Time.earliest
-                            (Timeline.endTime previous)
+                            (Timeline.previousEndTime previous)
                             now
                 in
-                dwellFor (lookup (Timeline.getEvent previous))
-                    (Time.duration (Timeline.startTime previous) endTime)
+                dwellFor (lookup previousOccurringEvent)
+                    (Time.duration previousStartTime endTime)
 
             else if log "lerp" <| Time.thisBeforeThat now (Timeline.startTime target) then
                 -- we're transitioning between 1 and 2
@@ -363,7 +394,7 @@ dwellFor movement duration =
 
 
 {-| -}
-springInterpolation : (event -> Movement) -> Timeline.Occurring event -> Timeline.Occurring event -> Time.Absolute -> State -> State
+springInterpolation : (event -> Movement) -> Timeline.Previous event -> Timeline.Occurring event -> Time.Absolute -> State -> State
 springInterpolation lookup previous target now state =
     let
         wobble =
@@ -383,14 +414,14 @@ springInterpolation lookup previous target now state =
                     x
 
         duration =
-            Time.duration (Timeline.endTime previous) (Timeline.startTime target)
+            Time.duration (Timeline.previousEndTime previous) (Timeline.startTime target)
 
         params =
             Spring.select wobble duration
 
         new =
             Spring.stepOver
-                (Time.duration (Timeline.endTime previous) now)
+                (Time.duration (Timeline.previousEndTime previous) now)
                 params
                 targetPos
                 { position = Pixels.inPixels state.position
@@ -402,7 +433,7 @@ springInterpolation lookup previous target now state =
     }
 
 
-interpolateBetween : (event -> Movement) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Time.Absolute -> State -> State
+interpolateBetween : (event -> Movement) -> Timeline.Previous event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Time.Absolute -> State -> State
 interpolateBetween lookup previous ((Timeline.Occurring target targetTime maybeTargetDwell) as targetOccurring) maybeLookAhead currentTime state =
     let
         targetPosition =
@@ -417,7 +448,7 @@ interpolateBetween lookup previous ((Timeline.Occurring target targetTime maybeT
             Time.inMilliseconds targetTime
 
         startTimeInMs =
-            Time.inMilliseconds (Timeline.endTime previous)
+            Time.inMilliseconds (Timeline.previousEndTime previous)
 
         targetVelocity =
             Pixels.inPixelsPerSecond (velocityAtTarget lookup targetOccurring maybeLookAhead)
@@ -432,7 +463,13 @@ interpolateBetween lookup previous ((Timeline.Occurring target targetTime maybeT
                     { x = 1000
                     , y = Pixels.inPixelsPerSecond state.velocity
                     }
-                , departure = getLeave lookup previous
+                , departure =
+                    case previous of
+                        Timeline.Previous prevOccurring ->
+                            getLeave lookup prevOccurring
+
+                        Timeline.PreviouslyInterrupted _ ->
+                            nullDeparture
                 , end =
                     { x = targetTimeInMs
                     , y = Pixels.inPixels targetPosition
@@ -709,7 +746,7 @@ startColoring lookup (Timeline.Occurring start startTime _) =
     lookup start
 
 
-color : (event -> Color.Color) -> Timeline.Occurring event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> Color.Color -> Color.Color
+color : (event -> Color.Color) -> Timeline.Previous event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> Color.Color -> Color.Color
 color lookup previous ((Timeline.Occurring target targetTime maybeDwell) as targetOccurring) maybeLookAhead phase now state =
     case phase of
         Timeline.Start ->
@@ -727,7 +764,7 @@ color lookup previous ((Timeline.Occurring target targetTime maybeDwell) as targ
                 let
                     progress =
                         Time.progress
-                            (Timeline.endTime previous)
+                            (Timeline.previousEndTime previous)
                             targetTime
                             now
 

@@ -6,7 +6,7 @@ module Internal.Timeline exposing
     , startTime, endTime, getEvent, extendEventDwell, hasDwell
     , addToDwell
     , Phase(..), Adjustment, Line(..), Timetable(..)
-    , Previous(..), linesAreActive, linesAreActiveDebug
+    , Previous(..), linesAreActive, previousEndTime
     )
 
 {-|
@@ -98,7 +98,7 @@ type alias Starter event anchor state =
 
 type alias Interpolator event anchor state =
     (event -> anchor)
-    -> Occurring event
+    -> Previous event
     -> Occurring event
     -> Maybe (Occurring event)
     -> Phase
@@ -217,6 +217,16 @@ endTime (Occurring _ time maybeDwell) =
             Time.advanceBy dwell time
 
 
+previousEndTime : Previous event -> Time.Absolute
+previousEndTime prev =
+    case prev of
+        Previous event ->
+            endTime event
+
+        PreviouslyInterrupted time ->
+            time
+
+
 {-| -}
 needsUpdate : Timeline event -> Bool
 needsUpdate (Timeline timeline) =
@@ -296,9 +306,10 @@ linesAreActive now lines =
 
             else
                 let
-                    maybeLast =
+                    last =
                         List.reverse events
                             |> List.head
+                            |> Maybe.withDefault startingEvent
 
                     maybeInterruption =
                         case List.head remaining of
@@ -315,11 +326,8 @@ linesAreActive now lines =
                             True
 
                         else
-                            case maybeLast of
-                                Nothing ->
-                                    linesAreActive now remaining
-
-                                Just (Occurring _ time _) ->
+                            case last of
+                                Occurring _ time _ ->
                                     if Time.thisAfterThat time now then
                                         True
 
@@ -327,11 +335,8 @@ linesAreActive now lines =
                                         linesAreActive now remaining
 
                     Nothing ->
-                        case maybeLast of
-                            Nothing ->
-                                linesAreActive now remaining
-
-                            Just (Occurring _ time _) ->
+                        case last of
+                            Occurring _ time _ ->
                                 if Time.thisAfterThat time now then
                                     True
 
@@ -414,7 +419,7 @@ getLastEventTime lines =
         Just (Line start startEvent trailing) ->
             case List.reverse trailing of
                 [] ->
-                    Just start
+                    Just (startTime startEvent)
 
                 (Occurring _ at maybeDwell) :: _ ->
                     Just at
@@ -680,8 +685,7 @@ foldOverLines beginning lookup maybeAdjustor interpolate timeline startingState 
                                 { state = startingState
                                 , events = startingEvent :: events
                                 , previous =
-                                    -- Previous
-                                    startingEvent
+                                    Previous startingEvent
                                 , beginning = beginning
                                 , status =
                                     NotDone
@@ -725,7 +729,7 @@ foldOverLines beginning lookup maybeAdjustor interpolate timeline startingState 
 type alias Cursor event state =
     { state : state
     , events : List (Occurring event)
-    , previous : Occurring event
+    , previous : Previous event
     , status : Status
     , beginning : Beginning
     , previousAdjustment :
@@ -823,12 +827,10 @@ overEvents now maybeInterruption lookup maybeAdjustor interpolate _ cursor =
                                 -- however, if there has been an interruption, our previous doesn't change
                                 case status of
                                     Interrupted ->
-                                        -- PreviouslyInterrupted
-                                        cursor.previous
+                                        PreviouslyInterrupted currentTime
 
                                     _ ->
-                                        -- Previous
-                                        adjustedTarget
+                                        Previous adjustedTarget
                             , status = status
                             , beginning = Continuing
                             , previousAdjustment =
