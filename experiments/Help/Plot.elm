@@ -142,11 +142,11 @@ timeline :
     -> Svg msg
 timeline config =
     let
-        events =
+        lines =
             Internal.Timeline.getEvents config.timeline
 
         ( start, end ) =
-            getStartAndEnd events
+            getStartAndEnd (List.concat lines)
 
         rendered =
             render config.timeline
@@ -183,6 +183,13 @@ timeline config =
             calcDerivative rendered
                 (.time >> Time.posixToMillis)
                 (.value >> .velocity)
+
+        renderedEvents =
+            List.indexedMap
+                (\i events ->
+                    LineChart.line Color.green Dots.plus "Events" (renderEvents i events)
+                )
+                lines
     in
     Html.div
         [ class "container" ]
@@ -201,13 +208,14 @@ timeline config =
             , line = Line.default
             , dots = Dots.default
             }
-            [ LineChart.line Color.green Dots.plus "Events" (renderEvents events)
-            , LineChart.line Color.purple Dots.none "Position" points
-            , LineChart.dash Color.blue Dots.none "Velocity" [ 4, 2 ] velocities
+            (renderedEvents
+                ++ [ LineChart.line Color.purple Dots.none "Position" points
+                   , LineChart.dash Color.blue Dots.none "Velocity" [ 4, 2 ] velocities
 
-            -- , LineChart.line Color.red Dots.none "Calc - Velocity" calcVelocities
-            -- , LineChart.line Color.orange Dots.none "Accel" acceleration
-            ]
+                   -- , LineChart.line Color.red Dots.none "Calc - Velocity" calcVelocities
+                   -- , LineChart.line Color.orange Dots.none "Accel" acceleration
+                   ]
+            )
         ]
 
 
@@ -418,11 +426,11 @@ render myTimeline toPos config =
         frames
 
 
-renderEvents events =
+renderEvents i events =
     List.map
         (\( time, ev ) ->
             { time = toFloat (Time.posixToMillis time)
-            , value = 300
+            , value = toFloat (300 + (i * 50))
             }
         )
         events

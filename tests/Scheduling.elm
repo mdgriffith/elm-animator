@@ -477,4 +477,45 @@ cleaning =
                 in
                 Expect.true "This timeline at this time should still be active"
                     (Timeline.linesAreActive now lines)
+        , only <|
+            test "Garbage collection" <|
+                \_ ->
+                    let
+                        newTimeline =
+                            Animator.init Starting
+                                |> Animator.update (Time.millisToPosix 0)
+                                |> Animator.queue
+                                    [ Animator.wait (Animator.seconds 1.0)
+                                    , Animator.event (Animator.seconds 1) One
+                                    , Animator.wait (Animator.seconds 1.0)
+                                    , Animator.event (Animator.seconds 1) Two
+                                    ]
+                                |> skipLog "------> Start"
+                                |> Animator.update (Time.millisToPosix 5000)
+                                |> skipLog "------> End"
+                    in
+                    Expect.equal
+                        newTimeline
+                        (Timeline.Timeline
+                            { events =
+                                Timeline.Timetable
+                                    [ Timeline.Line (qty 0)
+                                        (occur Two (qty 0) Nothing)
+                                        []
+                                    ]
+                            , initial = Starting
+                            , interruption = []
+                            , now = qty 5000
+                            , queued = Nothing
+                            , running = True
+                            }
+                        )
         ]
+
+
+skipLog str x =
+    let
+        _ =
+            Debug.log str ""
+    in
+    x

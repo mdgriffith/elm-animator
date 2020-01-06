@@ -297,12 +297,116 @@ update now (Timeline timeline) =
 clean : TimelineDetails event -> TimelineDetails event
 clean details =
     let
+        events =
+            case details.events of
+                Timetable evs ->
+                    evs
+
         running =
             case details.events of
-                Timetable events ->
-                    linesAreActive details.now events
+                Timetable lines ->
+                    linesAreActive details.now lines
     in
-    { details | running = running }
+    { details
+        | running = running
+        , events = Timetable (garbageCollectOldEvents details.now [] events)
+    }
+
+
+{-| If we're dwelling at an event, we can reset the event we're dwelling on to the base of the timeline.
+
+All previous lines can be dropped.
+
+However, if we're not dwelling, we want to keep the previous lines.
+
+So we track "droppable" lines until we meet a dwell.
+
+-}
+garbageCollectOldEvents : Time.Absolute -> List (Line event) -> List (Line event) -> List (Line event)
+garbageCollectOldEvents now droppable lines =
+    case lines of
+        [] ->
+            List.reverse droppable
+
+        (Line startAt startingEvent events) :: remaining ->
+            if Time.thisAfterThat startAt now then
+                -- this line hasn't happened yet
+                List.reverse droppable ++ lines
+
+            else if dwellingAt now startingEvent then
+                -- we can safetly drop the droppables
+                lines
+
+            else
+                case List.foldl (shortenLine now) NotFinished events of
+                    NotFinished ->
+                        List.reverse droppable ++ lines
+
+                    AfterLine ->
+                        case List.head remaining of
+                            Nothing ->
+                                lines
+
+                            Just (Line startNext next _) ->
+                                if Time.thisAfterThat now startNext then
+                                    -- the next line has started
+                                    -- this current line can be dropped if we're dwelling
+                                    garbageCollectOldEvents now (Line startAt startingEvent events :: droppable) remaining
+
+                                else
+                                    List.reverse droppable ++ lines
+
+                    DwellingAt newLine ->
+                        reverseEvents newLine :: remaining
+
+
+reverseEvents (Line start event evs) =
+    Line start event (List.reverse evs)
+
+
+type LineStatus event
+    = NotFinished
+    | DwellingAt (Line event)
+    | AfterLine
+
+
+shortenLine now event dwellingAtEvent =
+    case dwellingAtEvent of
+        NotFinished ->
+            if dwellingAt now event then
+                DwellingAt (Line (startTime event) event [])
+
+            else if Time.thisAfterThat now (startTime event) then
+                AfterLine
+
+            else
+                NotFinished
+
+        DwellingAt (Line time start remaining) ->
+            DwellingAt (Line time start (event :: remaining))
+
+        AfterLine ->
+            if dwellingAt now event then
+                DwellingAt (Line (startTime event) event [])
+
+            else if Time.thisAfterThat now (startTime event) then
+                AfterLine
+
+            else
+                NotFinished
+
+
+dwellingAt : Time.Absolute -> Occurring event -> Bool
+dwellingAt now event =
+    let
+        eventEndTime =
+            endTime event
+
+        eventStartTime =
+            startTime event
+    in
+    Time.thisAfterThat now eventStartTime
+        && Time.thisBeforeThat now eventEndTime
 
 
 linesAreActive : Time.Absolute -> List (Line event) -> Bool

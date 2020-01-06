@@ -29,7 +29,7 @@ import Html.Attributes as Attr
 opacity : Timeline event -> (event -> Float) -> Html.Attribute msg
 opacity timeline lookup =
     Attr.style "opacity"
-        (String.fromFloat (Animator.float timeline lookup))
+        (String.fromFloat (Animator.linear timeline lookup))
 
 
 {-| -}

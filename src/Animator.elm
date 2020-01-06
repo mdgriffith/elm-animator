@@ -12,6 +12,7 @@ module Animator exposing
     , leaveLate, arriveEarly, withWobble, wobble
     , loop, wave, wrap, zigzag
     , pause, shift
+    , describe
     )
 
 {-|
@@ -53,6 +54,11 @@ module Animator exposing
 @docs loop, wave, wrap, zigzag
 
 @docs pause, shift
+
+
+# Debugging
+
+@docs describe
 
 -}
 
@@ -244,6 +250,20 @@ type alias Schedule event =
 
 
 {- Interpolations -}
+
+
+type alias Description event =
+    Timeline.Description event
+
+
+{-| -}
+describe : Timeline event -> List (Description event)
+describe timeline =
+    Timeline.foldp identity
+        Interpolate.startDescription
+        Nothing
+        Interpolate.describe
+        timeline
 
 
 {-| -}

@@ -9,6 +9,7 @@ import Color
 import Html exposing (..)
 import Html.Attributes as Attr
 import Html.Events as Events
+import Internal.Timeline
 import Time
 
 
@@ -80,6 +81,7 @@ view model =
             ]
         , div
             [ Attr.style "display" "flex"
+            , Attr.style "flex-direction" "column"
             , Attr.style "align-items" "center"
             , Attr.style "justify-content" "center"
             , Attr.style "width" "100%"
@@ -87,10 +89,72 @@ view model =
             , Attr.style "user-select" "none"
             , Attr.style "font-family" "'Roboto', sans-serif"
             ]
-            [ viewCheckbox model.checked
+            [ viewDescription model.checked
+            , viewCheckbox model.checked
             ]
         ]
     }
+
+
+viewDescription timeline =
+    div
+        [ Attr.style "border-left" "1px solid blue"
+        , Attr.style "border-right" "1px solid blue"
+        , Attr.style "padding" "20px"
+        , Attr.style "display" "flex"
+        , Attr.style "flex-direction" "row"
+        ]
+        (List.map describeEvent (Animator.describe timeline))
+
+
+describeEvent description =
+    case description of
+        Internal.Timeline.DescribeStartTransition time ->
+            Html.div []
+                [ Html.text "start"
+                ]
+
+        Internal.Timeline.DescribeEvent time event ->
+            Html.div
+                [ Attr.style "display" "flex"
+                , Attr.style "flex-direction" "column"
+                , Attr.style "justify-content" "center"
+                , Attr.style "margin" "16px"
+                ]
+                [ Html.span [] [ Html.text (eventToString event) ]
+                , viewTime time
+                ]
+
+        Internal.Timeline.DescribeInterruption details ->
+            Html.div
+                [ Attr.style "display" "flex"
+                , Attr.style "flex-direction" "column"
+                , Attr.style "justify-content" "center"
+                , Attr.style "margin" "32px"
+                ]
+                [ Html.span [] [ Html.text (eventToString details.target) ]
+                , viewTime details.interruption
+                , Html.span [] [ Html.text "⭣" ]
+                , Html.span [] [ Html.text (eventToString details.newTarget) ]
+                , viewTime details.newTargetTime
+                ]
+
+
+eventToString bool =
+    case bool of
+        True ->
+            "True"
+
+        False ->
+            "False"
+
+
+viewTime time =
+    let
+        ms =
+            Time.posixToMillis time
+    in
+    text (String.right 5 (String.fromInt ms))
 
 
 {-| Our actual checkbox!
@@ -150,16 +214,16 @@ viewCheckbox checked =
                     , Animator.CSS.transform
                         { position = { x = 0, y = 0 }
                         , rotate =
-                            Animator.float checked <|
+                            Animator.linear checked <|
                                 \state ->
                                     case state of
                                         True ->
                                             turns 0
 
                                         False ->
-                                            turns 0.4
+                                            turns 0.25
                         , scale =
-                            Animator.float checked <|
+                            Animator.linear checked <|
                                 \state ->
                                     case state of
                                         True ->
