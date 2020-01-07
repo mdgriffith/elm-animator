@@ -6,7 +6,7 @@ module Internal.Timeline exposing
     , startTime, endTime, getEvent, extendEventDwell, hasDwell
     , addToDwell
     , Phase(..), Adjustment, Line(..), Timetable(..)
-    , Description(..), Previous(..), linesAreActive, previousEndTime
+    , Description(..), Previous(..), gc, linesAreActive, previousEndTime
     )
 
 {-|
@@ -313,6 +313,17 @@ clean details =
     }
 
 
+gc : Timeline event -> Timeline event
+gc (Timeline details) =
+    let
+        events =
+            case details.events of
+                Timetable evs ->
+                    evs
+    in
+    Timeline { details | events = Timetable (garbageCollectOldEvents details.now [] events) }
+
+
 {-| If we're dwelling at an event, we can reset the event we're dwelling on to the base of the timeline.
 
 All previous lines can be dropped.
@@ -338,26 +349,53 @@ garbageCollectOldEvents now droppable lines =
                 lines
 
             else
-                case List.foldl (shortenLine now) NotFinished events of
-                    NotFinished ->
-                        List.reverse droppable ++ lines
+                let
+                    maybeInterruptionTime =
+                        remaining
+                            |> List.head
+                            |> Maybe.map lineStartTime
 
-                    AfterLine ->
-                        case List.head remaining of
+                    interrupted =
+                        case maybeInterruptionTime of
                             Nothing ->
-                                lines
+                                False
 
-                            Just (Line startNext next _) ->
-                                if Time.thisAfterThat now startNext then
-                                    -- the next line has started
-                                    -- this current line can be dropped if we're dwelling
-                                    garbageCollectOldEvents now (Line startAt startingEvent events :: droppable) remaining
+                            Just interruptionTime ->
+                                Time.thisAfterThat now interruptionTime
+                in
+                if interrupted then
+                    garbageCollectOldEvents now (Line startAt startingEvent events :: droppable) remaining
 
-                                else
-                                    List.reverse droppable ++ lines
+                else
+                    case List.foldl (shortenLine now) NotFinished events of
+                        NotFinished ->
+                            List.reverse droppable ++ lines
 
-                    DwellingAt newLine ->
-                        reverseEvents newLine :: remaining
+                        AfterLine ->
+                            case List.head remaining of
+                                Nothing ->
+                                    case List.head (List.reverse events) of
+                                        Nothing ->
+                                            lines
+
+                                        Just last ->
+                                            [ Line (startTime last) last [] ]
+
+                                Just (Line startNext next _) ->
+                                    if Time.thisAfterThat now startNext then
+                                        -- the next line has started
+                                        -- this current line can be dropped if we're dwelling
+                                        garbageCollectOldEvents now (Line startAt startingEvent events :: droppable) remaining
+
+                                    else
+                                        List.reverse droppable ++ lines
+
+                        DwellingAt newLine ->
+                            reverseEvents newLine :: remaining
+
+
+lineStartTime (Line start _ _) =
+    start
 
 
 reverseEvents (Line start event evs) =
@@ -373,11 +411,11 @@ type LineStatus event
 shortenLine now event dwellingAtEvent =
     case dwellingAtEvent of
         NotFinished ->
-            if dwellingAt now event then
-                DwellingAt (Line (startTime event) event [])
-
-            else if Time.thisAfterThat now (startTime event) then
+            if Time.thisAfterThat now (endTime event) then
                 AfterLine
+
+            else if dwellingAt now event then
+                DwellingAt (Line (startTime event) event [])
 
             else
                 NotFinished
