@@ -6,7 +6,7 @@ module Internal.Timeline exposing
     , startTime, endTime, getEvent, extendEventDwell, hasDwell
     , addToDwell
     , Phase(..), Adjustment, Line(..), Timetable(..)
-    , Description(..), Previous(..), gc, linesAreActive, previousEndTime
+    , Description(..), Previous(..), gc, linesAreActive, previousEndTime, updateNoGC
     )
 
 {-|
@@ -281,21 +281,48 @@ update now (Timeline timeline) =
         }
             |> applyQueued
             |> applyInterruptions
-            |> clean
+            |> clean True
             |> Timeline
 
     else
         { timeline | now = Time.absolute now }
             |> applyQueued
             |> applyInterruptions
-            |> clean
+            |> clean True
+            |> Timeline
+
+
+updateNoGC : Time.Posix -> Timeline event -> Timeline event
+updateNoGC now (Timeline timeline) =
+    if timeline.events == Timetable [] then
+        { timeline
+            | now = Time.absolute now
+            , events =
+                let
+                    firstOccurring =
+                        Occurring timeline.initial (Time.absolute now) Nothing
+                in
+                Timetable
+                    [ Line (Time.absolute now) firstOccurring []
+                    ]
+        }
+            |> applyQueued
+            |> applyInterruptions
+            |> clean False
+            |> Timeline
+
+    else
+        { timeline | now = Time.absolute now }
+            |> applyQueued
+            |> applyInterruptions
+            |> clean False
             |> Timeline
 
 
 {-| Garbage collect and update `isRunning`
 -}
-clean : TimelineDetails event -> TimelineDetails event
-clean details =
+clean : Bool -> TimelineDetails event -> TimelineDetails event
+clean runGC details =
     let
         events =
             case details.events of
@@ -309,7 +336,12 @@ clean details =
     in
     { details
         | running = running
-        , events = Timetable (garbageCollectOldEvents details.now [] events)
+        , events =
+            if runGC then
+                Timetable (garbageCollectOldEvents details.now [] events)
+
+            else
+                details.events
     }
 
 

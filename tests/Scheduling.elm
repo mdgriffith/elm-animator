@@ -351,7 +351,7 @@ interruptions =
                                 , Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) Three
                                 ]
-                            |> Animator.update (Time.millisToPosix 0)
+                            |> Timeline.updateNoGC (Time.millisToPosix 0)
 
                     interruptedAfterFinish =
                         baseline
@@ -360,7 +360,7 @@ interruptions =
                                 , Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) Five
                                 ]
-                            |> Animator.update (Time.millisToPosix 6000)
+                            |> Timeline.updateNoGC (Time.millisToPosix 6000)
                 in
                 Expect.equal
                     interruptedAfterFinish
@@ -396,7 +396,7 @@ interruptions =
                                 , Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) Three
                                 ]
-                            |> Animator.update (Time.millisToPosix 0)
+                            |> Timeline.updateNoGC (Time.millisToPosix 0)
 
                     interruptedAfterFinish =
                         baseline
@@ -405,7 +405,7 @@ interruptions =
                                 , Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) Five
                                 ]
-                            |> Animator.update (Time.millisToPosix 8000)
+                            |> Timeline.updateNoGC (Time.millisToPosix 8000)
                 in
                 Expect.equal
                     interruptedAfterFinish
