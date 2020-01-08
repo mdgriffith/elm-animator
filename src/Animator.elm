@@ -99,12 +99,8 @@ init first =
 
 {-| -}
 current : Timeline event -> event
-current timeline =
-    Timeline.foldp identity
-        Interpolate.startPass
-        Nothing
-        Interpolate.pass
-        timeline
+current =
+    Timeline.getEvent << Timeline.current
 
 
 {-| -}

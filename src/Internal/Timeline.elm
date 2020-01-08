@@ -5,6 +5,7 @@ module Internal.Timeline exposing
     , foldp, update, needsUpdate
     , startTime, endTime, getEvent, extendEventDwell, hasDwell
     , addToDwell
+    , current, startPass, pass
     , Phase(..), Adjustment, Line(..), Timetable(..)
     , Description(..), Previous(..), gc, linesAreActive, previousEndTime, updateNoGC
     )
@@ -22,6 +23,8 @@ module Internal.Timeline exposing
 @docs startTime, endTime, getEvent, extendEventDwell, hasDwell
 
 @docs addToDwell
+
+@docs current, startPass, pass
 
 @docs Phase, Adjustment, Line, Timetable
 
@@ -42,6 +45,14 @@ type Schedule event
 {-| -}
 type Event event
     = Event Time.Duration event (Maybe Time.Duration)
+
+
+getScheduledEvent (Event _ ev _) =
+    ev
+
+
+adjustScheduledDuration fn (Event dur ev maybeDwell) =
+    Event (fn dur) ev maybeDwell
 
 
 {-| -}
@@ -579,20 +590,65 @@ applyInterruptionHelper interrupts timeline =
     - otherwise, add as a new `Line` to the timetable.
 
 -}
+
+
+
+-- interrupt : TimelineDetails events -> Time.Absolute -> Schedule events -> Timetable events
+-- interrupt details startAt ((Schedule delay startingEvent reverseQueued) as scheduled) =
+--     case details.events of
+--         Timetable lines ->
+--             case currentAndPrevious (Timeline details) of
+--                 ( prev, currentTarget ) ->
+--                     if Time.thisAfterThat startAt (startTime currentTarget) then
+--                         enqueue details startAt scheduled
+--                     else
+--                         let
+--                             timeDiscount =
+--                                 if getEvent prev == getScheduledEvent startingEvent then
+--                                     -- we're returning to where we just were.
+--                                     Just (Time.duration (endTime prev) startAt)
+--                                 else
+--                                     Nothing
+--                         in
+--                         Timetable
+--                             (lines
+--                                 ++ [ createLine startAt
+--                                         (Schedule delay
+--                                             (adjustScheduledTime
+--                                                 (\prevDur ->
+--                                                     case timeDiscount of
+--                                                         Nothing ->
+--                                                             prevDur
+--                                                         Just newDur ->
+--                                                             newDur
+--                                                 )
+--                                                 startingEvent
+--                                             )
+--                                             reverseQueued
+--                                         )
+--                                    ]
+--                             )
+
+
 interrupt : TimelineDetails events -> Time.Absolute -> Schedule events -> Timetable events
-interrupt details startAt ((Schedule _ startingEvent reverseQueued) as scheduled) =
+interrupt details startAt ((Schedule delay_ startingEvent reverseQueued) as scheduled) =
     case details.events of
         Timetable lines ->
-            case getLastEventTime lines of
+            case getLast2Events lines of
                 Nothing ->
                     enqueue details startAt scheduled
 
-                Just last ->
-                    if Time.thisAfterThat startAt last then
+                Just (LastTwoEvents penultimateTime penultimate lastEventTime lastEvent) ->
+                    if Time.thisAfterThat startAt lastEventTime then
                         enqueue details startAt scheduled
 
                     else
-                        Timetable (lines ++ [ createLine startAt scheduled ])
+                        let
+                            newStartingEvent =
+                                startingEvent
+                                    |> adjustScheduledDuration (\d -> d)
+                        in
+                        Timetable (lines ++ [ createLine startAt (Schedule delay_ newStartingEvent reverseQueued) ])
 
 
 getLastEventTime : List (Line event) -> Maybe Time.Absolute
@@ -608,6 +664,28 @@ getLastEventTime lines =
 
                 (Occurring _ at maybeDwell) :: _ ->
                     Just at
+
+
+type LastTwoEvents event
+    = LastTwoEvents Time.Absolute event Time.Absolute event
+
+
+getLast2Events : List (Line event) -> Maybe (LastTwoEvents event)
+getLast2Events lines =
+    case List.reverse lines of
+        [] ->
+            Nothing
+
+        (Line start startingEvent trailing) :: _ ->
+            case List.reverse trailing of
+                [] ->
+                    Just (LastTwoEvents start (getEvent startingEvent) start (getEvent startingEvent))
+
+                (Occurring lastEvent lastEventTime _) :: [] ->
+                    Just (LastTwoEvents start (getEvent startingEvent) lastEventTime lastEvent)
+
+                (Occurring lastEvent lastEventTime _) :: (Occurring penultimate penultimateTime maybeDwell) :: _ ->
+                    Just (LastTwoEvents penultimateTime penultimate lastEventTime lastEvent)
 
 
 {-| Queue a list of events to be played after everything.
@@ -1245,3 +1323,41 @@ getPhase beginning target now maybeInterruption =
 
 
 -}
+
+
+current : Timeline event -> Occurring event
+current timeline =
+    foldp identity
+        startPass
+        Nothing
+        pass
+        timeline
+
+
+startPass : (event -> event) -> Occurring event -> Occurring event
+startPass lookup start =
+    start
+
+
+pass : (event -> event) -> Previous event -> Occurring event -> Maybe (Occurring event) -> Phase -> Time.Absolute -> Occurring event -> Occurring event
+pass _ _ target _ _ _ _ =
+    target
+
+
+currentAndPrevious : Timeline event -> ( Occurring event, Occurring event )
+currentAndPrevious timeline =
+    foldp identity
+        startCurrentAndPrevious
+        Nothing
+        passCurrentAndPrevious
+        timeline
+
+
+startCurrentAndPrevious : (event -> event) -> Occurring event -> ( Occurring event, Occurring event )
+startCurrentAndPrevious lookup start =
+    ( start, start )
+
+
+passCurrentAndPrevious : (event -> event) -> Previous event -> Occurring event -> Maybe (Occurring event) -> Phase -> Time.Absolute -> ( Occurring event, Occurring event ) -> ( Occurring event, Occurring event )
+passCurrentAndPrevious _ _ target _ _ _ ( _, prevTarget ) =
+    ( prevTarget, target )

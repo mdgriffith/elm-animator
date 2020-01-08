@@ -102,6 +102,8 @@ viewDescription timeline =
         , Attr.style "border-right" "1px solid blue"
         , Attr.style "padding" "20px"
         , Attr.style "display" "flex"
+        , Attr.style "height" "200px"
+        , Attr.style "margin-bottom" "50px"
         , Attr.style "flex-direction" "row"
         ]
         (List.map describeEvent (Animator.describe timeline))
