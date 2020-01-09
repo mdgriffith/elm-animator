@@ -644,9 +644,16 @@ interrupt details startAt ((Schedule delay_ startingEvent reverseQueued) as sche
 
                     else
                         let
+                            progress =
+                                Time.progress penultimateTime lastEventTime startAt
+
                             newStartingEvent =
-                                startingEvent
-                                    |> adjustScheduledDuration (\d -> d)
+                                if penultimate == getEvent startingEvent then
+                                    startingEvent
+                                        |> adjustScheduledDuration (Quantity.multiplyBy progress)
+
+                                else
+                                    startingEvent
                         in
                         Timetable (lines ++ [ createLine startAt (Schedule delay_ newStartingEvent reverseQueued) ])
 
@@ -682,10 +689,10 @@ getLast2Events lines =
                     Just (LastTwoEvents start (getEvent startingEvent) start (getEvent startingEvent))
 
                 (Occurring lastEvent lastEventTime _) :: [] ->
-                    Just (LastTwoEvents start (getEvent startingEvent) lastEventTime lastEvent)
+                    Just (LastTwoEvents (endTime startingEvent) (getEvent startingEvent) lastEventTime lastEvent)
 
-                (Occurring lastEvent lastEventTime _) :: (Occurring penultimate penultimateTime maybeDwell) :: _ ->
-                    Just (LastTwoEvents penultimateTime penultimate lastEventTime lastEvent)
+                (Occurring lastEvent lastEventTime _) :: penult :: _ ->
+                    Just (LastTwoEvents (endTime penult) (getEvent penult) lastEventTime lastEvent)
 
 
 {-| Queue a list of events to be played after everything.
