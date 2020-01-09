@@ -282,14 +282,14 @@ update now (Timeline timeline) =
         }
             |> applyQueued
             |> applyInterruptions
-            |> clean False
+            |> clean True
             |> Timeline
 
     else
         { timeline | now = Time.absolute now }
             |> applyQueued
             |> applyInterruptions
-            |> clean False
+            |> clean True
             |> Timeline
 
 
