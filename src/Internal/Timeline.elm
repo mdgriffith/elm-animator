@@ -265,16 +265,6 @@ getEvents (Timeline timeline) =
                 |> List.map (List.map (\(Occurring evt time maybeDwell) -> ( Time.toPosix time, evt )))
 
 
-getEnd : Timeline event -> Time.Posix
-getEnd timeline =
-    Time.millisToPosix 0
-
-
-getStart : Timeline event -> Time.Posix
-getStart timeline =
-    Time.millisToPosix 0
-
-
 {-| -}
 update : Time.Posix -> Timeline event -> Timeline event
 update now (Timeline timeline) =
@@ -292,14 +282,14 @@ update now (Timeline timeline) =
         }
             |> applyQueued
             |> applyInterruptions
-            |> clean True
+            |> clean False
             |> Timeline
 
     else
         { timeline | now = Time.absolute now }
             |> applyQueued
             |> applyInterruptions
-            |> clean True
+            |> clean False
             |> Timeline
 
 
@@ -590,72 +580,116 @@ applyInterruptionHelper interrupts timeline =
     - otherwise, add as a new `Line` to the timetable.
 
 -}
-
-
-
--- interrupt : TimelineDetails events -> Time.Absolute -> Schedule events -> Timetable events
--- interrupt details startAt ((Schedule delay startingEvent reverseQueued) as scheduled) =
---     case details.events of
---         Timetable lines ->
---             case currentAndPrevious (Timeline details) of
---                 ( prev, currentTarget ) ->
---                     if Time.thisAfterThat startAt (startTime currentTarget) then
---                         enqueue details startAt scheduled
---                     else
---                         let
---                             timeDiscount =
---                                 if getEvent prev == getScheduledEvent startingEvent then
---                                     -- we're returning to where we just were.
---                                     Just (Time.duration (endTime prev) startAt)
---                                 else
---                                     Nothing
---                         in
---                         Timetable
---                             (lines
---                                 ++ [ createLine startAt
---                                         (Schedule delay
---                                             (adjustScheduledTime
---                                                 (\prevDur ->
---                                                     case timeDiscount of
---                                                         Nothing ->
---                                                             prevDur
---                                                         Just newDur ->
---                                                             newDur
---                                                 )
---                                                 startingEvent
---                                             )
---                                             reverseQueued
---                                         )
---                                    ]
---                             )
-
-
 interrupt : TimelineDetails events -> Time.Absolute -> Schedule events -> Timetable events
 interrupt details startAt ((Schedule delay_ startingEvent reverseQueued) as scheduled) =
     case details.events of
         Timetable lines ->
-            case getLast2Events lines of
+            case interruptLines startAt scheduled [] lines of
                 Nothing ->
                     enqueue details startAt scheduled
 
-                Just (LastTwoEvents penultimateTime penultimate lastEventTime lastEvent) ->
-                    if Time.thisAfterThat startAt lastEventTime then
-                        enqueue details startAt scheduled
+                Just interrupted ->
+                    Timetable interrupted
+
+
+interruptLines : Time.Absolute -> Schedule event -> List (Line event) -> List (Line event) -> Maybe (List (Line event))
+interruptLines startInterruption scheduled pastLines lines =
+    case lines of
+        [] ->
+            Nothing
+
+        startLine :: remaining ->
+            case interruptLine startInterruption scheduled startLine remaining of
+                Nothing ->
+                    interruptLines startInterruption scheduled (startLine :: pastLines) remaining
+
+                Just interruption ->
+                    -- interruption is the interruption in the proper order, embedded with remaining
+                    Just (List.reverse pastLines ++ (startLine :: interruption))
+
+
+interruptLine startInterruption scheduled line future =
+    case line of
+        Line start startEvent trailing ->
+            if Time.thisAfterThat startInterruption start then
+                -- this line starts before the interruption
+                case future of
+                    [] ->
+                        case getTransitionAt startInterruption startEvent trailing of
+                            Nothing ->
+                                Nothing
+
+                            Just last2Events ->
+                                Just
+                                    [ interruptAtExactly startInterruption scheduled last2Events ]
+
+                    (Line nextStart next nextEvents) :: futureRemaining ->
+                        -- we need to find the target event we're currently enroute to.
+                        -- if the next line has already started, but the event hasnt happened yet
+                        -- then we know `next` is the target
+                        if Time.thisAfterThat startInterruption nextStart && Time.thisBeforeThat startInterruption (startTime next) then
+                            Just
+                                (Line nextStart next nextEvents
+                                    :: interruptAtExactly startInterruption
+                                        scheduled
+                                        (LastTwoEvents (endTime startEvent) (getEvent startEvent) (startTime next) (getEvent next))
+                                    :: futureRemaining
+                                )
+
+                        else
+                            Nothing
+
+            else
+                Nothing
+
+
+getTransitionAt interruptionTime startEvent trailing =
+    case trailing of
+        [] ->
+            Nothing
+
+        next :: remain ->
+            if Time.thisAfterThat interruptionTime (endTime startEvent) && Time.thisBeforeThat interruptionTime (startTime next) then
+                Just (LastTwoEvents (endTime startEvent) (getEvent startEvent) (startTime next) (getEvent next))
+
+            else
+                getTransitionAt interruptionTime startEvent remain
+
+
+interruptAtExactly startInterruption scheduled (LastTwoEvents penultimateTime penultimate lastEventTime lastEvent) =
+    case scheduled of
+        Schedule delay_ startingEvent reverseQueued ->
+            let
+                progress =
+                    Time.progress penultimateTime lastEventTime startInterruption
+
+                newStartingEvent =
+                    if penultimate == getScheduledEvent startingEvent then
+                        startingEvent
+                            |> adjustScheduledDuration (Quantity.multiplyBy progress)
 
                     else
-                        let
-                            progress =
-                                Time.progress penultimateTime lastEventTime startAt
+                        startingEvent
+            in
+            createLine startInterruption
+                (Schedule delay_ newStartingEvent reverseQueued)
 
-                            newStartingEvent =
-                                if penultimate == getEvent startingEvent then
-                                    startingEvent
-                                        |> adjustScheduledDuration (Quantity.multiplyBy progress)
 
-                                else
-                                    startingEvent
-                        in
-                        Timetable (lines ++ [ createLine startAt (Schedule delay_ newStartingEvent reverseQueued) ])
+
+-- type Found event
+--     = NothingFound
+--     | FoundOne
+--     | FoundTwo (LastTwoEvents Time.Absolute event Time.Absolute event)
+
+
+type LastTwoEvents event
+    = LastTwoEvents Time.Absolute event Time.Absolute event
+
+
+findInterruptedTransition startInterruption events =
+    case events of
+        _ ->
+            Nothing
 
 
 getLastEventTime : List (Line event) -> Maybe Time.Absolute
@@ -673,26 +707,20 @@ getLastEventTime lines =
                     Just at
 
 
-type LastTwoEvents event
-    = LastTwoEvents Time.Absolute event Time.Absolute event
 
-
-getLast2Events : List (Line event) -> Maybe (LastTwoEvents event)
-getLast2Events lines =
-    case List.reverse lines of
-        [] ->
-            Nothing
-
-        (Line start startingEvent trailing) :: _ ->
-            case List.reverse trailing of
-                [] ->
-                    Just (LastTwoEvents start (getEvent startingEvent) start (getEvent startingEvent))
-
-                (Occurring lastEvent lastEventTime _) :: [] ->
-                    Just (LastTwoEvents (endTime startingEvent) (getEvent startingEvent) lastEventTime lastEvent)
-
-                (Occurring lastEvent lastEventTime _) :: penult :: _ ->
-                    Just (LastTwoEvents (endTime penult) (getEvent penult) lastEventTime lastEvent)
+-- getLast2Events : List (Line event) -> Maybe (LastTwoEvents event)
+-- getLast2Events lines =
+--     case List.reverse lines of
+--         [] ->
+--             Nothing
+--         (Line start startingEvent trailing) :: _ ->
+--             case List.reverse trailing of
+--                 [] ->
+--                     Just (LastTwoEvents start (getEvent startingEvent) start (getEvent startingEvent))
+--                 (Occurring lastEvent lastEventTime _) :: [] ->
+--                     Just (LastTwoEvents (endTime startingEvent) (getEvent startingEvent) lastEventTime lastEvent)
+--                 (Occurring lastEvent lastEventTime _) :: penult :: _ ->
+--                     Just (LastTwoEvents (endTime penult) (getEvent penult) lastEventTime lastEvent)
 
 
 {-| Queue a list of events to be played after everything.
