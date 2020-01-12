@@ -88,7 +88,7 @@ basicInterpolation : Benchmark
 basicInterpolation =
     let
         timeline =
-            Animator.init (Time.millisToPosix 0) Hufflepuff
+            Animator.init Hufflepuff
                 |> Animator.queue
                     [ Animator.wait (Animator.seconds 1)
                     , Animator.event (Animator.seconds 1) Griffyndor
