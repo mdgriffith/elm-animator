@@ -1,14 +1,14 @@
 module Internal.Time exposing
-    ( thisBeforeThat, thisAfterThat, equal
+    ( thisBeforeOrEqualThat, thisAfterOrEqualThat, equal
     , Absolute, AbsoluteTime(..), Duration, absolute, duration, progress
     , inMilliseconds
     , latest, earliest, toPosix
-    , advanceBy, rollbackBy
+    , advanceBy, rollbackBy, thisAfterThat, thisBeforeThat
     )
 
 {-|
 
-@docs thisBeforeThat, thisAfterThat, equal
+@docs thisBeforeOrEqualThat, thisAfterOrEqualThat, equal
 
 @docs Absolute, AbsoluteTime, Duration, absolute, duration, progress
 
@@ -86,7 +86,7 @@ progress (Quantity.Quantity start) (Quantity.Quantity end) (Quantity.Quantity cu
 
 latest : Absolute -> Absolute -> Absolute
 latest one two =
-    if thisBeforeThat one two then
+    if thisBeforeOrEqualThat one two then
         two
 
     else
@@ -95,7 +95,7 @@ latest one two =
 
 earliest : Absolute -> Absolute -> Absolute
 earliest one two =
-    if thisBeforeThat one two then
+    if thisBeforeOrEqualThat one two then
         one
 
     else
@@ -104,11 +104,21 @@ earliest one two =
 
 thisBeforeThat : Absolute -> Absolute -> Bool
 thisBeforeThat this that =
-    this |> Quantity.lessThanOrEqualTo that
+    this |> Quantity.lessThan that
 
 
 thisAfterThat : Absolute -> Absolute -> Bool
 thisAfterThat this that =
+    this |> Quantity.greaterThan that
+
+
+thisBeforeOrEqualThat : Absolute -> Absolute -> Bool
+thisBeforeOrEqualThat this that =
+    this |> Quantity.lessThanOrEqualTo that
+
+
+thisAfterOrEqualThat : Absolute -> Absolute -> Bool
+thisAfterOrEqualThat this that =
     this |> Quantity.greaterThanOrEqualTo that
 
 

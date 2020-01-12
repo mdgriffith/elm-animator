@@ -7,7 +7,7 @@ module Internal.Timeline exposing
     , addToDwell
     , current, startPass, pass
     , Phase(..), Adjustment, Line(..), Timetable(..)
-    , Description(..), Previous(..), gc, linesAreActive, previousEndTime, updateNoGC
+    , Description(..), Previous(..), atTime, gc, gcLog, linesAreActive, previousEndTime, updateNoGC
     )
 
 {-|
@@ -265,19 +265,32 @@ getEvents (Timeline timeline) =
                 |> List.map (List.map (\(Occurring evt time maybeDwell) -> ( Time.toPosix time, evt )))
 
 
+atTime : Time.Posix -> Timeline event -> Timeline event
+atTime now (Timeline timeline) =
+    Timeline { timeline | now = Time.absolute now }
+
+
 {-| -}
 update : Time.Posix -> Timeline event -> Timeline event
-update now (Timeline timeline) =
+update possiblyNow (Timeline timeline) =
+    let
+        -- we can only move forward with updating
+        -- This is so that the GC doesn't cause awkward skips.
+        -- NOTE: for something like debug mode, we might want to disable this
+        -- to allow scrubbing a timeline.
+        now =
+            Quantity.max (Time.absolute possiblyNow) timeline.now
+    in
     if timeline.events == Timetable [] then
         { timeline
-            | now = Time.absolute now
+            | now = now
             , events =
                 let
                     firstOccurring =
-                        Occurring timeline.initial (Time.absolute now) Nothing
+                        Occurring timeline.initial now Nothing
                 in
                 Timetable
-                    [ Line (Time.absolute now) firstOccurring []
+                    [ Line now firstOccurring []
                     ]
         }
             |> applyQueued
@@ -286,7 +299,7 @@ update now (Timeline timeline) =
             |> Timeline
 
     else
-        { timeline | now = Time.absolute now }
+        { timeline | now = now }
             |> applyQueued
             |> applyInterruptions
             |> clean True
@@ -357,6 +370,17 @@ gc (Timeline details) =
     Timeline { details | events = Timetable (garbageCollectOldEvents details.now [] events) }
 
 
+gcLog : Timeline event -> Timeline event
+gcLog (Timeline details) =
+    let
+        events =
+            case details.events of
+                Timetable evs ->
+                    evs
+    in
+    Timeline { details | events = Timetable (garbageCollectOldEventsLog details.now [] events) }
+
+
 {-| If we're dwelling at an event, we can reset the event we're dwelling on to the base of the timeline.
 
 All previous lines can be dropped.
@@ -373,13 +397,14 @@ garbageCollectOldEvents now droppable lines =
             List.reverse droppable
 
         (Line startAt startingEvent events) :: remaining ->
-            if Time.thisAfterThat startAt now then
+            if Time.thisAfterOrEqualThat startAt now then
                 -- this line hasn't happened yet
                 List.reverse droppable ++ lines
 
             else if dwellingAt now startingEvent then
                 -- we can safetly drop the droppables
                 lines
+                -- List.reverse droppable ++ lines
 
             else
                 let
@@ -394,9 +419,10 @@ garbageCollectOldEvents now droppable lines =
                                 False
 
                             Just interruptionTime ->
-                                Time.thisAfterThat now interruptionTime
+                                Time.thisAfterOrEqualThat now interruptionTime
                 in
                 if interrupted then
+                    -- reduce a
                     garbageCollectOldEvents now (Line startAt startingEvent events :: droppable) remaining
 
                 else
@@ -415,7 +441,7 @@ garbageCollectOldEvents now droppable lines =
                                             [ Line (startTime last) last [] ]
 
                                 Just (Line startNext next _) ->
-                                    if Time.thisAfterThat now startNext then
+                                    if Time.thisAfterOrEqualThat now startNext then
                                         -- the next line has started
                                         -- this current line can be dropped if we're dwelling
                                         garbageCollectOldEvents now (Line startAt startingEvent events :: droppable) remaining
@@ -423,7 +449,87 @@ garbageCollectOldEvents now droppable lines =
                                     else
                                         List.reverse droppable ++ lines
 
+                        -- List.reverse droppable ++ lines
                         DwellingAt newLine ->
+                            -- newLine :: lines
+                            reverseEvents newLine :: remaining
+
+
+{-| If we're dwelling at an event, we can reset the event we're dwelling on to the base of the timeline.
+
+All previous lines can be dropped.
+
+However, if we're not dwelling, we want to keep the previous lines.
+
+So we track "droppable" lines until we meet a dwell.
+
+-}
+garbageCollectOldEventsLog : Time.Absolute -> List (Line event) -> List (Line event) -> List (Line event)
+garbageCollectOldEventsLog now droppable lines =
+    let
+        _ =
+            Debug.log "gc" "now"
+    in
+    case lines of
+        [] ->
+            List.reverse droppable
+
+        (Line startAt startingEvent events) :: remaining ->
+            if Debug.log "starting" <| Time.thisAfterOrEqualThat startAt now then
+                -- this line hasn't happened yet
+                List.map (Debug.log "lines") (List.reverse droppable ++ lines)
+
+            else if Debug.log "dwelling at" <| dwellingAt now startingEvent then
+                -- we can safetly drop the droppables
+                lines
+                -- List.reverse droppable ++ lines
+
+            else
+                let
+                    maybeInterruptionTime =
+                        remaining
+                            |> List.head
+                            |> Maybe.map lineStartTime
+
+                    interrupted =
+                        case maybeInterruptionTime of
+                            Nothing ->
+                                False
+
+                            Just interruptionTime ->
+                                Time.thisAfterOrEqualThat now interruptionTime
+                in
+                if Debug.log "interrupted" interrupted then
+                    -- reduce a
+                    garbageCollectOldEvents now (Line startAt startingEvent events :: droppable) remaining
+
+                else
+                    case Debug.log "shorten" <| List.foldl (shortenLine now) NotFinished events of
+                        NotFinished ->
+                            List.reverse droppable ++ lines
+
+                        AfterLine ->
+                            case List.head remaining of
+                                Nothing ->
+                                    case List.head (List.reverse events) of
+                                        Nothing ->
+                                            lines
+
+                                        Just last ->
+                                            [ Line (startTime last) last [] ]
+
+                                Just (Line startNext next _) ->
+                                    if Time.thisAfterOrEqualThat now startNext then
+                                        -- the next line has started
+                                        -- this current line can be dropped if we're dwelling
+                                        garbageCollectOldEvents now (Line startAt startingEvent events :: droppable) remaining
+
+                                    else
+                                        List.reverse droppable ++ lines
+
+                        -- List.reverse droppable ++ lines
+                        DwellingAt newLine ->
+                            -- newLine :: lines
                             reverseEvents newLine :: remaining
 
 
@@ -444,7 +550,7 @@ type LineStatus event
 shortenLine now event dwellingAtEvent =
     case dwellingAtEvent of
         NotFinished ->
-            if Time.thisAfterThat now (endTime event) then
+            if Time.thisAfterOrEqualThat now (endTime event) then
                 AfterLine
 
             else if dwellingAt now event then
@@ -460,7 +566,7 @@ shortenLine now event dwellingAtEvent =
             if dwellingAt now event then
                 DwellingAt (Line (startTime event) event [])
 
-            else if Time.thisAfterThat now (startTime event) then
+            else if Time.thisAfterOrEqualThat now (startTime event) then
                 AfterLine
 
             else
@@ -476,8 +582,8 @@ dwellingAt now event =
         eventStartTime =
             startTime event
     in
-    Time.thisAfterThat now eventStartTime
-        && Time.thisBeforeThat now eventEndTime
+    Time.thisAfterOrEqualThat now eventStartTime
+        && Time.thisBeforeOrEqualThat now eventEndTime
 
 
 linesAreActive : Time.Absolute -> List (Line event) -> Bool
@@ -487,7 +593,7 @@ linesAreActive now lines =
             False
 
         (Line startAt startingEvent events) :: remaining ->
-            if Time.thisAfterThat startAt now then
+            if Time.thisAfterOrEqualThat startAt now then
                 True
 
             else
@@ -508,13 +614,13 @@ linesAreActive now lines =
                 case maybeInterruption of
                     Just interruptTime ->
                         -- interuption hasn't happened yet, so we need to continue till it does
-                        if Time.thisAfterThat interruptTime now then
+                        if Time.thisAfterOrEqualThat interruptTime now then
                             True
 
                         else
                             case last of
                                 Occurring _ time _ ->
-                                    if Time.thisAfterThat time now then
+                                    if Time.thisAfterOrEqualThat time now then
                                         True
 
                                     else
@@ -523,7 +629,7 @@ linesAreActive now lines =
                     Nothing ->
                         case last of
                             Occurring _ time _ ->
-                                if Time.thisAfterThat time now then
+                                if Time.thisAfterOrEqualThat time now then
                                     True
 
                                 else
@@ -611,7 +717,7 @@ interruptLines startInterruption scheduled pastLines lines =
 interruptLine startInterruption scheduled line future =
     case line of
         Line start startEvent trailing ->
-            if Time.thisAfterThat startInterruption start then
+            if Time.thisAfterOrEqualThat startInterruption start then
                 -- this line starts before the interruption
                 case future of
                     [] ->
@@ -627,7 +733,7 @@ interruptLine startInterruption scheduled line future =
                         -- we need to find the target event we're currently enroute to.
                         -- if the next line has already started, but the event hasnt happened yet
                         -- then we know `next` is the target
-                        if Time.thisAfterThat startInterruption nextStart && Time.thisBeforeThat startInterruption (startTime next) then
+                        if Time.thisAfterOrEqualThat startInterruption nextStart && Time.thisBeforeOrEqualThat startInterruption (startTime next) then
                             Just
                                 (Line nextStart next nextEvents
                                     :: interruptAtExactly startInterruption
@@ -649,8 +755,13 @@ getTransitionAt interruptionTime startEvent trailing =
             Nothing
 
         next :: remain ->
-            if Time.thisAfterThat interruptionTime (endTime startEvent) && Time.thisBeforeThat interruptionTime (startTime next) then
-                Just (LastTwoEvents (endTime startEvent) (getEvent startEvent) (startTime next) (getEvent next))
+            let
+                previous =
+                    List.head remain
+                        |> Maybe.withDefault startEvent
+            in
+            if Time.thisAfterOrEqualThat interruptionTime (endTime previous) && Time.thisBeforeThat interruptionTime (startTime next) then
+                Just (LastTwoEvents (endTime previous) (getEvent previous) (startTime next) (getEvent next))
 
             else
                 getTransitionAt interruptionTime startEvent remain
@@ -707,22 +818,6 @@ getLastEventTime lines =
                     Just at
 
 
-
--- getLast2Events : List (Line event) -> Maybe (LastTwoEvents event)
--- getLast2Events lines =
---     case List.reverse lines of
---         [] ->
---             Nothing
---         (Line start startingEvent trailing) :: _ ->
---             case List.reverse trailing of
---                 [] ->
---                     Just (LastTwoEvents start (getEvent startingEvent) start (getEvent startingEvent))
---                 (Occurring lastEvent lastEventTime _) :: [] ->
---                     Just (LastTwoEvents (endTime startingEvent) (getEvent startingEvent) lastEventTime lastEvent)
---                 (Occurring lastEvent lastEventTime _) :: penult :: _ ->
---                     Just (LastTwoEvents (endTime penult) (getEvent penult) lastEventTime lastEvent)
-
-
 {-| Queue a list of events to be played after everything.
 
     - add events to the timeline that is currently active.
@@ -751,7 +846,7 @@ addToCurrentLine now scheduled lines =
 
                 (Line startOne startEventOne one) :: (Line startTwo startEventTwo two) :: remaining ->
                     -- we check if now is after startOne, but before startTwo
-                    if Time.thisAfterThat now startOne && Time.thisAfterThat startTwo now then
+                    if Time.thisAfterOrEqualThat now startOne && Time.thisAfterOrEqualThat startTwo now then
                         -- one is the current timeline
                         addEventsToLine now scheduled (Line startOne startEventOne one)
                             :: Line startTwo startEventTwo two
@@ -802,12 +897,19 @@ addEventsToLine now (Schedule delay scheduledStartingEvent reverseQueued) (Line 
     case reversedEvents of
         [] ->
             let
+                startNewEventsAt =
+                    Time.latest (startTime startingEvent) start
+
                 startingEventWithDwell =
                     case startingEvent of
                         Occurring ev lastEventTime maybeDwell ->
-                            Occurring ev lastEventTime (Just (Time.duration start lastEventTime))
+                            if Time.thisAfterThat start lastEventTime then
+                                Occurring ev lastEventTime (Just (Time.duration start lastEventTime))
+
+                            else
+                                Occurring ev lastEventTime Nothing
             in
-            List.foldl toOccurring ( start, [] ) queued
+            List.foldl toOccurring ( startNewEventsAt, [] ) queued
                 |> Tuple.second
                 |> List.reverse
                 |> Line startLineAt startingEventWithDwell
@@ -822,14 +924,19 @@ addEventsToLine now (Schedule delay scheduledStartingEvent reverseQueued) (Line 
                         |> Tuple.second
                         |> List.reverse
             in
-            if Time.thisAfterThat start lastEventTime then
+            if Time.thisAfterOrEqualThat start lastEventTime then
                 -- if the start of the scheduled events is after the last event time,
                 -- then we need to increase the dwell time of the last event to match the start time.
                 let
                     newLastEvent =
                         Occurring lastEvent
                             lastEventTime
-                            (Just (Time.duration start lastEventTime))
+                            (if Time.thisAfterThat start lastEventTime then
+                                Just (Time.duration start lastEventTime)
+
+                             else
+                                Nothing
+                            )
                 in
                 Line startLineAt
                     startingEvent
@@ -1235,7 +1342,7 @@ getPhase beginning target now maybeInterruption =
                             False
 
                         Just interruptTime ->
-                            Time.thisBeforeThat interruptTime (startTime target)
+                            Time.thisBeforeOrEqualThat interruptTime (startTime target)
             in
             if interrupted then
                 let
@@ -1247,7 +1354,7 @@ getPhase beginning target now maybeInterruption =
                 , interruptionTime
                 )
 
-            else if Time.thisAfterThat now (endTime target) then
+            else if Time.thisAfterOrEqualThat now (endTime target) then
                 ( NotDone, Transitioning, now )
 
             else

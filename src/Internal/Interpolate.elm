@@ -83,7 +83,7 @@ linearly lookup previous ((Timeline.Occurring target targetTime maybeDwell) as t
                 eventEndTime =
                     Timeline.endTime targetOccurring
             in
-            if Time.thisAfterThat now eventEndTime || Time.thisAfterThat now targetTime then
+            if Time.thisAfterOrEqualThat now eventEndTime || Time.thisAfterOrEqualThat now targetTime then
                 lookup target
 
             else
@@ -327,7 +327,7 @@ move lookup previous target maybeLookAhead phase now state =
 
         Timeline.Transitioning ->
             -- we're somewhere between prev and target.
-            if log "dwell-prev" <| Time.thisBeforeThat now (Timeline.previousEndTime previous) && notInterrupted previous then
+            if log "dwell-prev" <| Time.thisBeforeOrEqualThat now (Timeline.previousEndTime previous) && notInterrupted previous then
                 -- we're dwelling at prev
                 -- dwell till `now`
                 let
@@ -361,7 +361,7 @@ move lookup previous target maybeLookAhead phase now state =
                 dwellFor (lookup previousOccurringEvent)
                     (Time.duration previousStartTime endTime)
 
-            else if log "lerp" <| Time.thisBeforeThat now (Timeline.startTime target) then
+            else if log "lerp" <| Time.thisBeforeOrEqualThat now (Timeline.startTime target) then
                 -- we're transitioning between 1 and 2
                 -- transition till now
                 -- with a target velocity based on lookahead
@@ -790,7 +790,7 @@ color lookup previous ((Timeline.Occurring target targetTime maybeDwell) as targ
                 eventEndTime =
                     Timeline.endTime targetOccurring
             in
-            if Time.thisAfterThat now eventEndTime || Time.thisAfterThat now targetTime then
+            if Time.thisAfterOrEqualThat now eventEndTime || Time.thisAfterOrEqualThat now targetTime then
                 lookup target
 
             else

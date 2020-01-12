@@ -1,13 +1,16 @@
-module Scheduling exposing (cleaning, interruptions, queueing)
+module Scheduling exposing (cleaning, interruptions, ordering, queueing)
 
 import Animator
 import Duration
 import Expect exposing (Expectation, FloatingPointTolerance(..))
 import Fuzz exposing (Fuzzer, float, int, list, string)
 import Internal.Interpolate as Interpolate
+import Internal.Time as Time
 import Internal.Timeline as Timeline
 import Pixels
 import Quantity
+import Random
+import Result
 import Test exposing (..)
 import Time
 
@@ -62,7 +65,8 @@ toVals event =
 valueAtEquals time val tl =
     let
         new =
-            Animator.update (Time.millisToPosix time) tl
+            -- we can't call update because updates have to be monotonic
+            Timeline.atTime (Time.millisToPosix time) tl
     in
     Expect.within
         (Absolute 0.001)
@@ -259,6 +263,10 @@ interruptions =
                     )
         , test "Correctly folds" <|
             \_ ->
+                let
+                    _ =
+                        Debug.log "tl" newTimeline
+                in
                 Expect.all
                     [ valueAtEquals 0 0
                     , valueAtEquals 2000 1
@@ -371,7 +379,7 @@ interruptions =
                                     (occur Starting (qty 0) (Just (qty 1)))
                                     [ occur One (qty 2000) (Just (qty 1))
                                     , occur Two (qty 4000) (Just (qty 1))
-                                    , occur Three (qty 6000) (Just (qty 0))
+                                    , occur Three (qty 6000) Nothing
                                     , occur Four (qty 7000) (Just (qty 1))
                                     , occur Five (qty 9000) Nothing
                                     ]
@@ -547,7 +555,289 @@ cleaning =
                         , running = True
                         }
                     )
+        , test "Unknown GC event" <|
+            \_ ->
+                let
+                    newTimeline =
+                        Animator.init Starting
+                            |> Animator.update (Time.millisToPosix 0)
+                            |> Animator.queue
+                                [ Animator.wait (Animator.seconds 1.0)
+                                , Animator.event (Animator.seconds 1) One
+                                , Animator.wait (Animator.seconds 1.0)
+                                , Animator.event (Animator.seconds 1) Two
+                                ]
+                            |> Animator.update (Time.millisToPosix 1000)
+                            |> Animator.interrupt
+                                [ Animator.event (Animator.seconds 1) Four
+                                , Animator.wait (Animator.seconds 1.0)
+                                , Animator.event (Animator.seconds 1) Five
+                                ]
+                            |> Animator.update (Time.millisToPosix 2000)
+                            |> Animator.update (Time.millisToPosix 5000)
+                            |> Timeline.gc
+                in
+                Expect.equal
+                    newTimeline
+                    (Timeline.Timeline
+                        { events =
+                            Timeline.Timetable
+                                [ Timeline.Line (qty 5000)
+                                    (occur Five (qty 5000) Nothing)
+                                    []
+                                ]
+                        , initial = Starting
+                        , interruption = []
+                        , now = qty 5000
+                        , queued = Nothing
+                        , running = True
+                        }
+                    )
         ]
+
+
+ordering =
+    describe "Preserve Ordering"
+        [ fuzz (fuzzTimeline 0 6000 [ One, Two, Three, Four, Five ]) "Line order is always preserved" <|
+            \timelineInstruction ->
+                let
+                    actualTimeline =
+                        instructionsToTimeline timelineInstruction
+                in
+                case actualTimeline of
+                    Timeline.Timeline details ->
+                        case details.events of
+                            Timeline.Timetable lines ->
+                                let
+                                    order =
+                                        List.foldl isOrderPreserved ( 0, True ) lines
+                                in
+                                Expect.true "Line order is preserved"
+                                    (Tuple.second order)
+        , fuzz (fuzzTimeline 0 6000 [ One, Two, Three, Four, Five ])
+            "Event order is always preserved"
+          <|
+            \timelineInstruction ->
+                case instructionsToTimeline timelineInstruction of
+                    Timeline.Timeline details ->
+                        case details.events of
+                            Timeline.Timetable lines ->
+                                let
+                                    preserved =
+                                        List.all isEventOrderPreserved lines
+                                in
+                                Expect.true "Event order is preserved"
+                                    preserved
+        , fuzz (fuzzTimeline 0 6000 [ One, Two, Three, Four, Five ])
+            "GC doesn't affect order"
+          <|
+            \timelineInstruction ->
+                case instructionsToTimeline timelineInstruction of
+                    Timeline.Timeline details ->
+                        case details.events of
+                            Timeline.Timetable lines ->
+                                Expect.true "Event order after GC is preserved"
+                                    (List.all isEventOrderPreserved lines)
+        , fuzz (fuzzTimeline 0 6000 [ One, Two, Three, Four, Five ])
+            "GC is idempotent"
+          <|
+            \timelineInstruction ->
+                let
+                    actualTimeline =
+                        instructionsToTimeline timelineInstruction
+
+                    gcedTimeline =
+                        Timeline.gc actualTimeline
+                in
+                Expect.equal
+                    actualTimeline
+                    (Timeline.gc gcedTimeline)
+        ]
+
+
+isOrderPreserved (Timeline.Line start _ _) (( previous, preserved ) as existing) =
+    if not preserved then
+        existing
+
+    else
+        let
+            newPrevious =
+                Time.posixToMillis (Time.toPosix start)
+        in
+        ( newPrevious
+        , newPrevious >= previous
+        )
+
+
+isEventOrderPreserved (Timeline.Line start startingEvent events) =
+    let
+        orderPreserved event (( prev, preserved ) as skip) =
+            if not preserved then
+                skip
+
+            else
+                let
+                    newPrev =
+                        Timeline.startTime event
+                            |> Time.toPosix
+                            |> Time.posixToMillis
+                in
+                ( newPrev
+                , newPrev >= prev
+                )
+    in
+    List.foldl orderPreserved ( Time.posixToMillis (Time.toPosix start), True ) (startingEvent :: events)
+        |> Tuple.second
+
+
+
+{- FUZZ TESTING FOR TIMELINES
+
+
+
+
+   Ordering
+       1. No matter what set of interruptions or queues, the timeline order is correct.
+       2. Same with event order within timelines.
+
+   GC
+       1. GC does not affect 'observable' events
+           - An event is observable If it's in an unbroken chain of interruption/queued events tilll `Now`
+           - i.e. An event that dwells can drop itself and all previous events.
+
+
+   Timeline Fuzzer:
+
+       - Add some number of Queue and Interrupt at random times on a range.
+       - Specific start and end time(the range)
+
+       - High level description of pipeline.
+       - From description ->
+               - Calc observable timeline
+               - Create actual timeline
+
+
+-}
+
+
+type InstructionTimeline event
+    = InstructionTimeline Int event (List (Instruction event))
+
+
+type Instruction event
+    = Queue Int (List ( Int, event ))
+    | Interruption Int (List ( Int, event ))
+
+
+fuzzTimeline : Int -> Int -> List event -> Fuzzer (InstructionTimeline event)
+fuzzTimeline one two eventOptions =
+    let
+        start =
+            min one two
+
+        end =
+            max one two
+
+        timeRange =
+            Fuzz.intRange start end
+
+        durationRange =
+            Fuzz.intRange 0 ((end - start) // 3)
+
+        instructionFuzzer =
+            listOneToFive
+                (Fuzz.oneOf
+                    [ Fuzz.map2 Interruption timeRange (fuzzEvents durationRange eventOptions)
+                    , Fuzz.map2 Queue timeRange (fuzzEvents durationRange eventOptions)
+                    ]
+                )
+    in
+    Fuzz.map2
+        (\startingEvent instructions ->
+            InstructionTimeline start startingEvent instructions
+        )
+        (Fuzz.oneOf (List.map Fuzz.constant eventOptions))
+        instructionFuzzer
+
+
+fuzzEvents : Fuzzer Int -> List event -> Fuzzer (List ( Int, event ))
+fuzzEvents timeRange eventOptions =
+    listOneToFive
+        (Fuzz.map2 Tuple.pair
+            timeRange
+            (Fuzz.oneOf (List.map Fuzz.constant eventOptions))
+        )
+
+
+instructionsToTimeline : InstructionTimeline event -> Timeline.Timeline event
+instructionsToTimeline (InstructionTimeline startTime startEvent instructions) =
+    let
+        addInstructions myTimeline =
+            List.foldl instruct myTimeline instructions
+
+        instruct instruction myTimeline =
+            case instruction of
+                Queue start events ->
+                    myTimeline
+                        |> Animator.queue (List.map instructionToEvent events)
+                        |> Animator.update (Time.millisToPosix start)
+
+                Interruption start events ->
+                    myTimeline
+                        |> Animator.interrupt (List.map instructionToEvent events)
+                        |> Animator.update (Time.millisToPosix start)
+    in
+    Animator.init startEvent
+        |> Animator.update (Time.millisToPosix startTime)
+        |> addInstructions
+
+
+instructionToEvent ( i, event ) =
+    Animator.event (Animator.millis (toFloat i)) event
+
+
+listOneToFive : Fuzzer a -> Fuzzer (List a)
+listOneToFive contents =
+    Fuzz.oneOf
+        [ Fuzz.map
+            List.singleton
+            contents
+        , Fuzz.map2
+            (\one two ->
+                [ one, two ]
+            )
+            contents
+            contents
+        , Fuzz.map3
+            (\one two three ->
+                [ one, two, three ]
+            )
+            contents
+            contents
+            contents
+        , Fuzz.map4
+            (\one two three four ->
+                [ one, two, three, four ]
+            )
+            contents
+            contents
+            contents
+            contents
+        , Fuzz.map5
+            (\one two three four five ->
+                [ one, two, three, four, five ]
+            )
+            contents
+            contents
+            contents
+            contents
+            contents
+        ]
+
+
+
+-- describeInstructions =
+--     Debug.todo ""
 
 
 skipLog str x =
