@@ -201,160 +201,160 @@ view model =
     in
     { title = "Elm - Select Harry Potter House"
     , body =
-        [--     viewTimelineGroup "Single Event"
-         --     [ { name = "Pos"
-         --       , timeline = singleEvent
-         --       , move = toHousePosition
-         --       }
-         --     , { name = "Oscillator"
-         --       , timeline = singleEvent
-         --       , move = oscillators
-         --       }
-         --     , { name = "Pos -> Oscillators"
-         --       , timeline = singleEvent
-         --       , move = posThenOscillators
-         --       }
-         --     , { name = "Sorta Wobbly"
-         --       , timeline = singleEvent
-         --       , move = sortaWobbly
-         --       }
-         --     , { name = "Wobbly"
-         --       , timeline = singleEvent
-         --       , move = wobbly
-         --       }
-         --     ]
-         -- , viewTimelineGroup "Double Event"
-         --     [ { name = "Pos"
-         --       , timeline = doubleEvent
-         --       , move = toHousePosition
-         --       }
-         --     , { name = "Oscillator"
-         --       , timeline = doubleEvent
-         --       , move = oscillators
-         --       }
-         --     , { name = "Pos -> Oscillators"
-         --       , timeline = doubleEvent
-         --       , move = posThenOscillators
-         --       }
-         --     , { name = "Sorta wobbly"
-         --       , timeline = doubleEvent
-         --       , move = sortaWobbly
-         --       }
-         --     , { name = "Wobbly"
-         --       , timeline = doubleEvent
-         --       , move = wobbly
-         --       }
-         --     ]
-         -- , viewTimelineGroup "Interruptions - 1250"
-         --     [ { name = "Pos"
-         --       , timeline = doubleInterrupted
-         --       , move = toHousePosition
-         --       }
-         --     , { name = "Oscillator"
-         --       , timeline = doubleInterrupted
-         --       , move = oscillators
-         --       }
-         --     , { name = "Pos -> Oscillators"
-         --       , timeline = doubleInterrupted
-         --       , move = posThenOscillators
-         --       }
-         --     , { name = "Sorta wobbly"
-         --       , timeline = doubleInterrupted
-         --       , move = sortaWobbly
-         --       }
-         --     , { name = "Wobbly"
-         --       , timeline = doubleInterrupted
-         --       , move = wobbly
-         --       }
-         --     ]
-         -- , viewTimelineGroup "Double Interruption - 1250"
-         --     [ { name = "Pos"
-         --       , timeline = doubleInterruptedInterrupted
-         --       , move = toHousePosition
-         --       }
-         --     , { name = "Oscillator"
-         --       , timeline = doubleInterruptedInterrupted
-         --       , move = oscillators
-         --       }
-         --     , { name = "Pos -> Oscillators"
-         --       , timeline = doubleInterruptedInterrupted
-         --       , move = posThenOscillators
-         --       }
-         --     , { name = "Sorta wobbly"
-         --       , timeline = doubleInterruptedInterrupted
-         --       , move = sortaWobbly
-         --       }
-         --     , { name = "Wobbly"
-         --       , timeline = doubleInterruptedInterrupted
-         --       , move = wobbly
-         --       }
-         --     ]
-         -- , viewTimelineGroup "Four Continuous"
-         --     [ { name = "Pos"
-         --       , timeline = fourContinuous
-         --       , move = toHousePosition
-         --       }
-         --     , { name = "Oscillator"
-         --       , timeline = fourContinuous
-         --       , move = oscillators
-         --       }
-         --     , { name = "Pos -> Oscillators"
-         --       , timeline = fourContinuous
-         --       , move = posThenOscillators
-         --       }
-         --     , { name = "Sorta Wobbly"
-         --       , timeline = fourContinuous
-         --       , move = sortaWobbly
-         --       }
-         --     , { name = "Wobbly"
-         --       , timeline = fourContinuous
-         --       , move = wobbly
-         --       }
-         --     ]
-         -- , viewTimelineGroup "Four with Pause"
-         --     [ { name = "Pos"
-         --       , timeline = fourWithPause
-         --       , move = toHousePosition
-         --       }
-         --     , { name = "Oscillator"
-         --       , timeline = fourWithPause
-         --       , move = oscillators
-         --       }
-         --     , { name = "Pos -> Oscillators"
-         --       , timeline = fourWithPause
-         --       , move = posThenOscillators
-         --       }
-         --     , { name = "Sorta Wobbly"
-         --       , timeline = fourWithPause
-         --       , move = sortaWobbly
-         --       }
-         --     , { name = "Wobbly"
-         --       , timeline = fourWithPause
-         --       , move = wobbly
-         --       }
-         --     ]
-         -- , viewTimelineGroup "Interrupted - Four with Pause"
-         --     [ { name = "Pos"
-         --       , timeline = fourWithPauseInterrupted
-         --       , move = toHousePosition
-         --       }
-         --     , { name = "Oscillator"
-         --       , timeline = fourWithPauseInterrupted
-         --       , move = oscillators
-         --       }
-         --     , { name = "Pos -> Oscillators"
-         --       , timeline = fourWithPauseInterrupted
-         --       , move = posThenOscillators
-         --       }
-         --     , { name = "Sorta Wobbly"
-         --       , timeline = fourWithPauseInterrupted
-         --       , move = sortaWobbly
-         --       }
-         --     , { name = "Wobbly"
-         --       , timeline = fourWithPauseInterrupted
-         --       , move = wobbly
-         --       }
-         --     ]
+        [ viewTimelineGroup "Single Event"
+            [ { name = "Pos"
+              , timeline = singleEvent
+              , move = toHousePosition
+              }
+            , { name = "Oscillator"
+              , timeline = singleEvent
+              , move = oscillators
+              }
+            , { name = "Pos -> Oscillators"
+              , timeline = singleEvent
+              , move = posThenOscillators
+              }
+            , { name = "Sorta Wobbly"
+              , timeline = singleEvent
+              , move = sortaWobbly
+              }
+            , { name = "Wobbly"
+              , timeline = singleEvent
+              , move = wobbly
+              }
+            ]
+        , viewTimelineGroup "Double Event"
+            [ { name = "Pos"
+              , timeline = doubleEvent
+              , move = toHousePosition
+              }
+            , { name = "Oscillator"
+              , timeline = doubleEvent
+              , move = oscillators
+              }
+            , { name = "Pos -> Oscillators"
+              , timeline = doubleEvent
+              , move = posThenOscillators
+              }
+            , { name = "Sorta wobbly"
+              , timeline = doubleEvent
+              , move = sortaWobbly
+              }
+            , { name = "Wobbly"
+              , timeline = doubleEvent
+              , move = wobbly
+              }
+            ]
+        , viewTimelineGroup "Interruptions - 1250"
+            [ { name = "Pos"
+              , timeline = doubleInterrupted
+              , move = toHousePosition
+              }
+            , { name = "Oscillator"
+              , timeline = doubleInterrupted
+              , move = oscillators
+              }
+            , { name = "Pos -> Oscillators"
+              , timeline = doubleInterrupted
+              , move = posThenOscillators
+              }
+            , { name = "Sorta wobbly"
+              , timeline = doubleInterrupted
+              , move = sortaWobbly
+              }
+            , { name = "Wobbly"
+              , timeline = doubleInterrupted
+              , move = wobbly
+              }
+            ]
+        , viewTimelineGroup "Double Interruption - 1250"
+            [ { name = "Pos"
+              , timeline = doubleInterruptedInterrupted
+              , move = toHousePosition
+              }
+            , { name = "Oscillator"
+              , timeline = doubleInterruptedInterrupted
+              , move = oscillators
+              }
+            , { name = "Pos -> Oscillators"
+              , timeline = doubleInterruptedInterrupted
+              , move = posThenOscillators
+              }
+            , { name = "Sorta wobbly"
+              , timeline = doubleInterruptedInterrupted
+              , move = sortaWobbly
+              }
+            , { name = "Wobbly"
+              , timeline = doubleInterruptedInterrupted
+              , move = wobbly
+              }
+            ]
+        , viewTimelineGroup "Four Continuous"
+            [ { name = "Pos"
+              , timeline = fourContinuous
+              , move = toHousePosition
+              }
+            , { name = "Oscillator"
+              , timeline = fourContinuous
+              , move = oscillators
+              }
+            , { name = "Pos -> Oscillators"
+              , timeline = fourContinuous
+              , move = posThenOscillators
+              }
+            , { name = "Sorta Wobbly"
+              , timeline = fourContinuous
+              , move = sortaWobbly
+              }
+            , { name = "Wobbly"
+              , timeline = fourContinuous
+              , move = wobbly
+              }
+            ]
+        , viewTimelineGroup "Four with Pause"
+            [ { name = "Pos"
+              , timeline = fourWithPause
+              , move = toHousePosition
+              }
+            , { name = "Oscillator"
+              , timeline = fourWithPause
+              , move = oscillators
+              }
+            , { name = "Pos -> Oscillators"
+              , timeline = fourWithPause
+              , move = posThenOscillators
+              }
+            , { name = "Sorta Wobbly"
+              , timeline = fourWithPause
+              , move = sortaWobbly
+              }
+            , { name = "Wobbly"
+              , timeline = fourWithPause
+              , move = wobbly
+              }
+            ]
+        , viewTimelineGroup "Interrupted - Four with Pause"
+            [ { name = "Pos"
+              , timeline = fourWithPauseInterrupted
+              , move = toHousePosition
+              }
+            , { name = "Oscillator"
+              , timeline = fourWithPauseInterrupted
+              , move = oscillators
+              }
+            , { name = "Pos -> Oscillators"
+              , timeline = fourWithPauseInterrupted
+              , move = posThenOscillators
+              }
+            , { name = "Sorta Wobbly"
+              , timeline = fourWithPauseInterrupted
+              , move = sortaWobbly
+              }
+            , { name = "Wobbly"
+              , timeline = fourWithPauseInterrupted
+              , move = wobbly
+              }
+            ]
         ]
     }
 

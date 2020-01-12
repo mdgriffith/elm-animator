@@ -19,6 +19,7 @@ import Color
 import Duration
 import Html exposing (Html, div, h1, node, p, text)
 import Html.Attributes exposing (class)
+import Internal.Estimation as Estimate
 import Internal.Spring as Spring
 import Internal.Timeline
 import LineChart as LineChart
@@ -165,6 +166,14 @@ timeline config =
                 )
                 rendered
 
+        estimatedVelocities =
+            renderEstimatedVelocity config.timeline
+                config.toMovement
+                { framesPerSecond = 60
+                , start = start
+                , end = addMs 1000 end
+                }
+
         velocities =
             List.map
                 (\e ->
@@ -211,6 +220,7 @@ timeline config =
             (renderedEvents
                 ++ [ LineChart.line Color.purple Dots.none "Position" points
                    , LineChart.dash Color.blue Dots.none "Velocity" [ 4, 2 ] velocities
+                   , LineChart.dash Color.green Dots.none "Est. Vel." [ 4, 4 ] estimatedVelocities
 
                    -- , LineChart.line Color.red Dots.none "Calc - Velocity" calcVelocities
                    -- , LineChart.line Color.orange Dots.none "Accel" acceleration
@@ -470,6 +480,58 @@ renderVelocities move tl toPos =
         )
         []
         (List.range 0 400)
+
+
+renderEstimatedVelocity :
+    Animator.Timeline event
+    -> (event -> Animator.Movement)
+    ->
+        { framesPerSecond : Float
+        , start : Time.Posix
+        , end : Time.Posix
+        }
+    ->
+        List
+            --      in MS
+            { time : Float
+
+            -- velocity
+            , value : Float
+            }
+renderEstimatedVelocity myTimeline toPos config =
+    let
+        startTimeInMs =
+            Time.posixToMillis config.start
+
+        durationInMs =
+            Time.posixToMillis config.end
+                - startTimeInMs
+
+        frameCount =
+            (toFloat durationInMs / 1000) * config.framesPerSecond
+
+        frameSize =
+            1000 / config.framesPerSecond
+
+        frames =
+            List.range 0 (ceiling frameCount)
+    in
+    List.foldl
+        (\i rendered ->
+            let
+                currentTime =
+                    Time.millisToPosix (round (toFloat startTimeInMs + (toFloat i * frameSize)))
+
+                estimated =
+                    Estimate.velocity 8 currentTime myTimeline toPos
+            in
+            { time = toFloat (Time.posixToMillis currentTime)
+            , value = estimated
+            }
+                :: rendered
+        )
+        []
+        frames
 
 
 view :

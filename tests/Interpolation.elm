@@ -4,7 +4,9 @@ import Animator
 import Duration
 import Expect exposing (Expectation, FloatingPointTolerance(..))
 import Fuzz exposing (Fuzzer, float, int, list, string)
+import Internal.Estimation as Estimate
 import Internal.Interpolate as Interpolate
+import Internal.Timeline as Timeline
 import Pixels
 import Quantity
 import Test exposing (..)
@@ -115,65 +117,45 @@ timeline =
         [ fuzz pointsOnTimeline "All points report the correct velocity" <|
             \time ->
                 let
-                    resolution =
-                        8
-
-                    before =
-                        mapTime (\t -> t - resolution) time
-
-                    after =
-                        mapTime (\t -> t + resolution) time
-
-                    zero =
-                        Animator.move (Animator.update before harryPotterHouseTimeline) toPosition
-
-                    one =
-                        Animator.move (Animator.update time harryPotterHouseTimeline) toPosition
-
-                    two =
-                        Animator.move (Animator.update after harryPotterHouseTimeline) toPosition
-
-                    first =
-                        (one.position - zero.position) / resolution
-
-                    second =
-                        (two.position - one.position) / resolution
+                    found =
+                        Animator.move (Timeline.atTime time harryPotterHouseTimeline) toPosition
 
                     expected =
-                        -- 1000 * avg first second
-                        1000 * (two.position - zero.position) / (2 * resolution)
+                        Estimate.velocity 8 time harryPotterHouseTimeline toPosition
                 in
                 Expect.within
-                    -- my guess is that this is such a wide margin
-                    -- because the method for calculating velocity in this function could be better.
-                    -- my other guess is that it's something else...
-                    (Absolute 40)
-                    one.velocity
+                    (Absolute 0.1)
+                    found.velocity
                     expected
         , let
             newTimeline =
                 Animator.init Hufflepuff
-                    |> Animator.update (Time.millisToPosix 0)
                     |> Animator.queue
                         [ Animator.wait (Animator.seconds 1)
                         , Animator.event (Animator.seconds 1) Griffyndor
                         ]
-                    |> Animator.update (Time.millisToPosix 1200)
+                    |> Animator.update (Time.millisToPosix 0)
+                    -- |> Animator.update (Time.millisToPosix 1200)
                     |> Animator.interrupt
                         [ Animator.event (Animator.seconds 1) Ravenclaw
                         ]
-                    |> Animator.update (Time.millisToPosix 1250)
+                    |> Animator.update (Time.millisToPosix 1500)
           in
           test "Interruptions interpolate correctly" <|
             \_ ->
                 let
                     position =
-                        Animator.linear (Animator.update (Time.millisToPosix 1500) newTimeline) toPos
+                        Animator.linear
+                            (Animator.update (Time.millisToPosix 2000) newTimeline)
+                            toPos
                 in
+                -- we were half the way to griffyndor (200)
+                -- and then halfway between that and Ravenclaw (1000)
+                --  400 + 200 = 600
                 Expect.within
                     (Absolute 0.001)
                     position
-                    300
+                    600
         ]
 
 
