@@ -1,1 +1,3 @@
-# elm-animator
+# Elm Animator
+
+*!* Work in progress
