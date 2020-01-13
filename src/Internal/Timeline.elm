@@ -1354,7 +1354,7 @@ getPhase beginning target now maybeInterruption =
                 , interruptionTime
                 )
 
-            else if Time.thisAfterOrEqualThat now (endTime target) then
+            else if Time.thisAfterThat now (endTime target) then
                 ( NotDone, Transitioning, now )
 
             else

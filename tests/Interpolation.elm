@@ -135,7 +135,6 @@ timeline =
                         , Animator.event (Animator.seconds 1) Griffyndor
                         ]
                     |> Animator.update (Time.millisToPosix 0)
-                    -- |> Animator.update (Time.millisToPosix 1200)
                     |> Animator.interrupt
                         [ Animator.event (Animator.seconds 1) Ravenclaw
                         ]
@@ -156,6 +155,38 @@ timeline =
                     (Absolute 0.001)
                     position
                     600
+        , test "Velocity at continuous checkpoints is not 0" <|
+            \_ ->
+                let
+                    newTimeline =
+                        Animator.init Hufflepuff
+                            |> Animator.queue
+                                [ Animator.event (Animator.seconds 1) Griffyndor
+                                , Animator.event (Animator.seconds 1) Slytherin
+                                , Animator.event (Animator.seconds 1) Ravenclaw
+                                ]
+                            |> Animator.update (Time.millisToPosix 0)
+
+                    posAt time timetable =
+                        let
+                            position =
+                                Animator.move
+                                    (Timeline.atTime
+                                        (Time.millisToPosix time)
+                                        timetable
+                                    )
+                                    toPosition
+                        in
+                        Expect.notWithin
+                            (Absolute 0.001)
+                            0
+                            position.velocity
+                in
+                Expect.all
+                    [ posAt 1000
+                    , posAt 2000
+                    ]
+                    newTimeline
         ]
 
 
