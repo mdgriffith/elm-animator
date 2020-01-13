@@ -263,10 +263,6 @@ interruptions =
                     )
         , test "Correctly folds" <|
             \_ ->
-                let
-                    _ =
-                        Debug.log "tl" newTimeline
-                in
                 Expect.all
                     [ valueAtEquals 0 0
                     , valueAtEquals 2000 1
