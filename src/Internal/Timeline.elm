@@ -1328,8 +1328,11 @@ getPhase : Beginning -> Occurring event -> Time.Absolute -> Maybe Time.Absolute 
 getPhase beginning target now maybeInterruption =
     case beginning of
         Beginning ->
-            ( NotDone
-              -- TODO: or Finished
+            ( if dwellingAt now target then
+                Finished
+
+              else
+                NotDone
             , Start
             , now
             )
@@ -1343,6 +1346,7 @@ getPhase beginning target now maybeInterruption =
 
                         Just interruptTime ->
                             Time.thisBeforeOrEqualThat interruptTime (startTime target)
+                                && Time.thisAfterThat now interruptTime
             in
             if interrupted then
                 let
