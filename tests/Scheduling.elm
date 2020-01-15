@@ -1,4 +1,4 @@
-module Scheduling exposing (cleaning, interruptions, ordering, queueing)
+module Scheduling exposing (cleaning, interruptions, ordering, queueing, tailRecursion)
 
 import Animator
 import Duration
@@ -589,6 +589,52 @@ cleaning =
                         , running = True
                         }
                     )
+        ]
+
+
+tailRecursion =
+    describe "Tail recursion"
+        [ test "Enqueueing" <|
+            \_ ->
+                let
+                    newTimeline =
+                        Animator.init 0
+                            |> Animator.update (Time.millisToPosix 0)
+                            |> Animator.queue
+                                (List.map (Animator.event (Animator.seconds 1)) (List.range 0 10000))
+                            |> Animator.update (Time.millisToPosix 5000)
+                in
+                Expect.true "Successfully enqueued 10,000 events" True
+        , test "Interrupting" <|
+            \_ ->
+                let
+                    newTimeline =
+                        Animator.init 0
+                            |> Animator.update (Time.millisToPosix 0)
+                            |> Animator.interrupt
+                                (List.map (Animator.event (Animator.seconds 1)) (List.range 0 10000))
+                            |> Animator.update (Time.millisToPosix 5000)
+                in
+                Expect.true "Successfully interupt with 10,000 events" True
+        , test "Interpolating" <|
+            \_ ->
+                let
+                    newTimeline =
+                        Animator.init 0
+                            |> Animator.update (Time.millisToPosix 0)
+                            |> Animator.queue
+                                (List.map (Animator.event (Animator.seconds 1)) (List.range 0 10000))
+                            |> Animator.update (Time.millisToPosix 5000)
+
+                    now =
+                        Animator.move
+                            (Timeline.atTime
+                                (Time.millisToPosix 1000000)
+                                newTimeline
+                            )
+                            (\x -> Animator.to (toFloat x))
+                in
+                Expect.true "Successfully interpolate with 10,000 events" True
         ]
 
 
