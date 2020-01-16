@@ -30,7 +30,7 @@ doubleEvent =
             [ Animator.wait (Animator.seconds 1)
             , Animator.event (Animator.seconds 1) Griffyndor
             ]
-        |> Animator.update (Time.millisToPosix 1000)
+        |> Internal.Timeline.updateNoGC (Time.millisToPosix 1000)
 
 
 fourContinuous =
@@ -66,8 +66,8 @@ doubleInterrupted =
         |> Animator.interrupt
             [ Animator.event (Animator.seconds 1) Ravenclaw
             ]
-        |> Animator.update (Time.millisToPosix 2500)
-        |> Animator.update (Time.millisToPosix 3000)
+        |> Internal.Timeline.updateNoGC (Time.millisToPosix 2500)
+        |> Internal.Timeline.updateNoGC (Time.millisToPosix 3000)
 
 
 doubleInterruptedInterrupted =
@@ -75,8 +75,8 @@ doubleInterruptedInterrupted =
         |> Animator.interrupt
             [ Animator.event (Animator.seconds 1) Slytherin
             ]
-        |> Animator.update (Time.millisToPosix 3001)
-        |> Animator.update (Time.millisToPosix 3500)
+        |> Internal.Timeline.updateNoGC (Time.millisToPosix 3001)
+        |> Internal.Timeline.updateNoGC (Time.millisToPosix 3500)
 
 
 fourContinuousInterrupted =
@@ -190,15 +190,14 @@ viewTimeline { name, timeline, move } =
 
 view : Model -> Browser.Document Msg
 view model =
-    let
-        _ =
-            Animator.move fourContinuousInterrupted toHousePosition
-                |> Debug.log "******** end pos/osc"
-
-        -- _ =
-        --     Animator.move fourContinuous oscillators
-        --         |> Debug.log "******* end osc "
-    in
+    -- let
+    --     _ =
+    --         Animator.move fourContinuousInterrupted toHousePosition
+    --             |> Debug.log "******** end pos/osc"
+    --     -- _ =
+    --     --     Animator.move fourContinuous oscillators
+    --     --         |> Debug.log "******* end osc "
+    -- in
     { title = "Elm - Select Harry Potter House"
     , body =
         [ viewTimelineGroup "Single Event"

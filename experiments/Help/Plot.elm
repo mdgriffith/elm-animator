@@ -220,7 +220,7 @@ timeline config =
             (renderedEvents
                 ++ [ LineChart.line Color.purple Dots.none "Position" points
                    , LineChart.dash Color.blue Dots.none "Velocity" [ 4, 2 ] velocities
-                   , LineChart.dash Color.green Dots.none "Est. Vel." [ 4, 4 ] estimatedVelocities
+                   , LineChart.dash Color.red Dots.none "Est. Vel." [ 4, 4 ] estimatedVelocities
 
                    -- , LineChart.line Color.red Dots.none "Calc - Velocity" calcVelocities
                    -- , LineChart.line Color.orange Dots.none "Accel" acceleration
@@ -428,7 +428,7 @@ render myTimeline toPos config =
                     Time.millisToPosix (round (toFloat startTimeInMs + (toFloat i * frameSize)))
             in
             { time = currentTime
-            , value = Animator.move (Animator.update currentTime myTimeline) toPos
+            , value = Animator.move (Internal.Timeline.atTime currentTime myTimeline) toPos
             }
                 :: rendered
         )
@@ -453,7 +453,7 @@ renderPoints move tl toPos =
                 currentTime =
                     Time.millisToPosix (i * 16)
             in
-            case move (Animator.update currentTime tl) toPos of
+            case move (Internal.Timeline.atTime currentTime tl) toPos of
                 current ->
                     { time = toFloat i * 16
                     , position = current.position
@@ -471,7 +471,7 @@ renderVelocities move tl toPos =
                 currentTime =
                     Time.millisToPosix (i * 16)
             in
-            case move (Animator.update currentTime tl) toPos of
+            case move (Internal.Timeline.atTime currentTime tl) toPos of
                 current ->
                     { time = toFloat i * 16
                     , position = current.velocity
@@ -523,7 +523,7 @@ renderEstimatedVelocity myTimeline toPos config =
                     Time.millisToPosix (round (toFloat startTimeInMs + (toFloat i * frameSize)))
 
                 estimated =
-                    Estimate.velocity 8 currentTime myTimeline toPos
+                    Estimate.velocity 32 currentTime myTimeline toPos
             in
             { time = toFloat (Time.posixToMillis currentTime)
             , value = estimated
