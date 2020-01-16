@@ -4,6 +4,7 @@ import Animator
 import Duration
 import Expect exposing (Expectation, FloatingPointTolerance(..))
 import Fuzz exposing (Fuzzer, float, int, list, string)
+import Fuzz.Timeline
 import Internal.Interpolate as Interpolate
 import Internal.Time as Time
 import Internal.Timeline as Timeline
@@ -640,11 +641,11 @@ tailRecursion =
 
 ordering =
     describe "Preserve Ordering"
-        [ fuzz (fuzzTimeline 0 6000 [ One, Two, Three, Four, Five ]) "Line order is always preserved" <|
+        [ fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ]) "Line order is always preserved" <|
             \timelineInstruction ->
                 let
                     actualTimeline =
-                        instructionsToTimeline timelineInstruction
+                        Fuzz.Timeline.toTimeline { gc = True } timelineInstruction
                 in
                 case actualTimeline of
                     Timeline.Timeline details ->
@@ -656,11 +657,11 @@ ordering =
                                 in
                                 Expect.true "Line order is preserved"
                                     (Tuple.second order)
-        , fuzz (fuzzTimeline 0 6000 [ One, Two, Three, Four, Five ])
+        , fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
             "Event order is always preserved"
           <|
             \timelineInstruction ->
-                case instructionsToTimeline timelineInstruction of
+                case Fuzz.Timeline.toTimeline { gc = True } timelineInstruction of
                     Timeline.Timeline details ->
                         case details.events of
                             Timeline.Timetable lines ->
@@ -670,23 +671,23 @@ ordering =
                                 in
                                 Expect.true "Event order is preserved"
                                     preserved
-        , fuzz (fuzzTimeline 0 6000 [ One, Two, Three, Four, Five ])
+        , fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
             "GC doesn't affect order"
           <|
             \timelineInstruction ->
-                case instructionsToTimeline timelineInstruction of
+                case Fuzz.Timeline.toTimeline { gc = True } timelineInstruction of
                     Timeline.Timeline details ->
                         case details.events of
                             Timeline.Timetable lines ->
                                 Expect.true "Event order after GC is preserved"
                                     (List.all isEventOrderPreserved lines)
-        , fuzz (fuzzTimeline 0 6000 [ One, Two, Three, Four, Five ])
+        , fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
             "GC is idempotent"
           <|
             \timelineInstruction ->
                 let
                     actualTimeline =
-                        instructionsToTimeline timelineInstruction
+                        Fuzz.Timeline.toTimeline { gc = True } timelineInstruction
 
                     gcedTimeline =
                         Timeline.gc actualTimeline
@@ -694,7 +695,91 @@ ordering =
                 Expect.equal
                     actualTimeline
                     (Timeline.gc gcedTimeline)
+        , fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
+            "GC does not affect values at and after gc time."
+          <|
+            \timelineInstruction ->
+                let
+                    time =
+                        Time.millisToPosix 1400
+
+                    actualTimeline =
+                        Fuzz.Timeline.toTimeline { gc = False } timelineInstruction
+
+                    timelineAt =
+                        Timeline.atTime time actualTimeline
+
+                    gcedTimeline =
+                        Timeline.gc timelineAt
+                in
+                Expect.all
+                    [ \tl ->
+                        Expect.equal
+                            (Animator.move tl toPosition)
+                            (Animator.move (Timeline.gc tl) toPosition)
+                    , \base ->
+                        let
+                            tl =
+                                Timeline.atTime (Time.millisToPosix 2000) base
+                        in
+                        Expect.equal
+                            (Animator.move tl toPosition)
+                            (Animator.move (Timeline.gc tl) toPosition)
+                    , \base ->
+                        let
+                            tl =
+                                Timeline.atTime (Time.millisToPosix 4000) base
+                        in
+                        Expect.equal
+                            (Animator.move tl toPosition)
+                            (Animator.move (Timeline.gc tl) toPosition)
+                    ]
+                    timelineAt
+        , only <|
+            fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
+                "Value is never NaN."
+            <|
+                \timelineInstruction ->
+                    let
+                        time =
+                            Time.millisToPosix 1400
+
+                        actualTimeline =
+                            Fuzz.Timeline.toTimeline { gc = False } timelineInstruction
+
+                        timelineAt =
+                            Timeline.atTime time actualTimeline
+
+                        movement =
+                            Animator.move timelineAt toPosition
+                    in
+                    Expect.true "Is NaN"
+                        (not (isNaN movement.position))
         ]
+
+
+toPosition event =
+    case event of
+        Starting ->
+            Animator.to 0
+
+        One ->
+            Animator.to 1
+
+        Two ->
+            Animator.to 2
+
+        Three ->
+            Animator.to 3
+
+        Four ->
+            Animator.to 4
+
+        Five ->
+            Animator.to 5
+
+        Unreachable ->
+            Animator.to -1
 
 
 isOrderPreserved (Timeline.Line start _ _) (( previous, preserved ) as existing) =
@@ -730,151 +815,6 @@ isEventOrderPreserved (Timeline.Line start startingEvent events) =
     in
     List.foldl orderPreserved ( Time.posixToMillis (Time.toPosix start), True ) (startingEvent :: events)
         |> Tuple.second
-
-
-
-{- FUZZ TESTING FOR TIMELINES
-
-
-
-
-   Ordering
-       1. No matter what set of interruptions or queues, the timeline order is correct.
-       2. Same with event order within timelines.
-
-   GC
-       1. GC does not affect 'observable' events
-           - An event is observable If it's in an unbroken chain of interruption/queued events tilll `Now`
-           - i.e. An event that dwells can drop itself and all previous events.
-
-
-   Timeline Fuzzer:
-
-       - Add some number of Queue and Interrupt at random times on a range.
-       - Specific start and end time(the range)
-
-       - High level description of pipeline.
-       - From description ->
-               - Calc observable timeline
-               - Create actual timeline
-
-
--}
-
-
-type InstructionTimeline event
-    = InstructionTimeline Int event (List (Instruction event))
-
-
-type Instruction event
-    = Queue Int (List ( Int, event ))
-    | Interruption Int (List ( Int, event ))
-
-
-fuzzTimeline : Int -> Int -> List event -> Fuzzer (InstructionTimeline event)
-fuzzTimeline one two eventOptions =
-    let
-        start =
-            min one two
-
-        end =
-            max one two
-
-        timeRange =
-            Fuzz.intRange start end
-
-        durationRange =
-            Fuzz.intRange 0 ((end - start) // 3)
-
-        instructionFuzzer =
-            listOneToFive
-                (Fuzz.oneOf
-                    [ Fuzz.map2 Interruption timeRange (fuzzEvents durationRange eventOptions)
-                    , Fuzz.map2 Queue timeRange (fuzzEvents durationRange eventOptions)
-                    ]
-                )
-    in
-    Fuzz.map2
-        (\startingEvent instructions ->
-            InstructionTimeline start startingEvent instructions
-        )
-        (Fuzz.oneOf (List.map Fuzz.constant eventOptions))
-        instructionFuzzer
-
-
-fuzzEvents : Fuzzer Int -> List event -> Fuzzer (List ( Int, event ))
-fuzzEvents timeRange eventOptions =
-    listOneToFive
-        (Fuzz.map2 Tuple.pair
-            timeRange
-            (Fuzz.oneOf (List.map Fuzz.constant eventOptions))
-        )
-
-
-instructionsToTimeline : InstructionTimeline event -> Timeline.Timeline event
-instructionsToTimeline (InstructionTimeline startTime startEvent instructions) =
-    let
-        addInstructions myTimeline =
-            List.foldl instruct myTimeline instructions
-
-        instruct instruction myTimeline =
-            case instruction of
-                Queue start events ->
-                    myTimeline
-                        |> Animator.queue (List.map instructionToEvent events)
-                        |> Animator.update (Time.millisToPosix start)
-
-                Interruption start events ->
-                    myTimeline
-                        |> Animator.interrupt (List.map instructionToEvent events)
-                        |> Animator.update (Time.millisToPosix start)
-    in
-    Animator.init startEvent
-        |> Animator.update (Time.millisToPosix startTime)
-        |> addInstructions
-
-
-instructionToEvent ( i, event ) =
-    Animator.event (Animator.millis (toFloat i)) event
-
-
-listOneToFive : Fuzzer a -> Fuzzer (List a)
-listOneToFive contents =
-    Fuzz.oneOf
-        [ Fuzz.map
-            List.singleton
-            contents
-        , Fuzz.map2
-            (\one two ->
-                [ one, two ]
-            )
-            contents
-            contents
-        , Fuzz.map3
-            (\one two three ->
-                [ one, two, three ]
-            )
-            contents
-            contents
-            contents
-        , Fuzz.map4
-            (\one two three four ->
-                [ one, two, three, four ]
-            )
-            contents
-            contents
-            contents
-            contents
-        , Fuzz.map5
-            (\one two three four five ->
-                [ one, two, three, four, five ]
-            )
-            contents
-            contents
-            contents
-            contents
-            contents
-        ]
 
 
 
