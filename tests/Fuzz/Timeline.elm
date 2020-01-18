@@ -1,4 +1,9 @@
-module Fuzz.Timeline exposing (timeline, toTimeline)
+module Fuzz.Timeline exposing
+    ( Instruction(..)
+    , InstructionTimeline(..)
+    , timeline
+    , toTimeline
+    )
 
 {-| FUZZ TESTING FOR TIMELINES
 
@@ -100,15 +105,15 @@ toTimeline { gc } (InstructionTimeline startTime startEvent instructions) =
                 Queue start events ->
                     myTimeline
                         |> Animator.queue (List.map instructionToEvent events)
-                        |> Animator.update (Time.millisToPosix start)
+                        |> update (Time.millisToPosix start)
 
                 Interruption start events ->
                     myTimeline
                         |> Animator.interrupt (List.map instructionToEvent events)
-                        |> Animator.update (Time.millisToPosix start)
+                        |> update (Time.millisToPosix start)
     in
     Animator.init startEvent
-        |> Animator.update (Time.millisToPosix startTime)
+        |> update (Time.millisToPosix startTime)
         |> addInstructions
 
 
