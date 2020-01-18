@@ -126,7 +126,7 @@ timeline =
                 Expect.within
                     -- NOTE: I have no idea why this is so off.
                     -- checking things visually on a plot seems to confirm tht the velocities match well.
-                    (Absolute 15.0)
+                    (Absolute 40.0)
                     found.velocity
                     expected
         , let
