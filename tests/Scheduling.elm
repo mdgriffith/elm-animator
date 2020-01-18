@@ -294,20 +294,20 @@ interruptions =
                                 , Animator.event (Animator.seconds 1) Unreachable
                                 , Animator.wait (Animator.seconds 1.0)
                                 ]
-                            |> Animator.update (Time.millisToPosix 0)
+                            |> Timeline.updateNoGC (Time.millisToPosix 0)
                             |> Animator.interrupt
                                 [ Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) Three
                                 , Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) Four
                                 ]
-                            |> Animator.update (Time.millisToPosix 3000)
+                            |> Timeline.updateNoGC (Time.millisToPosix 3000)
                             |> Animator.interrupt
                                 [ Animator.event (Animator.seconds 1) Two
                                 , Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) One
                                 ]
-                            |> Animator.update (Time.millisToPosix 4500)
+                            |> Timeline.updateNoGC (Time.millisToPosix 4500)
                 in
                 Expect.equal
                     doubleInterrupted
@@ -655,7 +655,58 @@ ordering =
                                     order =
                                         List.foldl isOrderPreserved ( 0, True ) lines
                                 in
-                                Expect.true "Line order is preserved"
+                                Expect.true "Line order is not preserved"
+                                    (Tuple.second order)
+        , test "Line order test case 1" <|
+            \_ ->
+                let
+                    instructions =
+                        Fuzz.Timeline.InstructionTimeline 0
+                            Five
+                            [ Fuzz.Timeline.Queue 1 [ ( 1, Two ) ]
+                            , Fuzz.Timeline.Interruption 1 [ ( 1, One ) ]
+                            , Fuzz.Timeline.Interruption 1 [ ( 0, Four ) ]
+                            , Fuzz.Timeline.Interruption 2 [ ( 0, Two ) ]
+                            , Fuzz.Timeline.Interruption 2 [ ( 0, Five ) ]
+                            ]
+
+                    actualTimeline =
+                        Fuzz.Timeline.toTimeline { gc = False } instructions
+                in
+                case actualTimeline of
+                    Timeline.Timeline details ->
+                        case details.events of
+                            Timeline.Timetable lines ->
+                                let
+                                    order =
+                                        List.foldl isOrderPreserved ( 0, True ) lines
+                                in
+                                Expect.true "Line order is not preserved"
+                                    (Tuple.second order)
+        , test "Line order test case 2" <|
+            \_ ->
+                let
+                    instructions =
+                        Fuzz.Timeline.InstructionTimeline 0
+                            Five
+                            [ Fuzz.Timeline.Interruption 0 [ ( 1, Two ) ]
+                            , Fuzz.Timeline.Interruption 0 [ ( 1, Four ) ] --, ( 0, Four ), ( 0, One ), ( 0, One ) ]
+                            , Fuzz.Timeline.Interruption 0 [ ( 0, One ) ]
+                            , Fuzz.Timeline.Interruption 1 [ ( 0, Three ) ] --, ( 0, One ), ( 0, Five ), ( 0, Five ), ( 0, Two ) ]
+                            ]
+
+                    actualTimeline =
+                        Fuzz.Timeline.toTimeline { gc = False } instructions
+                in
+                case actualTimeline of
+                    Timeline.Timeline details ->
+                        case details.events of
+                            Timeline.Timetable lines ->
+                                let
+                                    order =
+                                        List.foldl isOrderPreserved ( 0, True ) lines
+                                in
+                                Expect.true "Line order is not preserved"
                                     (Tuple.second order)
         , fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
             "Event order is always preserved"
@@ -714,47 +765,36 @@ ordering =
                 in
                 Expect.all
                     [ \tl ->
-                        Expect.equal
-                            (Animator.move tl toPosition)
-                            (Animator.move (Timeline.gc tl) toPosition)
-                    , \base ->
-                        let
-                            tl =
-                                Timeline.atTime (Time.millisToPosix 2000) base
-                        in
-                        Expect.equal
-                            (Animator.move tl toPosition)
-                            (Animator.move (Timeline.gc tl) toPosition)
-                    , \base ->
-                        let
-                            tl =
-                                Timeline.atTime (Time.millisToPosix 4000) base
-                        in
-                        Expect.equal
-                            (Animator.move tl toPosition)
-                            (Animator.move (Timeline.gc tl) toPosition)
+                        Expect.within
+                            (Absolute 0.001)
+                            (.position (Animator.move tl toPosition))
+                            (.position (Animator.move (Timeline.gc tl) toPosition))
+                    , \tl ->
+                        Expect.within
+                            (Absolute 0.001)
+                            (.velocity (Animator.move tl toPosition))
+                            (.velocity (Animator.move (Timeline.gc tl) toPosition))
                     ]
                     timelineAt
-        , only <|
-            fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
-                "Value is never NaN."
-            <|
-                \timelineInstruction ->
-                    let
-                        time =
-                            Time.millisToPosix 1400
+        , fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
+            "Value is never NaN."
+          <|
+            \timelineInstruction ->
+                let
+                    time =
+                        Time.millisToPosix 1400
 
-                        actualTimeline =
-                            Fuzz.Timeline.toTimeline { gc = False } timelineInstruction
+                    actualTimeline =
+                        Fuzz.Timeline.toTimeline { gc = False } timelineInstruction
 
-                        timelineAt =
-                            Timeline.atTime time actualTimeline
+                    timelineAt =
+                        Timeline.atTime time actualTimeline
 
-                        movement =
-                            Animator.move timelineAt toPosition
-                    in
-                    Expect.true "Is NaN"
-                        (not (isNaN movement.position))
+                    movement =
+                        Animator.move timelineAt toPosition
+                in
+                Expect.true "Is NaN"
+                    (not (isNaN movement.position))
         ]
 
 
