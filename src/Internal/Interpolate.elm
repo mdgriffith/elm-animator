@@ -766,12 +766,20 @@ velocityBetween : Pixels -> Time.Absolute -> Pixels -> Time.Absolute -> PixelsPe
 velocityBetween one oneTime two twoTime =
     let
         distance =
-            two |> Quantity.minus one
+            two
+                |> Quantity.minus one
 
         duration =
             Time.duration oneTime twoTime
+
+        vel =
+            distance |> Quantity.per duration
     in
-    distance |> Quantity.per duration
+    if Quantity.isNaN vel || Quantity.isInfinite vel then
+        Quantity.zero
+
+    else
+        vel
 
 
 startColoring : (event -> Color.Color) -> Timeline.Occurring event -> Color.Color
@@ -903,7 +911,7 @@ interpolateValue start end t =
 {-| Borrowed from: <https://github.com/ianmackenzie/elm-geometry/blob/3.1.0/src/CubicSpline2d.elm#L370>
 -}
 pointOn : Spline -> Proportion -> Point
-pointOn (Spline p1 p2 p3 p4) proportion =
+pointOn ((Spline p1 p2 p3 p4) as s) proportion =
     let
         q1 =
             interpolatePoints p1 p2 proportion

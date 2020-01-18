@@ -404,7 +404,6 @@ garbageCollectOldEvents now droppable lines =
             else if dwellingAt now startingEvent then
                 -- we can safetly drop the droppables
                 lines
-                -- List.reverse droppable ++ lines
 
             else
                 let
@@ -449,9 +448,7 @@ garbageCollectOldEvents now droppable lines =
                                     else
                                         List.reverse droppable ++ lines
 
-                        -- List.reverse droppable ++ lines
                         DwellingAt newLine ->
-                            -- newLine :: lines
                             reverseEvents newLine :: remaining
 
 
@@ -687,7 +684,7 @@ applyInterruptionHelper interrupts timeline =
 
 -}
 interrupt : TimelineDetails events -> Time.Absolute -> Schedule events -> Timetable events
-interrupt details startAt ((Schedule delay_ startingEvent reverseQueued) as scheduled) =
+interrupt details startAt scheduled =
     case details.events of
         Timetable lines ->
             case interruptLines startAt scheduled [] lines of
@@ -705,13 +702,31 @@ interruptLines startInterruption scheduled pastLines lines =
             Nothing
 
         startLine :: remaining ->
-            case interruptLine startInterruption scheduled startLine remaining of
-                Nothing ->
-                    interruptLines startInterruption scheduled (startLine :: pastLines) remaining
+            if interruptionHappensLater startInterruption remaining then
+                interruptLines startInterruption scheduled (startLine :: pastLines) remaining
 
-                Just interruption ->
-                    -- interruption is the interruption in the proper order, embedded with remaining
-                    Just (List.reverse pastLines ++ (startLine :: interruption))
+            else
+                case interruptLine startInterruption scheduled startLine remaining of
+                    Nothing ->
+                        interruptLines startInterruption scheduled (startLine :: pastLines) remaining
+
+                    Just interruption ->
+                        -- interruption is the interruption in the proper order, embedded with remaining
+                        if startInterruption == lineStartTime startLine then
+                            -- if the times are the same, then this new line replaces the current one.
+                            Just (List.reverse pastLines ++ interruption)
+
+                        else
+                            Just (List.reverse pastLines ++ (startLine :: interruption))
+
+
+interruptionHappensLater startInterruption remaining =
+    case remaining of
+        [] ->
+            False
+
+        top :: _ ->
+            Time.thisAfterOrEqualThat startInterruption (lineStartTime top)
 
 
 interruptLine startInterruption scheduled line future =
@@ -723,7 +738,9 @@ interruptLine startInterruption scheduled line future =
                     [] ->
                         case getTransitionAt startInterruption startEvent trailing of
                             Nothing ->
-                                Nothing
+                                Just
+                                    [ createLine startInterruption scheduled
+                                    ]
 
                             Just last2Events ->
                                 Just
@@ -784,13 +801,6 @@ interruptAtExactly startInterruption scheduled (LastTwoEvents penultimateTime pe
             in
             createLine startInterruption
                 (Schedule delay_ newStartingEvent reverseQueued)
-
-
-
--- type Found event
---     = NothingFound
---     | FoundOne
---     | FoundTwo (LastTwoEvents Time.Absolute event Time.Absolute event)
 
 
 type LastTwoEvents event
