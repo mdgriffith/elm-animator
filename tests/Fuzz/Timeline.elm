@@ -92,7 +92,7 @@ toTimeline { gc } (InstructionTimeline startTime startEvent instructions) =
     let
         update x =
             if gc then
-                Animator.update x
+                Timeline.update x
 
             else
                 Timeline.updateNoGC x

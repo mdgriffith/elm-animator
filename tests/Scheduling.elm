@@ -28,7 +28,7 @@ type Event
 
 timeline =
     Animator.init Starting
-        |> Animator.update (Time.millisToPosix 0)
+        |> Timeline.update (Time.millisToPosix 0)
 
 
 qty =
@@ -88,7 +88,7 @@ queueing =
                     , Animator.event (Animator.seconds 1) Three
                     , Animator.wait (Animator.seconds 1.0)
                     ]
-                |> Animator.update (Time.millisToPosix 0)
+                |> Timeline.update (Time.millisToPosix 0)
     in
     describe "Queueing"
         [ describe "Simple"
@@ -128,11 +128,11 @@ queueing =
                 let
                     queued =
                         timeline
-                            |> Animator.update (Time.millisToPosix 3000)
+                            |> Timeline.update (Time.millisToPosix 3000)
                             |> Animator.queue
                                 [ Animator.event (Animator.seconds 1) One
                                 ]
-                            |> Animator.update (Time.millisToPosix 4000)
+                            |> Timeline.update (Time.millisToPosix 4000)
                 in
                 -- specifically we expect the dwell time on `Starting` to be extended
                 Expect.equal
@@ -157,15 +157,15 @@ queueing =
                 let
                     queued =
                         timeline
-                            |> Animator.update (Time.millisToPosix 3000)
+                            |> Timeline.update (Time.millisToPosix 3000)
                             |> Animator.queue
                                 [ Animator.event (Animator.seconds 1) One
                                 ]
-                            |> Animator.update (Time.millisToPosix 4000)
+                            |> Timeline.update (Time.millisToPosix 4000)
                             |> Animator.queue
                                 [ Animator.event (Animator.seconds 1) Two
                                 ]
-                            |> Animator.update (Time.millisToPosix 7000)
+                            |> Timeline.update (Time.millisToPosix 7000)
                 in
                 -- specifically we expect the dwell time on `Starting` and `One` to be extended
                 Expect.equal
@@ -194,15 +194,15 @@ queueing =
                             [ Animator.wait (Animator.seconds 2)
                             , Animator.event (Animator.seconds 1) One
                             ]
-                        |> Animator.update (Time.millisToPosix 0)
+                        |> Timeline.update (Time.millisToPosix 0)
                         -- move the clock forward to 2s so that `now` matches
-                        |> Animator.update (Time.millisToPosix 2000)
+                        |> Timeline.update (Time.millisToPosix 2000)
                     )
                     (timeline
                         |> Animator.queue
                             [ Animator.event (Animator.seconds 1) One
                             ]
-                        |> Animator.update (Time.millisToPosix 2000)
+                        |> Timeline.update (Time.millisToPosix 2000)
                     )
         ]
 
@@ -220,14 +220,14 @@ interruptions =
                     , Animator.event (Animator.seconds 1) Unreachable
                     , Animator.wait (Animator.seconds 1.0)
                     ]
-                |> Animator.update (Time.millisToPosix 0)
+                |> Timeline.update (Time.millisToPosix 0)
                 |> Animator.interrupt
                     [ Animator.wait (Animator.seconds 1.0)
                     , Animator.event (Animator.seconds 1) Three
                     , Animator.wait (Animator.seconds 1.0)
                     , Animator.event (Animator.seconds 1) Four
                     ]
-                |> Animator.update (Time.millisToPosix 3000)
+                |> Timeline.update (Time.millisToPosix 3000)
     in
     describe "Interruptions"
         [ test "Correctly schedules" <|
@@ -276,7 +276,7 @@ interruptions =
             \t ->
                 let
                     new =
-                        Animator.update (Time.millisToPosix t) newTimeline
+                        Timeline.update (Time.millisToPosix t) newTimeline
                 in
                 Expect.atLeast 0
                     (Animator.float new toVals)
@@ -487,15 +487,15 @@ cleaning =
                 let
                     newTimeline =
                         Animator.init Starting
-                            |> Animator.update (Time.millisToPosix 0)
+                            |> Timeline.update (Time.millisToPosix 0)
                             |> Animator.queue
                                 [ Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) One
                                 , Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) Two
                                 ]
-                            |> Animator.update (Time.millisToPosix 1000)
-                            |> Animator.update (Time.millisToPosix 5000)
+                            |> Timeline.update (Time.millisToPosix 1000)
+                            |> Timeline.update (Time.millisToPosix 5000)
                             |> Timeline.gc
                 in
                 Expect.equal
@@ -519,21 +519,21 @@ cleaning =
                 let
                     newTimeline =
                         Animator.init Starting
-                            |> Animator.update (Time.millisToPosix 0)
+                            |> Timeline.update (Time.millisToPosix 0)
                             |> Animator.queue
                                 [ Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) One
                                 , Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) Two
                                 ]
-                            |> Animator.update (Time.millisToPosix 1000)
+                            |> Timeline.update (Time.millisToPosix 1000)
                             |> Animator.interrupt
                                 [ Animator.event (Animator.seconds 1) Four
                                 , Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) Five
                                 ]
-                            |> Animator.update (Time.millisToPosix 2000)
-                            |> Animator.update (Time.millisToPosix 5000)
+                            |> Timeline.update (Time.millisToPosix 2000)
+                            |> Timeline.update (Time.millisToPosix 5000)
                             |> Timeline.gc
                 in
                 Expect.equal
@@ -557,21 +557,21 @@ cleaning =
                 let
                     newTimeline =
                         Animator.init Starting
-                            |> Animator.update (Time.millisToPosix 0)
+                            |> Timeline.update (Time.millisToPosix 0)
                             |> Animator.queue
                                 [ Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) One
                                 , Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) Two
                                 ]
-                            |> Animator.update (Time.millisToPosix 1000)
+                            |> Timeline.update (Time.millisToPosix 1000)
                             |> Animator.interrupt
                                 [ Animator.event (Animator.seconds 1) Four
                                 , Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) Five
                                 ]
-                            |> Animator.update (Time.millisToPosix 2000)
-                            |> Animator.update (Time.millisToPosix 5000)
+                            |> Timeline.update (Time.millisToPosix 2000)
+                            |> Timeline.update (Time.millisToPosix 5000)
                             |> Timeline.gc
                 in
                 Expect.equal
@@ -600,10 +600,10 @@ tailRecursion =
                 let
                     newTimeline =
                         Animator.init 0
-                            |> Animator.update (Time.millisToPosix 0)
+                            |> Timeline.update (Time.millisToPosix 0)
                             |> Animator.queue
                                 (List.map (Animator.event (Animator.seconds 1)) (List.range 0 10000))
-                            |> Animator.update (Time.millisToPosix 5000)
+                            |> Timeline.update (Time.millisToPosix 5000)
                 in
                 Expect.true "Successfully enqueued 10,000 events" True
         , test "Interrupting" <|
@@ -611,10 +611,10 @@ tailRecursion =
                 let
                     newTimeline =
                         Animator.init 0
-                            |> Animator.update (Time.millisToPosix 0)
+                            |> Timeline.update (Time.millisToPosix 0)
                             |> Animator.interrupt
                                 (List.map (Animator.event (Animator.seconds 1)) (List.range 0 10000))
-                            |> Animator.update (Time.millisToPosix 5000)
+                            |> Timeline.update (Time.millisToPosix 5000)
                 in
                 Expect.true "Successfully interupt with 10,000 events" True
         , test "Interpolating" <|
@@ -622,18 +622,18 @@ tailRecursion =
                 let
                     newTimeline =
                         Animator.init 0
-                            |> Animator.update (Time.millisToPosix 0)
+                            |> Timeline.update (Time.millisToPosix 0)
                             |> Animator.queue
                                 (List.map (Animator.event (Animator.seconds 1)) (List.range 0 10000))
-                            |> Animator.update (Time.millisToPosix 5000)
+                            |> Timeline.update (Time.millisToPosix 5000)
 
                     now =
-                        Animator.move
+                        Animator.details
                             (Timeline.atTime
                                 (Time.millisToPosix 1000000)
                                 newTimeline
                             )
-                            (\x -> Animator.to (toFloat x))
+                            (\x -> Animator.at (toFloat x))
                 in
                 Expect.true "Successfully interpolate with 10,000 events" True
         ]
@@ -767,13 +767,13 @@ ordering =
                     [ \tl ->
                         Expect.within
                             (Absolute 0.001)
-                            (.position (Animator.move tl toPosition))
-                            (.position (Animator.move (Timeline.gc tl) toPosition))
+                            (.position (Animator.details tl toPosition))
+                            (.position (Animator.details (Timeline.gc tl) toPosition))
                     , \tl ->
                         Expect.within
                             (Absolute 0.001)
-                            (.velocity (Animator.move tl toPosition))
-                            (.velocity (Animator.move (Timeline.gc tl) toPosition))
+                            (.velocity (Animator.details tl toPosition))
+                            (.velocity (Animator.details (Timeline.gc tl) toPosition))
                     ]
                     timelineAt
         , fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
@@ -791,7 +791,7 @@ ordering =
                         Timeline.atTime time actualTimeline
 
                     movement =
-                        Animator.move timelineAt toPosition
+                        Animator.details timelineAt toPosition
                 in
                 Expect.true "Is NaN"
                     (not (isNaN movement.position))
@@ -801,25 +801,25 @@ ordering =
 toPosition event =
     case event of
         Starting ->
-            Animator.to 0
+            Animator.at 0
 
         One ->
-            Animator.to 1
+            Animator.at 1
 
         Two ->
-            Animator.to 2
+            Animator.at 2
 
         Three ->
-            Animator.to 3
+            Animator.at 3
 
         Four ->
-            Animator.to 4
+            Animator.at 4
 
         Five ->
-            Animator.to 5
+            Animator.at 5
 
         Unreachable ->
-            Animator.to -1
+            Animator.at -1
 
 
 isOrderPreserved (Timeline.Line start _ _) (( previous, preserved ) as existing) =

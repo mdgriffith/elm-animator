@@ -26,19 +26,38 @@ toPosition event =
                 |> Animator.loop (Animator.millis 100)
 
         Griffyndor ->
-            Animator.to 300
+            Animator.at 300
 
         Slytherin ->
-            Animator.to 700
+            Animator.at 700
 
         Ravenclaw ->
-            Animator.to 1000
+            Animator.at 1000
+
+
+oscillators event =
+    case event of
+        Hufflepuff ->
+            Animator.wave 0 1
+                |> Animator.loop (Animator.millis 100)
+
+        Griffyndor ->
+            Animator.wave 0 1
+                |> Animator.loop (Animator.millis 200)
+
+        Slytherin ->
+            Animator.wave 0 1
+                |> Animator.loop (Animator.millis 300)
+
+        Ravenclaw ->
+            Animator.wave 0 1
+                |> Animator.loop (Animator.millis 400)
 
 
 single =
     Animator.init Hufflepuff
-        |> Animator.update (Time.millisToPosix 0)
-        |> Animator.update (Time.millisToPosix 50)
+        |> Timeline.update (Time.millisToPosix 0)
+        |> Timeline.update (Time.millisToPosix 50)
 
 
 four =
@@ -52,7 +71,7 @@ four =
             , Animator.event (Animator.seconds 1) Ravenclaw
             , Animator.wait (Animator.seconds 1.0)
             ]
-        |> Animator.update (Time.millisToPosix 0)
+        |> Timeline.update (Time.millisToPosix 0)
 
 
 oscillations =
@@ -88,7 +107,7 @@ oscillations =
             \_ ->
                 let
                     { position, velocity } =
-                        Animator.move single toPosition
+                        Animator.details single toPosition
                 in
                 Expect.within
                     (Absolute 0.001)
@@ -98,10 +117,44 @@ oscillations =
             \_ ->
                 let
                     { position, velocity } =
-                        Animator.move (Animator.update (Time.millisToPosix 150) single) toPosition
+                        Animator.details (Timeline.update (Time.millisToPosix 150) single) toPosition
                 in
                 Expect.within
                     (Absolute 0.001)
                     position
                     1.0
+        , test "Scheduling doesn't eliminate existing thing" <|
+            \_ ->
+                let
+                    myTimeline =
+                        Animator.init Hufflepuff
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.to (Animator.seconds 1) Griffyndor
+                            |> Timeline.update (Time.millisToPosix 0)
+
+                    position =
+                        Animator.move myTimeline oscillators
+                in
+                Expect.within
+                    (Absolute 0.001)
+                    position
+                    1.0
+        , only <|
+            test "Mix waves when we transition from one to another" <|
+                \_ ->
+                    let
+                        double =
+                            Animator.init Hufflepuff
+                                |> Timeline.update (Time.millisToPosix 0)
+                                |> Animator.to (Animator.seconds 1) Griffyndor
+                                |> Timeline.update (Time.millisToPosix 0)
+                                |> Timeline.atTime (Time.millisToPosix 954)
+
+                        position =
+                            Animator.move double oscillators
+                    in
+                    Expect.within
+                        (Absolute 0.001)
+                        position
+                        1.0
         ]
