@@ -1,52 +1,66 @@
 module Animator exposing
-    ( Timeline, init, subscription
+    ( Timeline, init
     , current
-    , Schedule, Event
-    , wait, event
+    , Animator, animator, with, toSubscription
+    , to
     , Duration, millis, seconds, minutes
-    , animator, with, toSubscription
-    , queue, interrupt, update
-    , float, move, color
-    , xy, xyz, to, Movement
-    , leave, arrive, linear, smooth, verySmooth
-    , leaveLate, arriveEarly, withWobble, wobble
+    , Step, wait, event, interrupt, queue
+    , color
+    , linear, float
+    , Movement, move, xy, xyz
+    , details
+    , at
+    , Proportion
+    , leaveSmoothly, leaveLate
+    , arriveSmoothly, arriveEarly
+    , withWobble
     , loop, wave, wrap, zigzag
     , pause, shift
-    , describe
     )
 
 {-|
 
-@docs Timeline, init, subscription
+@docs Timeline, init
 
 @docs current
 
 
+# Animating
+
+@docs Animator, animator, with, toSubscription
+
+
 # Adding events to a timeline
 
-@docs Schedule, Event
-
-@docs Step, wait, event
+@docs to
 
 @docs Duration, millis, seconds, minutes
 
-
-# Animating
-
-@docs animator, with, toSubscription
-
-@docs queue, interrupt, update
+@docs Step, wait, event, interrupt, queue
 
 
 # Animating
 
-@docs float, move, color
+@docs color
 
-@docs xy, xyz, to, Movement
+@docs linear, float
 
-@docs Proportion, leave, arrive, linear, smooth, verySmooth
+@docs Movement, move, xy, xyz
 
-@docs leaveLate, arriveEarly, withWobble, wobble
+@docs details
+
+
+# Crafting Movement
+
+@docs at
+
+@docs Proportion
+
+@docs leaveSmoothly, leaveLate
+
+@docs arriveSmoothly, arriveEarly
+
+@docs withWobble
 
 
 # Oscillators
@@ -54,11 +68,6 @@ module Animator exposing
 @docs loop, wave, wrap, zigzag
 
 @docs pause, shift
-
-
-# Debugging
-
-@docs describe
 
 -}
 
@@ -73,18 +82,12 @@ import Time
 
 
 {-| -}
-type alias Timeline event =
-    Timeline.Timeline event
-
-
-{--}
-update : Time.Posix -> Timeline event -> Timeline event
-update =
-    Timeline.update
+type alias Timeline state =
+    Timeline.Timeline state
 
 
 {-| -}
-init : event -> Timeline event
+init : state -> Timeline state
 init first =
     Timeline.Timeline
         { initial = first
@@ -98,7 +101,7 @@ init first =
 
 
 {-| -}
-current : Timeline event -> event
+current : Timeline state -> state
 current =
     Timeline.getEvent << Timeline.current
 
@@ -126,25 +129,26 @@ minutes =
     Duration.minutes
 
 
-type Step event
+{-| -}
+type Step state
     = Wait Duration
-    | TransitionTo Duration event
+    | TransitionTo Duration state
 
 
 {-| -}
-event : Duration -> event -> Step event
+event : Duration -> state -> Step state
 event =
     TransitionTo
 
 
 {-| -}
-wait : Duration -> Step event
+wait : Duration -> Step state
 wait =
     Wait
 
 
 {-| -}
-queue : List (Step event) -> Timeline event -> Timeline event
+queue : List (Step state) -> Timeline state -> Timeline state
 queue steps (Timeline.Timeline tl) =
     Timeline.Timeline
         { tl
@@ -165,7 +169,13 @@ queue steps (Timeline.Timeline tl) =
 
 
 {-| -}
-interrupt : List (Step event) -> Timeline event -> Timeline event
+to : Duration -> state -> Timeline state -> Timeline state
+to dur ev timeline =
+    interrupt [ event dur ev ] timeline
+
+
+{-| -}
+interrupt : List (Step state) -> Timeline state -> Timeline state
 interrupt steps (Timeline.Timeline tl) =
     Timeline.Timeline
         { tl
@@ -180,7 +190,7 @@ interrupt steps (Timeline.Timeline tl) =
         }
 
 
-initializeSchedule : Time.Duration -> List (Step event) -> Maybe ( Schedule event, List (Step event) )
+initializeSchedule : Time.Duration -> List (Step state) -> Maybe ( Schedule state, List (Step state) )
 initializeSchedule waiting steps =
     case steps of
         [] ->
@@ -195,7 +205,7 @@ initializeSchedule waiting steps =
             Just ( Timeline.Schedule waiting (Timeline.Event dur checkpoint Nothing) [], moreSteps )
 
 
-stepsToEvents : Step event -> Timeline.Schedule event -> Timeline.Schedule event
+stepsToEvents : Step state -> Timeline.Schedule state -> Timeline.Schedule state
 stepsToEvents step (Timeline.Schedule delay startEvent events) =
     case events of
         [] ->
@@ -235,25 +245,25 @@ stepsToEvents step (Timeline.Schedule delay startEvent events) =
 
 
 {-| -}
-type alias Event event =
-    Timeline.Event event
+type alias Event state =
+    Timeline.Event state
 
 
 {-| -}
-type alias Schedule event =
-    Timeline.Schedule event
+type alias Schedule state =
+    Timeline.Schedule state
 
 
 
 {- Interpolations -}
 
 
-type alias Description event =
-    Timeline.Description event
+type alias Description state =
+    Timeline.Description state
 
 
 {-| -}
-describe : Timeline event -> List (Description event)
+describe : Timeline state -> List (Description state)
 describe timeline =
     Timeline.foldp identity
         Interpolate.startDescription
@@ -263,15 +273,18 @@ describe timeline =
 
 
 {-| -}
-float : Timeline event -> (event -> Float) -> Float
-float timeline lookup =
-    .position <|
-        move timeline (\ev -> to (lookup ev))
+color : Timeline state -> (state -> Color) -> Color
+color timeline lookup =
+    Timeline.foldp lookup
+        Interpolate.startColoring
+        Nothing
+        Interpolate.color
+        timeline
 
 
 {-| Interpolate a float linearly between destinations.
 -}
-linear : Timeline event -> (event -> Float) -> Float
+linear : Timeline state -> (state -> Float) -> Float
 linear timeline lookup =
     Timeline.foldp lookup
         Interpolate.startLinear
@@ -281,17 +294,21 @@ linear timeline lookup =
 
 
 {-| -}
-color : Timeline event -> (event -> Color) -> Color
-color timeline lookup =
-    Timeline.foldp lookup
-        Interpolate.startColoring
-        Nothing
-        Interpolate.color
-        timeline
+float : Timeline state -> (state -> Float) -> Float
+float timeline lookup =
+    .position <|
+        details timeline (\ev -> at (lookup ev))
 
 
 {-| -}
-xy : Timeline event -> (event -> { x : Movement, y : Movement }) -> { x : Float, y : Float }
+move : Timeline state -> (state -> Movement) -> Float
+move timeline lookup =
+    .position <|
+        details timeline lookup
+
+
+{-| -}
+xy : Timeline state -> (state -> { x : Movement, y : Movement }) -> { x : Float, y : Float }
 xy timeline lookup =
     (\{ x, y } ->
         { x = unwrapUnits x |> .position
@@ -307,7 +324,7 @@ xy timeline lookup =
 
 
 {-| -}
-xyz : Timeline event -> (event -> { x : Movement, y : Movement, z : Movement }) -> { x : Float, y : Float, z : Float }
+xyz : Timeline state -> (state -> { x : Movement, y : Movement, z : Movement }) -> { x : Float, y : Float, z : Float }
 xyz timeline lookup =
     (\{ x, y, z } ->
         { x = unwrapUnits x |> .position
@@ -323,8 +340,9 @@ xyz timeline lookup =
             timeline
 
 
-move : Timeline event -> (event -> Movement) -> { position : Float, velocity : Float }
-move timeline lookup =
+{-| -}
+details : Timeline state -> (state -> Movement) -> { position : Float, velocity : Float }
+details timeline lookup =
     unwrapUnits
         (Timeline.foldp lookup
             Interpolate.startMoving
@@ -352,8 +370,8 @@ type alias Movement =
 
 
 {-| -}
-to : Float -> Movement
-to =
+at : Float -> Movement
+at =
     Interpolate.Position Interpolate.defaultDeparture Interpolate.defaultArrival
 
 
@@ -371,17 +389,6 @@ type alias Proportion =
 
 
 {-| -}
-wobble : Movement -> Movement
-wobble movement =
-    case movement of
-        Interpolate.Position dep arrival pos ->
-            Interpolate.Position dep { arrival | wobbliness = 0.8 } pos
-
-        Interpolate.Oscillate dep arrival dur fn ->
-            Interpolate.Oscillate dep { arrival | wobbliness = 0.8 } dur fn
-
-
-{-| -}
 withWobble : Proportion -> Movement -> Movement
 withWobble p movement =
     case movement of
@@ -394,21 +401,13 @@ withWobble p movement =
 
 
 -- {-| -}
--- linear : Proportion
--- linear =
---     0
-
-
-{-| -}
-smooth : Proportion
-smooth =
-    0.4
-
-
-{-| -}
-verySmooth : Proportion
-verySmooth =
-    0.8
+-- smooth : Proportion
+-- smooth =
+--     0.4
+-- {-| -}
+-- verySmooth : Proportion
+-- verySmooth =
+--     0.8
 
 
 {-| -}
@@ -434,8 +433,8 @@ arriveEarly p movement =
 
 
 {-| -}
-leave : Proportion -> Movement -> Movement
-leave s movement =
+leaveSmoothly : Proportion -> Movement -> Movement
+leaveSmoothly s movement =
     case movement of
         Interpolate.Position dep arrival pos ->
             Interpolate.Position { dep | slowly = clamp 0 1 s } arrival pos
@@ -445,8 +444,8 @@ leave s movement =
 
 
 {-| -}
-arrive : Proportion -> Movement -> Movement
-arrive s movement =
+arriveSmoothly : Proportion -> Movement -> Movement
+arriveSmoothly s movement =
     case movement of
         Interpolate.Position dep arrival pos ->
             Interpolate.Position dep { arrival | slowly = clamp 0 1 s } pos
@@ -470,7 +469,7 @@ type Pause
 
 
 within : Float -> Float -> Float -> Bool
-within tolerance anchor at =
+within tolerance anchor val =
     let
         low =
             anchor - tolerance
@@ -478,14 +477,14 @@ within tolerance anchor at =
         high =
             anchor + tolerance
     in
-    at >= low && at <= high
+    val >= low && val <= high
 
 
 pauseToBounds : Pause -> Duration -> Duration -> ( Float, Float )
-pauseToBounds (Pause dur at) activeDuration totalDur =
+pauseToBounds (Pause dur val) activeDuration totalDur =
     let
         start =
-            Quantity.multiplyBy at activeDuration
+            Quantity.multiplyBy val activeDuration
     in
     ( Quantity.ratio start totalDur
     , Quantity.ratio (Quantity.plus start dur) totalDur
@@ -589,7 +588,7 @@ loop activeDuration (Oscillator pauses osc) =
 It's expecting a number between 0 and 1.
 
 -}
-shift : Float -> Oscillator -> Oscillator
+shift : Proportion -> Oscillator -> Oscillator
 shift x (Oscillator pauses osc) =
     Oscillator
         pauses
@@ -605,23 +604,14 @@ wrapToUnit x =
 This pause time will be added to the time you specify using `loop`, so that you can adjust the pause without disturbing the original duration of the oscillator.
 
 -}
-pause : Duration -> Float -> Oscillator -> Oscillator
-pause forDuration at (Oscillator pauses osc) =
+pause : Duration -> Proportion -> Oscillator -> Oscillator
+pause forDuration val (Oscillator pauses osc) =
     Oscillator
-        (Pause forDuration at :: pauses)
+        (Pause forDuration val :: pauses)
         osc
 
 
-orbit : { duration : Duration, toPosition : Float -> Float } -> Movement
-orbit config =
-    Interpolate.Oscillate
-        Interpolate.defaultDeparture
-        Interpolate.defaultArrival
-        config.duration
-        config.toPosition
-
-
-{-| Start at one number and move linearly to another. At th end, wrap to the first.
+{-| Start at one number and move linearly to another, then wrap back to the first.
 -}
 wrap : Float -> Float -> Oscillator
 wrap start end =
@@ -631,7 +621,7 @@ wrap start end =
     in
     Oscillator []
         (\u ->
-            u * total
+            start + (total * u)
         )
 
 
@@ -659,7 +649,8 @@ wave start end =
         )
 
 
-{-| -}
+{-| Start at one number, move linearly to another, and then linearly back.
+-}
 zigzag : Float -> Float -> Oscillator
 zigzag start end =
     let
@@ -668,7 +659,7 @@ zigzag start end =
     in
     Oscillator []
         (\u ->
-            start + (total * u)
+            start + total * (1 - abs (2 * u - 1))
         )
 
 
@@ -711,7 +702,7 @@ zigzag start end =
 
 
 {-| -}
-subscription : (Timeline event -> msg) -> Timeline event -> Sub msg
+subscription : (Timeline state -> msg) -> Timeline state -> Sub msg
 subscription toMsg timeline =
     if Timeline.needsUpdate timeline then
         Browser.Events.onAnimationFrame
@@ -723,20 +714,19 @@ subscription toMsg timeline =
         Sub.none
 
 
+{-| -}
 type Animator model msg
     = Animator (model -> Bool) (Time.Posix -> model -> model) (model -> msg)
 
 
+{-| -}
 animator : (model -> msg) -> Animator model msg
 animator toMsg =
     Animator (always False) (\now model -> model) toMsg
 
 
-type alias Over model event =
-    ( model -> Timeline event, Timeline event -> model -> model )
-
-
-with : (model -> Timeline event) -> (Timeline event -> model -> model) -> Animator model msg -> Animator model msg
+{-| -}
+with : (model -> Timeline state) -> (Timeline state -> model -> model) -> Animator model msg -> Animator model msg
 with get set (Animator isRunning updateModel toMsg) =
     Animator
         (\model ->
@@ -751,11 +741,12 @@ with get set (Animator isRunning updateModel toMsg) =
                 newModel =
                     updateModel now model
             in
-            set (update now (get newModel)) newModel
+            set (Timeline.update now (get newModel)) newModel
         )
         toMsg
 
 
+{-| -}
 toSubscription : model -> Animator model msg -> Sub msg
 toSubscription model (Animator isRunning updateModel toMsg) =
     if isRunning model then

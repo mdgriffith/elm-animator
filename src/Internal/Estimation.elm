@@ -24,13 +24,13 @@ velocity resolution time timeline toPosition =
             mapTime (\t -> t + resolution) time
 
         zero =
-            Animator.move (Timeline.atTime before timeline) toPosition
+            Animator.details (Timeline.atTime before timeline) toPosition
 
         one =
-            Animator.move (Timeline.atTime time timeline) toPosition
+            Animator.details (Timeline.atTime time timeline) toPosition
 
         two =
-            Animator.move (Timeline.atTime after timeline) toPosition
+            Animator.details (Timeline.atTime after timeline) toPosition
 
         first =
             (one.position - zero.position) / toFloat resolution

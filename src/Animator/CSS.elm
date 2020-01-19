@@ -1,4 +1,8 @@
-module Animator.CSS exposing (..)
+module Animator.CSS exposing
+    ( opacity
+    , backgroundColor, textColor, borderColor
+    , translate, rotate, scale, transform
+    )
 
 {-|
 
