@@ -7,7 +7,7 @@ module Internal.Timeline exposing
     , addToDwell
     , current, startPass, pass
     , Phase(..), Adjustment, Line(..), Timetable(..)
-    , Description(..), Previous(..), atTime, gc, gcLog, linesAreActive, previousEndTime, updateNoGC
+    , Description(..), Previous(..), atTime, gc, gcLog, linesAreActive, previousEndTime, previousStartTime, updateNoGC
     )
 
 {-|
@@ -233,6 +233,16 @@ previousEndTime prev =
     case prev of
         Previous event ->
             endTime event
+
+        PreviouslyInterrupted time ->
+            time
+
+
+previousStartTime : Previous event -> Time.Absolute
+previousStartTime prev =
+    case prev of
+        Previous event ->
+            startTime event
 
         PreviouslyInterrupted time ->
             time
@@ -687,7 +697,7 @@ interrupt : TimelineDetails events -> Time.Absolute -> Schedule events -> Timeta
 interrupt details startAt scheduled =
     case details.events of
         Timetable lines ->
-            case interruptLines startAt scheduled [] lines of
+            case interruptLines details.now startAt scheduled [] lines of
                 Nothing ->
                     enqueue details startAt scheduled
 
@@ -695,28 +705,29 @@ interrupt details startAt scheduled =
                     Timetable interrupted
 
 
-interruptLines : Time.Absolute -> Schedule event -> List (Line event) -> List (Line event) -> Maybe (List (Line event))
-interruptLines startInterruption scheduled pastLines lines =
+interruptLines : Time.Absolute -> Time.Absolute -> Schedule event -> List (Line event) -> List (Line event) -> Maybe (List (Line event))
+interruptLines now startInterruption scheduled pastLines lines =
     case lines of
         [] ->
             Nothing
 
         startLine :: remaining ->
             if interruptionHappensLater startInterruption remaining then
-                interruptLines startInterruption scheduled (startLine :: pastLines) remaining
+                interruptLines now startInterruption scheduled (startLine :: pastLines) remaining
 
             else
                 case interruptLine startInterruption scheduled startLine remaining of
                     Nothing ->
-                        interruptLines startInterruption scheduled (startLine :: pastLines) remaining
+                        interruptLines now startInterruption scheduled (startLine :: pastLines) remaining
 
                     Just interruption ->
-                        -- interruption is the interruption in the proper order, embedded with remaining
-                        if startInterruption == lineStartTime startLine then
-                            -- if the times are the same, then this new line replaces the current one.
+                        -- if the starting times are the same
+                        -- then this new line replaces the current one.
+                        if startInterruption == lineStartTime startLine && Time.thisAfterThat startInterruption now then
                             Just (List.reverse pastLines ++ interruption)
 
                         else
+                            -- interruption is the interruption in the proper order, embedded with remaining
                             Just (List.reverse pastLines ++ (startLine :: interruption))
 
 
