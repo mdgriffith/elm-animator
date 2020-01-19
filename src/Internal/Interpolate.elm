@@ -168,6 +168,15 @@ nullArrival =
     }
 
 
+wrap : Float -> Float
+wrap x =
+    if x < 0 then
+        1 + (x - toFloat (ceiling x))
+
+    else
+        x - toFloat (floor x)
+
+
 wrapUnitAfter : Duration.Duration -> Duration.Duration -> Float
 wrapUnitAfter dur total =
     let
@@ -421,8 +430,12 @@ dwellFor movement duration =
             }
 
         Oscillate _ _ period toX ->
-            { position = Pixels.pixels (toX (wrapUnitAfter period duration))
-            , velocity = derivativeOfEasing toX period (wrapUnitAfter period duration)
+            let
+                progress =
+                    wrapUnitAfter period duration
+            in
+            { position = Pixels.pixels (toX progress)
+            , velocity = derivativeOfEasing toX period progress
             }
 
 
@@ -528,6 +541,71 @@ interpolateBetween lookup previous ((Timeline.Occurring target targetTime maybeT
 
         firstDerivative =
             firstDerivativeOnSpline curve current.t
+
+        -- *NOTE* We'll probably want to do oscillation mixing in the future, but it's kinda involved.
+        -- This would get you some of the way there (where maybeMixing has a postion/velocity to use instead)
+        -- but it doesn't quite work to mix two oscillators in a direct way because of weird descructive interference.
+        -- and looks especially weird when the effective origin of the oscillation actually moves.
+        -- HOWEVER, I'm open to creative solutions :D
+        -- maybeMix =
+        --     case lookup target of
+        --         Oscillate _ mixArrival mixBPeriod mixB ->
+        --             case previous of
+        --                 Timeline.Previous p ->
+        --                     case lookup (Timeline.getEvent p) of
+        --                         Position _ _ _ ->
+        --                             Nothing
+        --                         Oscillate mixDeparture _ mixAPeriod mixA ->
+        --                             if Timeline.hasDwell p && (maybeLookAhead == Nothing || Timeline.hasDwell targetOccurring) then
+        --                                 let
+        --                                     {-
+        --                                        mixA starts at
+        --                                            (previousStartTime previous) ->
+        --                                                    roll mixA forward to previousEndTime
+        --                                        mixB starts at
+        --                                            (previousEndTime previous)
+        --                                            but must match 0 for 0 at targetTime
+        --                                            rephase mixB
+        --                                            progress is the percentage progress between
+        --                                                previousStartTime + previousEndTime
+        --                                     -}
+        --                                     phaseBShift =
+        --                                         wrapUnitAfter mixBPeriod totalDuration
+        --                                     phaseAShift =
+        --                                         wrapUnitAfter mixAPeriod
+        --                                             (Time.duration
+        --                                                 (Timeline.previousEndTime previous)
+        --                                                 (Timeline.previousStartTime previous)
+        --                                             )
+        --                                     totalDuration =
+        --                                         Time.duration (Timeline.previousEndTime previous) targetTime
+        --                                     progress =
+        --                                         Time.progress (Timeline.previousEndTime previous) targetTime currentTime
+        --                                     correctedA u =
+        --                                         (wrapUnitAfter mixAPeriod (Quantity.multiplyBy u totalDuration)
+        --                                             + phaseAShift
+        --                                         )
+        --                                             |> wrap
+        --                                             |> mixA
+        --                                     correctedB u =
+        --                                         (wrapUnitAfter mixBPeriod (Quantity.multiplyBy u totalDuration)
+        --                                             - phaseBShift
+        --                                         )
+        --                                             |> wrap
+        --                                             |> mixB
+        --                                     newEasing masterU =
+        --                                         mix correctedA correctedB progress masterU
+        --                                 in
+        --                                 Just
+        --                                     { position = Pixels.pixels (newEasing progress)
+        --                                     , velocity = derivativeOfEasing newEasing totalDuration progress
+        --                                     }
+        --                             else
+        --                                 Nothing
+        --                 Timeline.PreviouslyInterrupted _ ->
+        --                     Nothing
+        --         Position _ _ x ->
+        --             Nothing
     in
     { position =
         current.point.y
@@ -827,11 +905,18 @@ average x y progress =
     sqrt ((x * x) * (1 - progress) + (y * y) * progress)
 
 
+{-| Mix two easing functions.
 
--- f(t) = -1/2 e^(-6 t) (-2 e^(6 t) + sin(12 t) + 2 cos(12 t))
--- mix two easing functions given a weight and a percent (what point on the easing are we at)
+    - weightB is how much of `b` should be present.
+    - percent is where we are between 0 and 1
 
+So,
+weightB of 0 means we're just using easing a.
+weightB of 1 means we're just using easing b.
+weightB of 0.5 means we're taking the value at a and value at b and weighting them both by 0.5.
 
+-}
+mix : (Float -> Float) -> (Float -> Float) -> Float -> Float -> Float
 mix fnA fnB weightB percent =
     let
         a =
@@ -840,13 +925,14 @@ mix fnA fnB weightB percent =
         b =
             fnB percent
     in
-    a + weightB (b - a)
+    -- a + weightB * (b - a)
+    ((1 - weightB) * a) + (weightB * b)
 
 
 
 {- A mini embedded elm-geometry because I didn't want to impose it as a dependency.
 
-   Though definitely worth checking out.
+   However!  It's definitely a package worth checking out!
 
    https://package.elm-lang.org/packages/ianmackenzie/elm-geometry/3.1.0/
 
