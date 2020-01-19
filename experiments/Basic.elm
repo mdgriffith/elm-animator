@@ -21,7 +21,7 @@ import Time
 
 singleEvent =
     Animator.init Hufflepuff
-        |> Animator.update (Time.millisToPosix 0)
+        |> Internal.Timeline.update (Time.millisToPosix 0)
 
 
 doubleEvent =
@@ -40,7 +40,7 @@ fourContinuous =
             , Animator.event (Animator.seconds 1) Slytherin
             , Animator.event (Animator.seconds 1) Ravenclaw
             ]
-        |> Animator.update (Time.millisToPosix 0)
+        |> Internal.Timeline.update (Time.millisToPosix 0)
 
 
 fourWithPause =
@@ -54,7 +54,7 @@ fourWithPause =
             , Animator.event (Animator.seconds 1) Ravenclaw
             , Animator.wait (Animator.seconds 1)
             ]
-        |> Animator.update (Time.millisToPosix 3409)
+        |> Internal.Timeline.update (Time.millisToPosix 3409)
 
 
 
@@ -63,33 +63,27 @@ fourWithPause =
 
 doubleInterrupted =
     doubleEvent
-        |> Animator.interrupt
-            [ Animator.event (Animator.seconds 1) Ravenclaw
-            ]
+        |> Animator.to (Animator.seconds 1) Ravenclaw
         |> Internal.Timeline.updateNoGC (Time.millisToPosix 2500)
         |> Internal.Timeline.updateNoGC (Time.millisToPosix 3000)
 
 
 doubleInterruptedInterrupted =
     doubleInterrupted
-        |> Animator.interrupt
-            [ Animator.event (Animator.seconds 1) Slytherin
-            ]
+        |> Animator.to (Animator.seconds 1) Slytherin
         |> Internal.Timeline.updateNoGC (Time.millisToPosix 3001)
         |> Internal.Timeline.updateNoGC (Time.millisToPosix 3500)
 
 
 fourContinuousInterrupted =
     fourContinuous
-        |> Animator.update (Time.millisToPosix 1000)
-        |> Animator.interrupt
-            [ Animator.event (Animator.seconds 1) Ravenclaw
-            ]
-        |> Animator.update (Time.millisToPosix 1500)
+        |> Internal.Timeline.update (Time.millisToPosix 1000)
+        |> Animator.to (Animator.seconds 1) Ravenclaw
+        |> Internal.Timeline.update (Time.millisToPosix 1500)
 
 
 
--- |> Animator.update (Time.millisToPosix 3000)
+-- |> Internal.Timeline.update (Time.millisToPosix 3000)
 
 
 fourWithPauseInterrupted =
@@ -103,7 +97,7 @@ fourWithPauseInterrupted =
             , Animator.event (Animator.seconds 1) Ravenclaw
             , Animator.wait (Animator.seconds 1)
             ]
-        |> Animator.update (Time.millisToPosix 3450)
+        |> Internal.Timeline.update (Time.millisToPosix 3450)
 
 
 main =
@@ -192,10 +186,10 @@ view : Model -> Browser.Document Msg
 view model =
     -- let
     --     _ =
-    --         Animator.move fourContinuousInterrupted toHousePosition
+    --         Animator.details fourContinuousInterrupted toHousePosition
     --             |> Debug.log "******** end pos/osc"
     --     -- _ =
-    --     --     Animator.move fourContinuous oscillators
+    --     --     Animator.details fourContinuous oscillators
     --     --         |> Debug.log "******* end osc "
     -- in
     { title = "Elm - Select Harry Potter House"
@@ -242,6 +236,10 @@ view model =
             , { name = "Wobbly"
               , timeline = doubleEvent
               , move = wobbly
+              }
+            , { name = "Mixing"
+              , timeline = doubleEvent
+              , move = mixing
               }
             ]
         , viewTimelineGroup "Interruptions - 1250"
@@ -570,7 +568,7 @@ renderPoints move timeline toPos =
                 currentTime =
                     Time.millisToPosix (i * 16)
             in
-            case move (Animator.update currentTime timeline) toPos of
+            case move (Internal.Timeline.update currentTime timeline) toPos of
                 current ->
                     { time = toFloat i * 16
                     , position = current.position
@@ -588,7 +586,7 @@ renderVelocities move timeline toPos =
                 currentTime =
                     Time.millisToPosix (i * 16)
             in
-            case move (Animator.update currentTime timeline) toPos of
+            case move (Internal.Timeline.update currentTime timeline) toPos of
                 current ->
                     { time = toFloat i * 16
                     , position = current.velocity
@@ -653,8 +651,8 @@ update msg model =
                         , Animator.wait (Animator.seconds 3)
                         ]
                         model.timeline
-                        |> Animator.update (Time.millisToPosix 0)
-                        |> Animator.update (Time.millisToPosix 1409)
+                        |> Internal.Timeline.update (Time.millisToPosix 0)
+                        |> Internal.Timeline.update (Time.millisToPosix 1409)
               }
             , Cmd.none
             )
@@ -676,7 +674,7 @@ update msg model =
             ( { model
                 | time = newPosix
                 , timeline =
-                    Animator.update newPosix model.timeline
+                    Internal.Timeline.update newPosix model.timeline
               }
             , Cmd.none
             )
@@ -711,16 +709,16 @@ toPx x =
 toHousePosition event =
     case event of
         Hufflepuff ->
-            Animator.to 100
+            Animator.at 100
 
         Griffyndor ->
-            Animator.to 400
+            Animator.at 400
 
         Slytherin ->
-            Animator.to 700
+            Animator.at 700
 
         Ravenclaw ->
-            Animator.to 1000
+            Animator.at 1000
 
 
 oscillators event =
@@ -745,14 +743,14 @@ oscillators event =
 posThenOscillators event =
     case event of
         Hufflepuff ->
-            Animator.to 100
+            Animator.at 100
 
         Griffyndor ->
             Animator.wave 390 410
                 |> Animator.loop (Animator.millis 300)
 
         Slytherin ->
-            Animator.to 700
+            Animator.at 700
 
         Ravenclaw ->
             Animator.wave 990 1010
@@ -762,70 +760,89 @@ posThenOscillators event =
 toHousePositionFastStartSlowFinish event =
     case event of
         Hufflepuff ->
-            Animator.to 100
-                |> Animator.leave Animator.smooth
+            Animator.at 100
+                |> Animator.leaveSmoothly 0.4
 
         Griffyndor ->
-            Animator.to 400
+            Animator.at 400
 
         Slytherin ->
-            Animator.to 700
-                |> Animator.arrive Animator.verySmooth
+            Animator.at 700
+                |> Animator.arriveSmoothly 0.8
 
         Ravenclaw ->
-            Animator.to 1000
+            Animator.at 1000
 
 
 toHousePositionWithOrbit : House -> Animator.Movement
 toHousePositionWithOrbit event =
     case event of
         Hufflepuff ->
-            Animator.to 100
+            Animator.at 100
 
         Griffyndor ->
             Animator.wave 390 410
                 |> Animator.loop (Animator.millis 400)
 
         Slytherin ->
-            Animator.to 700
+            Animator.at 700
 
         Ravenclaw ->
-            Animator.to 1000
+            Animator.at 1000
 
 
 wobbly event =
     case event of
         Hufflepuff ->
-            Animator.to 100
+            Animator.at 100
                 |> Animator.withWobble 1
 
         Griffyndor ->
-            Animator.to 400
+            Animator.at 400
                 |> Animator.withWobble 1
 
         Slytherin ->
-            Animator.to 700
+            Animator.at 700
                 |> Animator.withWobble 1
 
         Ravenclaw ->
-            Animator.to 1000
+            Animator.at 1000
                 |> Animator.withWobble 1
+
+
+mixing event =
+    case event of
+        Hufflepuff ->
+            Animator.wave 90 110
+                |> Animator.loop (Animator.millis 200)
+
+        Griffyndor ->
+            Animator.wave 90 110
+                |> Animator.loop (Animator.millis 300)
+
+        Slytherin ->
+            Animator.wave 90 110
+                |> Animator.loop (Animator.millis 400)
+
+        Ravenclaw ->
+            Animator.wave 90 110
+                |> Animator.loop (Animator.millis 500)
 
 
 sortaWobbly event =
     case event of
         Hufflepuff ->
-            Animator.to 100
+            Animator.at 100
                 |> Animator.withWobble 0.5
 
         Griffyndor ->
-            Animator.to 400
+            Animator.at 400
                 |> Animator.withWobble 0.5
 
         Slytherin ->
-            Animator.to 700
+            Animator.at 700
                 |> Animator.withWobble 0.5
 
         Ravenclaw ->
-            Animator.to 1000
+            Animator.at 1000
                 |> Animator.withWobble 0.5

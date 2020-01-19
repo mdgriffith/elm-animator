@@ -20,8 +20,8 @@ doubleEvent =
         |> Animator.queue
             [ Animator.event (Animator.seconds 1) Slytherin
             ]
-        |> Animator.update (Time.millisToPosix 0)
-        |> Animator.update (Time.millisToPosix 1409)
+        |> Internal.Timeline.update (Time.millisToPosix 0)
+        |> Internal.Timeline.update (Time.millisToPosix 1409)
 
 
 fourContinuous =
@@ -31,8 +31,8 @@ fourContinuous =
             , Animator.event (Animator.seconds 1) Slytherin
             , Animator.event (Animator.seconds 1) Ravenclaw
             ]
-        |> Animator.update (Time.millisToPosix 0)
-        |> Animator.update (Time.millisToPosix 1409)
+        |> Internal.Timeline.update (Time.millisToPosix 0)
+        |> Internal.Timeline.update (Time.millisToPosix 1409)
 
 
 fourCWithPause =
@@ -46,8 +46,8 @@ fourCWithPause =
             , Animator.event (Animator.seconds 1) Ravenclaw
             , Animator.wait (Animator.seconds 1)
             ]
-        |> Animator.update (Time.millisToPosix 0)
-        |> Animator.update (Time.millisToPosix 1409)
+        |> Internal.Timeline.update (Time.millisToPosix 0)
+        |> Internal.Timeline.update (Time.millisToPosix 1409)
 
 
 main =
@@ -147,7 +147,7 @@ view model =
                 , Events.onClick NextHouse
                 , Attr.style "transform"
                     (toPx
-                        (.position (Animator.move model.timeline toPos))
+                        (.position (Animator.details model.timeline toPos))
                     )
 
                 -- , Attr.style "background-color"
@@ -166,7 +166,7 @@ view model =
                 --         )
                 --     )
                 ]
-                [ case Animator.move model.timeline toPos of
+                [ case Animator.details model.timeline toPos of
                     { position, velocity } ->
                         Html.div []
                             [ Html.div [] [ Html.text "pos: ", Html.text (String.fromFloat position) ]
@@ -179,10 +179,10 @@ view model =
         , Html.map ChartMsg
             (Help.Plot.view
                 model.chart
-                (renderPoints Animator.move model.timeline toPos)
-                (renderVelocities Animator.move model.timeline toPos)
+                (renderPoints Animator.details model.timeline toPos)
+                (renderVelocities Animator.details model.timeline toPos)
                 (renderEvents (Internal.Timeline.getEvents model.timeline))
-                { position = .position (Animator.move model.timeline toPos)
+                { position = .position (Animator.details model.timeline toPos)
                 , time = toFloat (Time.posixToMillis model.time)
                 }
             )
@@ -318,7 +318,7 @@ renderPoints move timeline toPos =
                 currentTime =
                     Time.millisToPosix (i * 16)
             in
-            case move (Animator.update currentTime timeline) toPos of
+            case move (Internal.Timeline.update currentTime timeline) toPos of
                 current ->
                     { time = toFloat i * 16
                     , position = current.position
@@ -336,7 +336,7 @@ renderVelocities move timeline toPos =
                 currentTime =
                     Time.millisToPosix (i * 16)
             in
-            case move (Animator.update currentTime timeline) toPos of
+            case move (Internal.Timeline.update currentTime timeline) toPos of
                 current ->
                     { time = toFloat i * 16
                     , position = current.velocity
@@ -401,8 +401,8 @@ update msg model =
                         , Animator.wait (Animator.seconds 3)
                         ]
                         model.timeline
-                        |> Animator.update (Time.millisToPosix 0)
-                        |> Animator.update (Time.millisToPosix 1409)
+                        |> Internal.Timeline.update (Time.millisToPosix 0)
+                        |> Internal.Timeline.update (Time.millisToPosix 1409)
               }
             , Cmd.none
             )
@@ -424,7 +424,7 @@ update msg model =
             ( { model
                 | time = newPosix
                 , timeline =
-                    Animator.update newPosix model.timeline
+                    Internal.Timeline.update newPosix model.timeline
               }
             , Cmd.none
             )
@@ -459,29 +459,29 @@ toPx x =
 toHousePosition event =
     case event of
         Hufflepuff ->
-            Animator.to 100
+            Animator.at 100
 
         Griffyndor ->
-            Animator.to 400
+            Animator.at 400
 
         Slytherin ->
-            Animator.to 700
+            Animator.at 700
 
         Ravenclaw ->
-            Animator.to 1000
+            Animator.at 1000
 
 
 toHousePositionWithOrbit event =
     case event of
         Hufflepuff ->
-            Animator.to 100
+            Animator.at 100
 
         Griffyndor ->
             Animator.wave 390 410
                 |> Animator.oscillate (Animator.millis 400)
 
         Slytherin ->
-            Animator.to 700
+            Animator.at 700
 
         Ravenclaw ->
-            Animator.to 1000
+            Animator.at 1000

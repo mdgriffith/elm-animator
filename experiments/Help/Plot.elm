@@ -428,7 +428,7 @@ render myTimeline toPos config =
                     Time.millisToPosix (round (toFloat startTimeInMs + (toFloat i * frameSize)))
             in
             { time = currentTime
-            , value = Animator.move (Internal.Timeline.atTime currentTime myTimeline) toPos
+            , value = Animator.details (Internal.Timeline.atTime currentTime myTimeline) toPos
             }
                 :: rendered
         )

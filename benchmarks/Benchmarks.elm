@@ -98,13 +98,13 @@ basicInterpolation =
                     , Animator.event (Animator.seconds 1) Ravenclaw
                     , Animator.wait (Animator.seconds 1)
                     ]
-                |> Animator.update (Time.millisToPosix 0)
-                |> Animator.update (Time.millisToPosix 3400)
+                |> Timeline.update (Time.millisToPosix 0)
+                |> Timeline.update (Time.millisToPosix 3400)
     in
     describe "Interpolate to a point on a 4 event timeline"
         [ benchmark "interpolate to position" <|
             \_ ->
-                Animator.move timeline toPos
+                Animator.details timeline toPos
         ]
 
 
@@ -118,16 +118,16 @@ type House
 toPos event =
     case event of
         Hufflepuff ->
-            Animator.to 100
+            Animator.at 100
 
         Griffyndor ->
-            Animator.to 400
+            Animator.at 400
 
         Slytherin ->
-            Animator.to 700
+            Animator.at 700
 
         Ravenclaw ->
-            Animator.to 1000
+            Animator.at 1000
 
 
 functionWithRecord { one, two, three, four, five, six } =
