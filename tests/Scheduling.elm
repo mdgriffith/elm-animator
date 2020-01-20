@@ -161,11 +161,11 @@ queueing =
                             |> Animator.queue
                                 [ Animator.event (Animator.seconds 1) One
                                 ]
-                            |> Timeline.update (Time.millisToPosix 4000)
+                            |> Timeline.updateNoGC (Time.millisToPosix 4000)
                             |> Animator.queue
                                 [ Animator.event (Animator.seconds 1) Two
                                 ]
-                            |> Timeline.update (Time.millisToPosix 7000)
+                            |> Timeline.updateNoGC (Time.millisToPosix 7000)
                 in
                 -- specifically we expect the dwell time on `Starting` and `One` to be extended
                 Expect.equal
@@ -220,14 +220,14 @@ interruptions =
                     , Animator.event (Animator.seconds 1) Unreachable
                     , Animator.wait (Animator.seconds 1.0)
                     ]
-                |> Timeline.update (Time.millisToPosix 0)
+                |> Timeline.updateNoGC (Time.millisToPosix 0)
                 |> Animator.interrupt
                     [ Animator.wait (Animator.seconds 1.0)
                     , Animator.event (Animator.seconds 1) Three
                     , Animator.wait (Animator.seconds 1.0)
                     , Animator.event (Animator.seconds 1) Four
                     ]
-                |> Timeline.update (Time.millisToPosix 3000)
+                |> Timeline.updateNoGC (Time.millisToPosix 3000)
     in
     describe "Interruptions"
         [ test "Correctly schedules" <|
@@ -388,51 +388,117 @@ interruptions =
                         , running = True
                         }
                     )
-        , test "Queue timeline instead if given long after existing" <|
+        , test "Progress, halfway" <|
             \_ ->
                 let
-                    baseline =
-                        timeline
+                    prog =
+                        Animator.init Starting
+                            |> Timeline.update (Time.millisToPosix 0)
                             |> Animator.queue
-                                [ Animator.wait (Animator.seconds 1.0)
-                                , Animator.event (Animator.seconds 1) One
-                                , Animator.wait (Animator.seconds 1.0)
-                                , Animator.event (Animator.seconds 1) Two
-                                , Animator.wait (Animator.seconds 1.0)
-                                , Animator.event (Animator.seconds 1) Three
+                                [ Animator.event (Animator.seconds 1) One
                                 ]
-                            |> Timeline.updateNoGC (Time.millisToPosix 0)
-
-                    interruptedAfterFinish =
-                        baseline
-                            |> Animator.interrupt
-                                [ Animator.event (Animator.seconds 1) Four
-                                , Animator.wait (Animator.seconds 1.0)
-                                , Animator.event (Animator.seconds 1) Five
-                                ]
-                            |> Timeline.updateNoGC (Time.millisToPosix 8000)
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Timeline.update (Time.millisToPosix 500)
+                            |> Timeline.progress
                 in
-                Expect.equal
-                    interruptedAfterFinish
-                    (Timeline.Timeline
-                        { events =
-                            Timeline.Timetable
-                                [ Timeline.Line (qty 0)
-                                    (occur Starting (qty 0) (Just (qty 1)))
-                                    [ occur One (qty 2000) (Just (qty 1))
-                                    , occur Two (qty 4000) (Just (qty 1))
-                                    , occur Three (qty 6000) (Just (qty 2))
-                                    , occur Four (qty 9000) (Just (qty 1))
-                                    , occur Five (qty 11000) Nothing
-                                    ]
+                Expect.within
+                    (Absolute 0.001)
+                    prog
+                    0.5
+        , test "Progress, resting at end" <|
+            \_ ->
+                let
+                    prog =
+                        Animator.init Starting
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.queue
+                                [ Animator.event (Animator.seconds 1) One
                                 ]
-                        , initial = Starting
-                        , interruption = []
-                        , now = qty 8000
-                        , queued = Nothing
-                        , running = True
-                        }
-                    )
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Timeline.update (Time.millisToPosix 1200)
+                            |> Timeline.progress
+                in
+                Expect.within
+                    (Absolute 0.001)
+                    prog
+                    1.0
+        , test "Progress, with interruption." <|
+            \_ ->
+                let
+                    prog =
+                        Animator.init Starting
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.queue
+                                [ Animator.event (Animator.seconds 1) One
+                                ]
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.interrupt
+                                [ Animator.event (Animator.seconds 1) Two
+                                ]
+                            |> Timeline.update (Time.millisToPosix 500)
+                            |> Timeline.update (Time.millisToPosix 1000)
+                            |> Timeline.progress
+                in
+                Expect.within
+                    (Absolute 0.001)
+                    prog
+                    0.5
+        , test "Dwelling time, resting at end" <|
+            \_ ->
+                let
+                    foundDwellTime =
+                        Animator.init Starting
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.queue
+                                [ Animator.event (Animator.seconds 1) One
+                                ]
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Timeline.update (Time.millisToPosix 1200)
+                            |> Timeline.dwellingTime
+                in
+                Expect.within
+                    (Absolute 0.001)
+                    foundDwellTime
+                    200
+        , test "Dwelling time, transitioning" <|
+            \_ ->
+                let
+                    foundDwellTime =
+                        Animator.init Starting
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.queue
+                                [ Animator.event (Animator.seconds 1) One
+                                ]
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Timeline.update (Time.millisToPosix 500)
+                            |> Timeline.dwellingTime
+                in
+                Expect.within
+                    (Absolute 0.001)
+                    foundDwellTime
+                    0
+        , test "Dwelling time, with interruption." <|
+            \_ ->
+                let
+                    foundDwellTime =
+                        Animator.init Starting
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.queue
+                                [ Animator.event (Animator.seconds 1) One
+                                , Animator.wait (Animator.seconds 1)
+                                ]
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.interrupt
+                                [ Animator.event (Animator.seconds 1) Two
+                                ]
+                            |> Timeline.update (Time.millisToPosix 500)
+                            |> Timeline.update (Time.millisToPosix 1000)
+                            |> Timeline.dwellingTime
+                in
+                Expect.within
+                    (Absolute 0.001)
+                    foundDwellTime
+                    0
         ]
 
 
@@ -744,7 +810,7 @@ ordering =
                         Timeline.gc actualTimeline
                 in
                 Expect.equal
-                    actualTimeline
+                    (Timeline.gc actualTimeline)
                     (Timeline.gc gcedTimeline)
         , fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
             "GC does not affect values at and after gc time."
@@ -756,6 +822,47 @@ ordering =
 
                     actualTimeline =
                         Fuzz.Timeline.toTimeline { gc = False } timelineInstruction
+
+                    timelineAt =
+                        Timeline.atTime time actualTimeline
+
+                    gcedTimeline =
+                        Timeline.gc timelineAt
+                in
+                Expect.all
+                    [ \tl ->
+                        Expect.within
+                            (Absolute 0.001)
+                            (.position (Animator.details tl toPosition))
+                            (.position (Animator.details (Timeline.gc tl) toPosition))
+                    , \tl ->
+                        Expect.within
+                            (Absolute 0.001)
+                            (.velocity (Animator.details tl toPosition))
+                            (.velocity (Animator.details (Timeline.gc tl) toPosition))
+                    ]
+                    timelineAt
+        , test "Harmless GC, test case 1" <|
+            \_ ->
+                let
+                    time =
+                        Time.millisToPosix 1200
+
+                    instructions =
+                        Fuzz.Timeline.InstructionTimeline 0
+                            One
+                            [ Fuzz.Timeline.Queue 0
+                                [ ( 0, Four )
+                                ]
+                            , Fuzz.Timeline.Interruption 1
+                                [ ( 0, One )
+                                , ( 0, Three )
+                                , ( 0, Two )
+                                ]
+                            ]
+
+                    actualTimeline =
+                        Fuzz.Timeline.toTimeline { gc = False } instructions
 
                     timelineAt =
                         Timeline.atTime time actualTimeline
@@ -795,6 +902,38 @@ ordering =
                 in
                 Expect.true "Is NaN"
                     (not (isNaN movement.position))
+        , test "GC trims down a single line if necessary" <|
+            \_ ->
+                let
+                    newTimeline =
+                        Animator.init 0
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.queue
+                                (List.map
+                                    (Animator.event (Animator.seconds 1))
+                                    (List.range 0 10000)
+                                )
+                            |> Timeline.update (Time.millisToPosix 5000)
+                            |> Timeline.update (Time.millisToPosix (500 * 1000))
+
+                    eventCount =
+                        case newTimeline of
+                            Timeline.Timeline details ->
+                                case details.events of
+                                    Timeline.Timetable lines ->
+                                        case lines of
+                                            [] ->
+                                                0
+
+                                            (Timeline.Line _ _ evs) :: _ ->
+                                                List.length evs
+                in
+                -- we are jsut testing that previous events are being removed
+                -- we don't really care how many.
+                -- but it should be ~500 in this case.
+                Expect.equal
+                    eventCount
+                    9506
         ]
 
 
