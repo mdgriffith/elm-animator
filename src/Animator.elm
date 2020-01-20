@@ -206,10 +206,10 @@ initializeSchedule waiting steps =
 
 
 stepsToEvents : Step state -> Timeline.Schedule state -> Timeline.Schedule state
-stepsToEvents step (Timeline.Schedule delay startEvent events) =
+stepsToEvents currentStep (Timeline.Schedule delay startEvent events) =
     case events of
         [] ->
-            case step of
+            case currentStep of
                 Wait waiting ->
                     Timeline.Schedule
                         delay
@@ -223,7 +223,7 @@ stepsToEvents step (Timeline.Schedule delay startEvent events) =
                         [ Timeline.Event dur checkpoint Nothing ]
 
         (Timeline.Event durationTo recentEvent maybeDwell) :: remaining ->
-            case step of
+            case currentStep of
                 Wait dur ->
                     Timeline.Schedule
                         delay
@@ -664,41 +664,135 @@ zigzag start end =
 
 
 
-{-
-
-   Fade
-      -> target opacity
-      ->
-
-   Color
-       -> target color
-
-   Rotation
-       -> Target angle
-       -> Target speed + direction
-       -> Target origin + axis
-
-   Position
-       -> Target position
-       -> Oscillator
-           |> every (8 seconds)
-               (0-1 -> position)
-
-       -> Wiggle
-           |> {pos, velocity, direction, progress: 0-1, durationSinceStart : Time}
-                   -> Delta position
-                       (possibly informed )
-       ->
-
-   MotionBlur
-
-       |> (velocity -> Blur value)
+{- SPRITES -}
 
 
-   Scale
-       -> Target Scale
+type Item item
+    = Through (List (Frame item))
+    | Cycle Period (List (Frame item))
 
--}
+
+type Period
+    = Loop Duration
+    | Repeat Int Duration
+
+
+type Frame item
+    = Frame item
+    | FramePause Int item
+
+
+{-| -}
+step : Timeline state -> sprite -> (state -> Item sprite) -> sprite
+step timeline defaultSprite lookup =
+    case lookup (current timeline) of
+        Through sprites ->
+            let
+                progress =
+                    Timeline.progress timeline
+
+                len =
+                    List.length sprites
+
+                index =
+                    floor (progress * toFloat len)
+            in
+            getItemAtIndex index defaultSprite 0 sprites
+
+        Cycle period sprites ->
+            let
+                totalMS =
+                    Timeline.dwellingTime timeline
+
+                len =
+                    List.length sprites
+            in
+            case period of
+                Loop dur ->
+                    let
+                        iterationTimeMS =
+                            Duration.inMilliseconds dur
+
+                        progress =
+                            wrapToUnit (totalMS / iterationTimeMS)
+
+                        index =
+                            floor (progress * toFloat len)
+                    in
+                    getItemAtIndex index defaultSprite 0 sprites
+
+                Repeat n dur ->
+                    let
+                        iterationTimeMS =
+                            Duration.inMilliseconds dur
+
+                        iteration =
+                            floor (totalMS / iterationTimeMS)
+
+                        progress =
+                            if iteration > n then
+                                1
+
+                            else
+                                wrapToUnit (totalMS / iterationTimeMS)
+
+                        index =
+                            floor (progress * toFloat len)
+                    in
+                    getItemAtIndex index defaultSprite 0 sprites
+
+
+getItemAtIndex : Int -> item -> Int -> List (Frame item) -> item
+getItemAtIndex targetIndex default currentIndex list =
+    case list of
+        [] ->
+            default
+
+        top :: remain ->
+            case top of
+                Frame item ->
+                    if targetIndex == currentIndex then
+                        item
+
+                    else
+                        getItemAtIndex targetIndex default (currentIndex + 1) remain
+
+                FramePause i item ->
+                    if currentIndex <= targetIndex && currentIndex + i >= targetIndex then
+                        item
+
+                    else
+                        getItemAtIndex targetIndex default (currentIndex + i) remain
+
+
+{-| -}
+frame : sprite -> Frame sprite
+frame =
+    Frame
+
+
+{-| -}
+hold : Int -> sprite -> Frame sprite
+hold =
+    FramePause
+
+
+{-| -}
+through : List (Frame sprite) -> Item sprite
+through =
+    Through
+
+
+{-| -}
+cycle : Duration -> List (Frame sprite) -> Item sprite
+cycle duration frames =
+    Cycle (Loop duration) frames
+
+
+{-| -}
+cycleN : Int -> Duration -> List (Frame sprite) -> Item sprite
+cycleN n duration frames =
+    Cycle (Repeat n duration) frames
 
 
 {-| -}
