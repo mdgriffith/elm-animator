@@ -124,8 +124,10 @@ timeline =
                         Estimate.velocity 32 time harryPotterHouseTimeline toPosition
                 in
                 Expect.within
-                    -- NOTE: I have no idea why this is so off.
-                    -- checking things visually on a plot seems to confirm tht the velocities match well.
+                    -- NOTE: the Estimate.velocity technique can be really off if we get near peaks/valleys
+                    -- You can see it visually on a plot
+                    -- It might be nice to have a bettern velocity estimation method at some point.
+                    -- But this test is mainly to guarantee we dont hae any super wacky spikes anyway.
                     (Absolute 40.0)
                     found.velocity
                     expected

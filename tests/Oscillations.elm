@@ -138,23 +138,5 @@ oscillations =
                 Expect.within
                     (Absolute 0.001)
                     position
-                    1.0
-        , only <|
-            test "Mix waves when we transition from one to another" <|
-                \_ ->
-                    let
-                        double =
-                            Animator.init Hufflepuff
-                                |> Timeline.update (Time.millisToPosix 0)
-                                |> Animator.to (Animator.seconds 1) Griffyndor
-                                |> Timeline.update (Time.millisToPosix 0)
-                                |> Timeline.atTime (Time.millisToPosix 954)
-
-                        position =
-                            Animator.move double oscillators
-                    in
-                    Expect.within
-                        (Absolute 0.001)
-                        position
-                        1.0
+                    0
         ]
