@@ -14,8 +14,12 @@ module Animator exposing
     , leaveSmoothly, leaveLate
     , arriveSmoothly, arriveEarly
     , withWobble
-    , loop, wave, wrap, zigzag
+    , wave, wrap, zigzag
+    , loop, repeat, once
     , pause, shift
+    , step
+    , Item, through, cycle, cycleN
+    , Frame, frame, hold
     )
 
 {-|
@@ -65,9 +69,20 @@ module Animator exposing
 
 # Oscillators
 
-@docs loop, wave, wrap, zigzag
+@docs wave, wrap, zigzag
+
+@docs loop, repeat, once
 
 @docs pause, shift
+
+
+# Sprites
+
+@docs step
+
+@docs Item, through, cycle, cycleN
+
+@docs Frame, frame, hold
 
 -}
 
@@ -454,10 +469,6 @@ arriveSmoothly s movement =
             Interpolate.Oscillate dep { arrival | slowly = clamp 0 1 s } dur fn
 
 
-
-{- Some help with randomness -}
-
-
 {-| -}
 type Oscillator
     = Oscillator (List Pause) (Float -> Float)
@@ -497,8 +508,46 @@ pauseValue (Pause _ v) =
 
 
 {-| -}
+once : Duration -> Oscillator -> Movement
+once activeDuration osc =
+    let
+        ( fn, totalDuration ) =
+            prepareOscillator activeDuration osc
+    in
+    Interpolate.Oscillate Interpolate.defaultDeparture
+        Interpolate.defaultArrival
+        (Interpolate.Repeat 1 totalDuration)
+        fn
+
+
+{-| -}
 loop : Duration -> Oscillator -> Movement
-loop activeDuration (Oscillator pauses osc) =
+loop activeDuration osc =
+    let
+        ( fn, totalDuration ) =
+            prepareOscillator activeDuration osc
+    in
+    Interpolate.Oscillate Interpolate.defaultDeparture
+        Interpolate.defaultArrival
+        (Interpolate.Loop totalDuration)
+        fn
+
+
+{-| -}
+repeat : Int -> Duration -> Oscillator -> Movement
+repeat n activeDuration osc =
+    let
+        ( fn, totalDuration ) =
+            prepareOscillator activeDuration osc
+    in
+    Interpolate.Oscillate Interpolate.defaultDeparture
+        Interpolate.defaultArrival
+        (Interpolate.Repeat n totalDuration)
+        fn
+
+
+prepareOscillator : Duration -> Oscillator -> ( Float -> Float, Duration )
+prepareOscillator activeDuration (Oscillator pauses osc) =
     let
         -- total duration of the oscillation (active + pauses)
         totalDuration =
@@ -577,10 +626,7 @@ loop activeDuration (Oscillator pauses osc) =
         fn u =
             withPause u u pauses
     in
-    Interpolate.Oscillate Interpolate.defaultDeparture
-        Interpolate.defaultArrival
-        totalDuration
-        fn
+    ( fn, totalDuration )
 
 
 {-| Shift an oscillator over by a certain amount.
@@ -595,6 +641,7 @@ shift x (Oscillator pauses osc) =
         (\u -> osc (wrapToUnit (u + x)))
 
 
+wrapToUnit : Float -> Float
 wrapToUnit x =
     x - toFloat (floor x)
 
@@ -669,12 +716,7 @@ zigzag start end =
 
 type Item item
     = Through (List (Frame item))
-    | Cycle Period (List (Frame item))
-
-
-type Period
-    = Loop Duration
-    | Repeat Int Duration
+    | Cycle Interpolate.Period (List (Frame item))
 
 
 type Frame item
@@ -708,7 +750,7 @@ step timeline defaultSprite lookup =
                     List.length sprites
             in
             case period of
-                Loop dur ->
+                Interpolate.Loop dur ->
                     let
                         iterationTimeMS =
                             Duration.inMilliseconds dur
@@ -721,7 +763,7 @@ step timeline defaultSprite lookup =
                     in
                     getItemAtIndex index defaultSprite 0 sprites
 
-                Repeat n dur ->
+                Interpolate.Repeat n dur ->
                     let
                         iterationTimeMS =
                             Duration.inMilliseconds dur
@@ -730,7 +772,7 @@ step timeline defaultSprite lookup =
                             floor (totalMS / iterationTimeMS)
 
                         progress =
-                            if iteration > n then
+                            if iteration >= n then
                                 1
 
                             else
@@ -786,13 +828,13 @@ through =
 {-| -}
 cycle : Duration -> List (Frame sprite) -> Item sprite
 cycle duration frames =
-    Cycle (Loop duration) frames
+    Cycle (Interpolate.Loop duration) frames
 
 
 {-| -}
 cycleN : Int -> Duration -> List (Frame sprite) -> Item sprite
 cycleN n duration frames =
-    Cycle (Repeat n duration) frames
+    Cycle (Interpolate.Repeat n duration) frames
 
 
 {-| -}

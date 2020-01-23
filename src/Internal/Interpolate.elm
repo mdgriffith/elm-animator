@@ -3,7 +3,7 @@ module Internal.Interpolate exposing
     , Movement(..), move, xy, xyz
     , derivativeOfEasing
     , startDescription, describe
-    , adjustTiming, defaultArrival, defaultDeparture, linearly, startColoring, startLinear, startMoving, startMovingXy, startMovingXyz
+    , Period(..), adjustTiming, defaultArrival, defaultDeparture, linearly, startColoring, startLinear, startMoving, startMovingXy, startMovingXyz
     )
 
 {-|
@@ -27,76 +27,6 @@ import Pixels
 import Quantity
 
 
-startDescription : (event -> event) -> Timeline.Occurring event -> List (Timeline.Description event)
-startDescription lookup (Timeline.Occurring start startTime _) =
-    []
-
-
-describe :
-    (event -> event)
-    -> Timeline.Previous event
-    -> Timeline.Occurring event
-    -> Maybe (Timeline.Occurring event)
-    -> Timeline.Phase
-    -> Time.Absolute
-    -> List (Timeline.Description event)
-    -> List (Timeline.Description event)
-describe _ previous target _ _ _ events =
-    case target of
-        Timeline.Occurring targetEv targetTime _ ->
-            case previous of
-                Timeline.Previous _ ->
-                    events ++ [ Timeline.DescribeEvent (Time.toPosix targetTime) targetEv ]
-
-                Timeline.PreviouslyInterrupted interruptionTime ->
-                    case List.reverse events of
-                        [] ->
-                            [ Timeline.DescribeEvent (Time.toPosix targetTime) targetEv ]
-
-                        (Timeline.DescribeEvent interruptionTargetTime interruptedEv) :: remaining ->
-                            List.reverse remaining
-                                ++ [ Timeline.DescribeInterruption
-                                        { interruption = Time.toPosix interruptionTime
-                                        , target = interruptedEv
-                                        , newTarget = targetEv
-                                        , newTargetTime = Time.toPosix targetTime
-                                        }
-                                   ]
-
-                        _ ->
-                            events ++ [ Timeline.DescribeEvent (Time.toPosix targetTime) targetEv ]
-
-
-startLinear : (event -> Float) -> Timeline.Occurring event -> Float
-startLinear lookup (Timeline.Occurring start startTime _) =
-    lookup start
-
-
-linearly : (event -> Float) -> Timeline.Previous event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> Float -> Float
-linearly lookup previous ((Timeline.Occurring target targetTime maybeDwell) as targetOccurring) maybeLookAhead phase now state =
-    case phase of
-        Timeline.Start ->
-            lookup target
-
-        Timeline.Transitioning ->
-            let
-                eventEndTime =
-                    Timeline.endTime targetOccurring
-            in
-            if Time.thisAfterOrEqualThat now eventEndTime || Time.thisAfterOrEqualThat now targetTime then
-                lookup target
-
-            else
-                let
-                    progress =
-                        Time.progress
-                            (Timeline.previousEndTime previous)
-                            targetTime
-                            now
-                in
-                linear state (lookup target) progress
-
-
 {-|
 
     oscillate around a point
@@ -105,8 +35,13 @@ linearly lookup previous ((Timeline.Occurring target targetTime maybeDwell) as t
 
 -}
 type Movement
-    = Oscillate Departure Arrival Time.Duration (Float -> Float)
+    = Oscillate Departure Arrival Period (Float -> Float)
     | Position Departure Arrival Float
+
+
+type Period
+    = Loop Time.Duration
+    | Repeat Int Time.Duration
 
 
 {-| Number betwen 0 and 1
@@ -208,6 +143,76 @@ type alias XY thing =
     { x : thing
     , y : thing
     }
+
+
+startDescription : (event -> event) -> Timeline.Occurring event -> List (Timeline.Description event)
+startDescription lookup (Timeline.Occurring start startTime _) =
+    []
+
+
+describe :
+    (event -> event)
+    -> Timeline.Previous event
+    -> Timeline.Occurring event
+    -> Maybe (Timeline.Occurring event)
+    -> Timeline.Phase
+    -> Time.Absolute
+    -> List (Timeline.Description event)
+    -> List (Timeline.Description event)
+describe _ previous target _ _ _ events =
+    case target of
+        Timeline.Occurring targetEv targetTime _ ->
+            case previous of
+                Timeline.Previous _ ->
+                    events ++ [ Timeline.DescribeEvent (Time.toPosix targetTime) targetEv ]
+
+                Timeline.PreviouslyInterrupted interruptionTime ->
+                    case List.reverse events of
+                        [] ->
+                            [ Timeline.DescribeEvent (Time.toPosix targetTime) targetEv ]
+
+                        (Timeline.DescribeEvent interruptionTargetTime interruptedEv) :: remaining ->
+                            List.reverse remaining
+                                ++ [ Timeline.DescribeInterruption
+                                        { interruption = Time.toPosix interruptionTime
+                                        , target = interruptedEv
+                                        , newTarget = targetEv
+                                        , newTargetTime = Time.toPosix targetTime
+                                        }
+                                   ]
+
+                        _ ->
+                            events ++ [ Timeline.DescribeEvent (Time.toPosix targetTime) targetEv ]
+
+
+startLinear : (event -> Float) -> Timeline.Occurring event -> Float
+startLinear lookup (Timeline.Occurring start startTime _) =
+    lookup start
+
+
+linearly : (event -> Float) -> Timeline.Previous event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> Float -> Float
+linearly lookup previous ((Timeline.Occurring target targetTime maybeDwell) as targetOccurring) maybeLookAhead phase now state =
+    case phase of
+        Timeline.Start ->
+            lookup target
+
+        Timeline.Transitioning ->
+            let
+                eventEndTime =
+                    Timeline.endTime targetOccurring
+            in
+            if Time.thisAfterOrEqualThat now eventEndTime || Time.thisAfterOrEqualThat now targetTime then
+                lookup target
+
+            else
+                let
+                    progress =
+                        Time.progress
+                            (Timeline.previousEndTime previous)
+                            targetTime
+                            now
+                in
+                linear state (lookup target) progress
 
 
 startMovingXy : (event -> XY Movement) -> Timeline.Occurring event -> XY State
@@ -430,13 +435,40 @@ dwellFor movement duration =
             }
 
         Oscillate _ _ period toX ->
-            let
-                progress =
-                    wrapUnitAfter period duration
-            in
-            { position = Pixels.pixels (toX progress)
-            , velocity = derivativeOfEasing toX period progress
-            }
+            case period of
+                Loop periodDuration ->
+                    let
+                        progress =
+                            wrapUnitAfter periodDuration duration
+                    in
+                    { position = Pixels.pixels (toX progress)
+                    , velocity = derivativeOfEasing toX periodDuration progress
+                    }
+
+                Repeat n periodDuration ->
+                    let
+                        iterationTimeMS =
+                            Duration.inMilliseconds periodDuration
+
+                        totalMS =
+                            Duration.inMilliseconds duration
+
+                        iteration =
+                            floor (totalMS / iterationTimeMS)
+                    in
+                    if iteration >= n then
+                        { position = Pixels.pixels (toX 1)
+                        , velocity = Pixels.pixelsPerSecond 0
+                        }
+
+                    else
+                        let
+                            progress =
+                                wrapUnitAfter periodDuration duration
+                        in
+                        { position = Pixels.pixels (toX progress)
+                        , velocity = derivativeOfEasing toX periodDuration progress
+                        }
 
 
 {-| -}
@@ -635,7 +667,16 @@ velocityAtTarget lookup ((Timeline.Occurring target targetTime maybeTargetDwell)
                             -- then we're approaching the last event
                             -- which will "dwell" automatically
                             -- until something happens
-                            derivativeOfEasing toX period 0
+                            case period of
+                                Loop dur ->
+                                    derivativeOfEasing toX dur 0
+
+                                Repeat n dur ->
+                                    if n == 0 then
+                                        Pixels.pixelsPerSecond 0
+
+                                    else
+                                        derivativeOfEasing toX dur 0
 
                 Just (Timeline.Occurring lookAhead aheadTime maybeLookAheadDwell) ->
                     let
@@ -658,7 +699,12 @@ velocityAtTarget lookup ((Timeline.Occurring target targetTime maybeTargetDwell)
                                     velocityBetween targetPosition targetTime (Pixels.pixels (toX 0)) aheadTime
 
                                 Just _ ->
-                                    derivativeOfEasing toX period 0
+                                    case period of
+                                        Loop periodDuration ->
+                                            derivativeOfEasing toX periodDuration 0
+
+                                        Repeat n periodDuration ->
+                                            derivativeOfEasing toX periodDuration 0
 
         Just dwell ->
             case lookup target of
@@ -666,7 +712,12 @@ velocityAtTarget lookup ((Timeline.Occurring target targetTime maybeTargetDwell)
                     Pixels.pixelsPerSecond 0
 
                 Oscillate _ _ period toX ->
-                    derivativeOfEasing toX period 0
+                    case period of
+                        Loop periodDuration ->
+                            derivativeOfEasing toX periodDuration 0
+
+                        Repeat n periodDuration ->
+                            derivativeOfEasing toX periodDuration 0
 
 
 getLeave lookup (Timeline.Occurring event _ _) =
