@@ -1,7 +1,7 @@
 module Animator exposing
     ( Timeline, init
     , current
-    , Animator, animator, with, toSubscription
+    , Animator, animator, with, toSubscription, update
     , to
     , Duration, millis, seconds, minutes
     , Step, wait, event, interrupt, queue
@@ -31,7 +31,7 @@ module Animator exposing
 
 # Animating
 
-@docs Animator, animator, with, toSubscription
+@docs Animator, animator, with, toSubscription, update
 
 
 # Adding events to a timeline
@@ -851,19 +851,19 @@ subscription toMsg timeline =
 
 
 {-| -}
-type Animator model msg
-    = Animator (model -> Bool) (Time.Posix -> model -> model) (model -> msg)
+type Animator model
+    = Animator (model -> Bool) (Time.Posix -> model -> model)
 
 
 {-| -}
-animator : (model -> msg) -> Animator model msg
-animator toMsg =
-    Animator (always False) (\now model -> model) toMsg
+animator : Animator model
+animator =
+    Animator (always False) (\now model -> model)
 
 
 {-| -}
-with : (model -> Timeline state) -> (Timeline state -> model -> model) -> Animator model msg -> Animator model msg
-with get set (Animator isRunning updateModel toMsg) =
+with : (model -> Timeline state) -> (Timeline state -> model -> model) -> Animator model -> Animator model
+with get set (Animator isRunning updateModel) =
     Animator
         (\model ->
             if isRunning model then
@@ -879,17 +879,20 @@ with get set (Animator isRunning updateModel toMsg) =
             in
             set (Timeline.update now (get newModel)) newModel
         )
-        toMsg
 
 
 {-| -}
-toSubscription : model -> Animator model msg -> Sub msg
-toSubscription model (Animator isRunning updateModel toMsg) =
+toSubscription : (Time.Posix -> msg) -> model -> Animator model -> Sub msg
+toSubscription toMsg model (Animator isRunning _) =
     if isRunning model then
         Browser.Events.onAnimationFrame
-            (\newTime ->
-                toMsg (updateModel newTime model)
-            )
+            toMsg
 
     else
         Sub.none
+
+
+{-| -}
+update : Time.Posix -> Animator model -> model -> model
+update newTime (Animator _ updateModel) model =
+    updateModel newTime model
