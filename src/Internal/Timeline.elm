@@ -367,7 +367,7 @@ clean runGC details =
                     linesAreActive details.now lines
     in
     { details
-        | running = running
+        | running = True --running: TODO: actually flag when active
         , events =
             if runGC then
                 Timetable (garbageCollectOldEvents details.now [] events)
