@@ -18,8 +18,8 @@ module Animator exposing
     , loop, repeat, once
     , pause, shift
     , step
-    , Item, through, cycle, cycleN
-    , Frame, frame, hold
+    , Frames, frame, hold, walk, framesWith
+    , Resting, FramesPerSecond, fps, cycle, cycleN
     )
 
 {-|
@@ -54,7 +54,7 @@ module Animator exposing
 @docs details
 
 
-# Crafting Movement
+# Adjusting transition
 
 @docs at
 
@@ -67,7 +67,7 @@ module Animator exposing
 @docs withWobble
 
 
-# Oscillators
+# Resting at a state
 
 @docs wave, wrap, zigzag
 
@@ -80,9 +80,9 @@ module Animator exposing
 
 @docs step
 
-@docs Item, through, cycle, cycleN
+@docs Frames, frame, hold, walk, framesWith
 
-@docs Frame, frame, hold
+@docs Resting, FramesPerSecond, fps, cycle, cycleN
 
 -}
 
@@ -714,40 +714,117 @@ zigzag start end =
 {- SPRITES -}
 
 
-type Item item
-    = Through (List (Frame item))
-    | Cycle Interpolate.Period (List (Frame item))
-
-
-type Frame item
+{-| -}
+type Frames item
     = Frame item
-    | FramePause Int item
+    | Hold Int item
+    | Walk item (List (Frames item))
+    | WithRest (Resting item) (Frames item)
 
 
 {-| -}
-step : Timeline state -> sprite -> (state -> Item sprite) -> sprite
-step timeline defaultSprite lookup =
-    case lookup (current timeline) of
-        Through sprites ->
+type Resting item
+    = Cycle Interpolate.Period (List (Frames item))
+
+
+{-| -}
+frame : sprite -> Frames sprite
+frame =
+    Frame
+
+
+{-| -}
+hold : Int -> sprite -> Frames sprite
+hold =
+    Hold
+
+
+{-| -}
+walk : sprite -> List (Frames sprite) -> Frames sprite
+walk =
+    Walk
+
+
+{-| -}
+framesWith :
+    { transition : Frames item
+    , resting : Resting item
+    }
+    -> Frames item
+framesWith cfg =
+    WithRest
+        cfg.resting
+        cfg.transition
+
+
+{-| -}
+type FramesPerSecond
+    = FramesPerSecond Float
+
+
+{-| -}
+fps : Float -> FramesPerSecond
+fps =
+    FramesPerSecond
+
+
+{-| -}
+cycle : FramesPerSecond -> List (Frames sprite) -> Resting sprite
+cycle (FramesPerSecond framesPerSecond) frames =
+    let
+        duration =
+            Duration.seconds (toFloat (List.length frames) / framesPerSecond)
+    in
+    Cycle (Interpolate.Loop duration) frames
+
+
+{-| -}
+cycleN : Int -> FramesPerSecond -> List (Frames sprite) -> Resting sprite
+cycleN n (FramesPerSecond framesPerSecond) frames =
+    let
+        duration =
+            Duration.seconds (toFloat (List.length frames) / framesPerSecond)
+    in
+    Cycle (Interpolate.Repeat n duration) frames
+
+
+{-| -}
+step : Timeline state -> (state -> Frames sprite) -> sprite
+step timeline lookup =
+    let
+        progress =
+            Timeline.progress timeline
+
+        currentFrameSet =
+            lookup (current timeline)
+    in
+    if progress == 1 then
+        restFrames currentFrameSet (Timeline.dwellingTime timeline)
+
+    else
+        stepFrames currentFrameSet progress
+
+
+restFrames : Frames item -> Float -> item
+restFrames currentFrameSet restingTimeMs =
+    case currentFrameSet of
+        Frame item ->
+            item
+
+        Hold i item ->
+            item
+
+        Walk start sprites ->
             let
-                progress =
-                    Timeline.progress timeline
-
-                len =
-                    List.length sprites
-
                 index =
-                    floor (progress * toFloat len) - 1
+                    totalFrames sprites - 1
             in
-            getItemAtIndex index defaultSprite 0 sprites
+            getItemAtIndex index (Frame start) 0 sprites
 
-        Cycle period sprites ->
+        WithRest (Cycle period cycleFrameList) transitionFrames ->
             let
-                totalMS =
-                    Timeline.dwellingTime timeline
-
                 len =
-                    List.length sprites
+                    totalFrames cycleFrameList
             in
             case period of
                 Interpolate.Loop dur ->
@@ -756,12 +833,12 @@ step timeline defaultSprite lookup =
                             Duration.inMilliseconds dur
 
                         progress =
-                            wrapToUnit (totalMS / iterationTimeMS)
+                            wrapToUnit (restingTimeMs / iterationTimeMS)
 
-                        index =
+                        targetIndex =
                             floor (progress * toFloat len)
                     in
-                    getItemAtIndex index defaultSprite 0 sprites
+                    getItemAtIndex targetIndex transitionFrames 0 cycleFrameList
 
                 Interpolate.Repeat n dur ->
                     let
@@ -769,26 +846,70 @@ step timeline defaultSprite lookup =
                             Duration.inMilliseconds dur
 
                         iteration =
-                            floor (totalMS / iterationTimeMS)
+                            floor (restingTimeMs / iterationTimeMS)
 
                         progress =
                             if iteration >= n then
                                 1
 
                             else
-                                wrapToUnit (totalMS / iterationTimeMS)
+                                wrapToUnit (restingTimeMs / iterationTimeMS)
 
-                        index =
+                        targetIndex =
                             floor (progress * toFloat len)
                     in
-                    getItemAtIndex index defaultSprite 0 sprites
+                    getItemAtIndex targetIndex transitionFrames 0 cycleFrameList
 
 
-getItemAtIndex : Int -> item -> Int -> List (Frame item) -> item
-getItemAtIndex targetIndex default currentIndex list =
-    case list of
+stepFrames : Frames item -> Float -> item
+stepFrames currentFrameSet progress =
+    case currentFrameSet of
+        Frame item ->
+            item
+
+        Hold i item ->
+            item
+
+        Walk start sprites ->
+            let
+                frameCount =
+                    totalFrames sprites
+
+                index =
+                    floor (progress * toFloat frameCount) - 1
+            in
+            getItemAtIndex index (Frame start) 0 sprites
+
+        WithRest _ newFrameSet ->
+            stepFrames newFrameSet progress
+
+
+totalFrames : List (Frames item) -> Int
+totalFrames frames =
+    List.foldl (\frm total -> total + frameSize frm) 0 frames
+
+
+frameSize : Frames item -> Int
+frameSize myFrame =
+    case myFrame of
+        Frame _ ->
+            1
+
+        Hold i _ ->
+            i
+
+        Walk i frames ->
+            List.foldl (\frm total -> total + frameSize frm) 0 frames
+
+        WithRest _ newFrameSet ->
+            frameSize newFrameSet
+
+
+getItemAtIndex : Int -> Frames item -> Int -> List (Frames item) -> item
+getItemAtIndex targetIndex transitionFrame currentIndex cycleList =
+    case cycleList of
         [] ->
-            default
+            lastFrame transitionFrame
 
         top :: remain ->
             case top of
@@ -797,44 +918,56 @@ getItemAtIndex targetIndex default currentIndex list =
                         item
 
                     else
-                        getItemAtIndex targetIndex default (currentIndex + 1) remain
+                        getItemAtIndex targetIndex transitionFrame (currentIndex + 1) remain
 
-                FramePause i item ->
+                Hold i item ->
                     if currentIndex <= targetIndex && currentIndex + i >= targetIndex then
                         item
 
                     else
-                        getItemAtIndex targetIndex default (currentIndex + i) remain
+                        getItemAtIndex targetIndex transitionFrame (currentIndex + i) remain
+
+                Walk item allFrames ->
+                    let
+                        frameCount =
+                            totalFrames allFrames
+                    in
+                    if targetIndex < currentIndex + frameCount then
+                        getItemAtIndex targetIndex transitionFrame currentIndex allFrames
+
+                    else
+                        getItemAtIndex targetIndex transitionFrame (currentIndex + frameCount) remain
+
+                WithRest _ frames ->
+                    let
+                        frameCount =
+                            frameSize frames
+                    in
+                    if targetIndex < currentIndex + frameCount then
+                        getItemAtIndex targetIndex transitionFrame currentIndex [ frames ]
+
+                    else
+                        getItemAtIndex targetIndex transitionFrame (currentIndex + frameCount) remain
 
 
-{-| -}
-frame : sprite -> Frame sprite
-frame =
-    Frame
+lastFrame myFrame =
+    case myFrame of
+        Frame item ->
+            item
 
+        Hold _ item ->
+            item
 
-{-| -}
-hold : Int -> sprite -> Frame sprite
-hold =
-    FramePause
+        Walk item remainingFrames ->
+            case List.head (List.reverse remainingFrames) of
+                Nothing ->
+                    item
 
+                Just last ->
+                    lastFrame last
 
-{-| -}
-through : List (Frame sprite) -> Item sprite
-through =
-    Through
-
-
-{-| -}
-cycle : Duration -> List (Frame sprite) -> Item sprite
-cycle duration frames =
-    Cycle (Interpolate.Loop duration) frames
-
-
-{-| -}
-cycleN : Int -> Duration -> List (Frame sprite) -> Item sprite
-cycleN n duration frames =
-    Cycle (Interpolate.Repeat n duration) frames
+        WithRest _ frames ->
+            lastFrame frames
 
 
 {-| -}
