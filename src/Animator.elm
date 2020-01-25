@@ -737,7 +737,7 @@ step timeline defaultSprite lookup =
                     List.length sprites
 
                 index =
-                    floor (progress * toFloat len)
+                    floor (progress * toFloat len) - 1
             in
             getItemAtIndex index defaultSprite 0 sprites
 
