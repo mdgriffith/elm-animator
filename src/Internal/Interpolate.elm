@@ -1,20 +1,28 @@
 module Internal.Interpolate exposing
-    ( color
-    , Movement(..), move, xy, xyz
+    ( startColoring, color
+    , Movement(..), startMoving, move, startMovingXy, xy, startMovingXyz, xyz
     , derivativeOfEasing
     , startDescription, describe
-    , Period(..), adjustTiming, defaultArrival, defaultDeparture, linearly, startColoring, startLinear, startMoving, startMovingXy, startMovingXyz
+    , startLinear, linearly
+    , defaultArrival, defaultDeparture
+    , Period(..), adjustTiming
     )
 
 {-|
 
-@docs color
+@docs startColoring, color
 
-@docs Movement, move, xy, xyz
+@docs Movement, startMoving, move, startMovingXy, xy, startMovingXyz, xyz
 
 @docs derivativeOfEasing
 
 @docs startDescription, describe
+
+@docs startLinear, linearly
+
+@docs defaultArrival, defaultDeparture
+
+@docs Period, adjustTiming
 
 -}
 

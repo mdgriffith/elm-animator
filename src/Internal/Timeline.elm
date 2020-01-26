@@ -1111,7 +1111,7 @@ However, this foldp is a bit different.
 
 Ok, we have a few subtle concepts here.
 
-1.  `event` is the event type provided by the user.
+1.  `state` is the state type provided by the user.
     _Example_ `ShowModal`
 
 2.  `anchor` is the direct value that the event is mapped to.
@@ -1125,13 +1125,22 @@ And we have some type aliases to capture how to create each one of those values.
 
     `Interpolator` is a function that maps linearly between two `motions`.
 
+There are also two modes:
+
+Normally we return a value directly at `now`.
+
+In the case where we want to render things ahead of time, we want to do that but THEN
+we want to proceed at regular time intervals until the timeline is finished.
+
+In that case we also want to capture the dwell state at the end of the timeline in some way.
+
 -}
 foldp :
-    (event -> anchor)
-    -> Starter event anchor motion
+    (state -> anchor)
+    -> Starter state anchor motion
     -> Maybe (TimeAdjustor anchor)
-    -> Interpolator event anchor motion
-    -> Timeline event
+    -> Interpolator state anchor motion
+    -> Timeline state
     -> motion
 foldp lookup starter maybeAdjustTiming interpolate ((Timeline timelineDetails) as timeline) =
     case timelineDetails.events of
@@ -1154,16 +1163,43 @@ foldp lookup starter maybeAdjustTiming interpolate ((Timeline timelineDetails) a
             foldOverLines Beginning lookup maybeAdjustTiming interpolate timelineDetails startingCursor timetable Nothing
 
 
-{-| There's some subtlty to starting the fold over timelines.
-
-We always want a `previous event` to be available because it's important to a lot of calculations that involve adjusting the timeline last minute.
-
-SO, how do we start everything?
-
--}
+{-| -}
 type Beginning
     = Beginning
     | Continuing
+
+
+type Captured motion
+    = Single motion
+    | Forward
+        { first : motion
+        , frames : List motion
+        , dwell :
+            Maybe
+                { iterations : Maybe Int
+                , frames : List motion
+                }
+        }
+
+
+type alias Cursor event state =
+    { state : state
+    , events : List (Occurring event)
+    , previous : Previous event
+    , status : Status
+    , beginning : Beginning
+    , previousAdjustment :
+        Maybe
+            { previousEventTime : Time.Absolute
+            , applied : Adjustment
+            }
+    }
+
+
+type Status
+    = Finished
+    | NotDone
+    | Interrupted
 
 
 foldOverLines :
@@ -1241,26 +1277,6 @@ foldOverLines beginning lookup maybeAdjustor interpolate timeline startingState 
                     cursor.state
                     remaining
                     (Just cursor)
-
-
-type alias Cursor event state =
-    { state : state
-    , events : List (Occurring event)
-    , previous : Previous event
-    , status : Status
-    , beginning : Beginning
-    , previousAdjustment :
-        Maybe
-            { previousEventTime : Time.Absolute
-            , applied : Adjustment
-            }
-    }
-
-
-type Status
-    = Finished
-    | NotDone
-    | Interrupted
 
 
 overEvents :
@@ -1377,6 +1393,16 @@ zeroDuration =
         extend dwell even further
 
 -}
+applyAdjustment :
+    (event -> anchor)
+    -> TimeAdjustor anchor
+    ->
+        { previousEventTime : Time.Absolute
+        , applied : Adjustment
+        }
+    -> Occurring event
+    -> Maybe (Occurring event)
+    -> ( Occurring event, Maybe Adjustment )
 applyAdjustment lookup adjustor { previousEventTime, applied } ((Occurring event time maybeDwell) as target) maybeLookAhead =
     let
         targetAdjustments =
@@ -1477,108 +1503,6 @@ getPhase beginning target now maybeInterruption =
 
 
 {- BOOKKEEPING -}
-{- We need some standard way to cleanup a timeline so it doesn't grow out of control.
-
-   What are some ways we could flag events to be removed.
-
-       1. Don't flag them.
-       2. If an event has occurred before, and occurs again, remove the older one if it's not involved in an interruption.
-           - means iterating through the entire timeline, and keeping track of what happened before.
-
-       3. Flag by depth.  timeline can only grow to x number of events.
-           -- Essentially Just `List.take n timeline` on each timeline.
-           -- Can be an issue if we're using `after`, or any sort of folding,
-           -- where we're depending on an event that is chopped.
-
-           -> `After` is important because
-               -> What if we have a modal or a menu that opens
-               -> Then inside of that menu, a bunch of stuff happens.
-               -> The modal open state now needs to be reflected in each one of those tiny animations
-
-
-               This seems sorta doable with a nested type.  Such as:
-                   Animator.opacity model.timeline <|
-                       \event ->
-                           case event of
-                               Modal _ ->
-                                   1
-
-                               _ ->
-                                   0
-
-
-               But falls apart when we try to implement those animations.  Consider modeling two checkboxes that are being checked.
-
-                   Animator.opacity model.timeline <|
-                       \event ->
-                           case event of
-                               Modal CheckedOne ->
-                                   1
-
-                               _ ->
-                                   0
-
-
-                   Animator.opacity model.timeline <|
-                       \event ->
-                           case event of
-                               Modal CheckedTwo ->
-                                   1
-
-                               _ ->
-                                   0
-
-
-               Now, checking one box will "uncheck" the previous ones.  The problem is that we have one timeline, when we need parallel timelines.
-
-
-
-               Using `After`:
-
-                   Animator.opacity (Animator.after (Modal CheckedTwo) model.timeline) <|
-                       \event ->
-                           case event of
-                               True ->
-                                   1
-
-                               False ->
-                                   0
-
-
-               Using `Between`:
-                   Animator.opacity (Animator.between ModalOpen ModalClosed model.timeline) <|
-                       \event ->
-                           case event of
-                               True ->
-                                   1
-
-                               False ->
-                                   0
-
-
-               However, instead!  we could just have a timeline of our states.
-
-               So, we have
-
-               `Animator.Timeline Bool` for our checkbox.
-
-
-
-
-
-
-   # Synced states
-
-   Instead of
-
-       `Animator.rewrite : newEvent -> Timeline event -> (event -> Maybe newEvent) -> Timeline newEvent`
-
-       Where the likely usage would be to recalculate an entire new timeline in the view.
-       It also prevents us from having the flag-by-depth garbage collection, which could be done automatically.
-
-
-
--}
 
 
 current : Timeline event -> Occurring event
