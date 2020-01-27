@@ -8,6 +8,7 @@ module Internal.Timeline exposing
     , progress, dwellingTime
     , current, startPass, pass
     , Phase(..), Adjustment, Line(..), Timetable(..)
+    , Capturing(..), Captured(..), mostRecentlyCaptured
     , Description(..), Previous(..), atTime, currentAndPrevious, gc, gcLog, getDwell, linesAreActive, previousEndTime, previousStartTime, updateNoGC
     )
 
@@ -30,6 +31,8 @@ module Internal.Timeline exposing
 @docs current, startPass, pass
 
 @docs Phase, Adjustment, Line, Timetable
+
+@docs Capturing, Captured, mostRecentlyCaptured
 
 -}
 
@@ -1136,13 +1139,14 @@ In that case we also want to capture the dwell state at the end of the timeline 
 
 -}
 foldp :
-    (state -> anchor)
+    Capturing
+    -> (state -> anchor)
     -> Starter state anchor motion
     -> Maybe (TimeAdjustor anchor)
     -> Interpolator state anchor motion
     -> Timeline state
-    -> motion
-foldp lookup starter maybeAdjustTiming interpolate ((Timeline timelineDetails) as timeline) =
+    -> Captured motion
+foldp capturing lookup starter maybeAdjustTiming interpolate ((Timeline timelineDetails) as timeline) =
     case timelineDetails.events of
         Timetable timetable ->
             let
@@ -1160,7 +1164,13 @@ foldp lookup starter maybeAdjustTiming interpolate ((Timeline timelineDetails) a
                 startingCursor =
                     starter lookup startingEvent
             in
-            foldOverLines Beginning lookup maybeAdjustTiming interpolate timelineDetails startingCursor timetable Nothing
+            foldOverLines capturing Beginning lookup maybeAdjustTiming interpolate timelineDetails startingCursor timetable Nothing
+
+
+type Capturing
+    = CaptureNow
+      --              frames per second to capture
+    | CaptureFuture Float
 
 
 {-| -}
@@ -1171,8 +1181,8 @@ type Beginning
 
 type Captured motion
     = Single motion
-    | Forward
-        { first : motion
+    | Future
+        { mostRecent : motion
         , frames : List motion
         , dwell :
             Maybe
@@ -1182,8 +1192,42 @@ type Captured motion
         }
 
 
+mostRecentlyCaptured : Captured motion -> motion
+mostRecentlyCaptured cap =
+    case cap of
+        Single m ->
+            m
+
+        Future details ->
+            details.mostRecent
+
+
+getFuture :
+    Captured motion
+    ->
+        { frames : List motion
+        , dwell :
+            Maybe
+                { iterations : Maybe Int
+                , frames : List motion
+                }
+        }
+getFuture cap =
+    case cap of
+        Single thing ->
+            { frames = [ thing ]
+            , dwell = Nothing
+            }
+
+        Future future ->
+            { frames = future.frames
+            , dwell = future.dwell
+            }
+
+
 type alias Cursor event state =
     { state : state
+    , captured : Maybe (Captured state)
     , events : List (Occurring event)
     , previous : Previous event
     , status : Status
@@ -1203,7 +1247,8 @@ type Status
 
 
 foldOverLines :
-    Beginning
+    Capturing
+    -> Beginning
     -> (event -> anchor)
     -> Maybe (TimeAdjustor anchor)
     -> Interpolator event anchor motion
@@ -1211,14 +1256,21 @@ foldOverLines :
     -> motion
     -> List (Line event)
     -> Maybe (Cursor event motion)
-    -> motion
-foldOverLines beginning lookup maybeAdjustor interpolate timeline startingState lines existingCursor =
-    case lines of
+    -> Captured motion
+foldOverLines capturing beginning lookup maybeAdjustor interpolate timeline startingState lines existingCursor =
+    case Debug.log "lines" lines of
         [] ->
             -- Generally, this shouldn't be reachable because we require an event on initialization
             -- likely we'll want to change events to `(start, [remaining])` at some point in the future
             -- interpolate lookup (Occurring timeline.initial timeline.now Nothing) Nothing Start
-            startingState
+            case Debug.log "existing" existingCursor of
+                Nothing ->
+                    Single startingState
+
+                Just exist ->
+                    exist.captured
+                        |> Maybe.withDefault
+                            (Single exist.state)
 
         (Line startAt startingEvent events) :: remaining ->
             let
@@ -1232,10 +1284,11 @@ foldOverLines beginning lookup maybeAdjustor interpolate timeline startingState 
 
                 cursor =
                     List.foldl
-                        (overEvents timeline.now maybeInterruption lookup maybeAdjustor interpolate)
+                        (overEvents capturing timeline.now maybeInterruption lookup maybeAdjustor interpolate)
                         (case existingCursor of
                             Nothing ->
                                 { state = startingState
+                                , captured = Nothing
                                 , events = startingEvent :: events
                                 , previous =
                                     Previous startingEvent
@@ -1265,11 +1318,35 @@ foldOverLines beginning lookup maybeAdjustor interpolate timeline startingState 
                         )
                         (startingEvent :: events)
             in
-            if cursor.status == Finished then
-                cursor.state
+            if Debug.log "finished" (cursor.status == Finished) then
+                case capturing of
+                    CaptureNow ->
+                        Single cursor.state
+
+                    CaptureFuture fps ->
+                        -- let
+                        --     _ =
+                        --         Debug.log "--------" " forward for capture"
+                        -- in
+                        -- foldOverLines capturing
+                        --     cursor.beginning
+                        --     lookup
+                        --     maybeAdjustor
+                        --     interpolate
+                        --     timeline
+                        --     cursor.state
+                        --     remaining
+                        --     (Just cursor)
+                        cursor.captured
+                            |> Maybe.withDefault (Single cursor.state)
 
             else
-                foldOverLines cursor.beginning
+                let
+                    _ =
+                        Debug.log "not finished" "--"
+                in
+                foldOverLines capturing
+                    cursor.beginning
                     lookup
                     maybeAdjustor
                     interpolate
@@ -1279,8 +1356,26 @@ foldOverLines beginning lookup maybeAdjustor interpolate timeline startingState 
                     (Just cursor)
 
 
+{-| #1 - foldOverLines - if phase == finished && capturing ~= CaptureFuture then
+
+    - continue to fold over all lines
+
+#2 - overEvents - if phase == fininished && capturing ~= CaptureFuture then
+
+    - if Finished ->
+        if CaptureFuture, then
+            capture all events until interrupted
+        else
+            cursor
+    if NotDone then
+
+        if we Become finished && capturing ~= CaptureFuture:
+            -> Roll forward and collect all frames
+
+-}
 overEvents :
-    Time.Absolute
+    Capturing
+    -> Time.Absolute
     -> Maybe Time.Absolute
     -> (event -> anchor)
     -> Maybe (TimeAdjustor anchor)
@@ -1288,95 +1383,267 @@ overEvents :
     -> Occurring event
     -> Cursor event motion
     -> Cursor event motion
-overEvents now maybeInterruption lookup maybeAdjustor interpolate _ cursor =
-    case cursor.status of
+overEvents capturing now maybeInterruption lookup maybeAdjustor interpolate _ cursor =
+    case Debug.log "over-events" cursor.status of
         Finished ->
-            cursor
+            case capturing of
+                CaptureNow ->
+                    cursor
+
+                CaptureFuture fps ->
+                    let
+                        eventEndTime =
+                            maybeInterruption
+                                |> Maybe.withDefault
+                                    (List.head cursor.events
+                                        |> Maybe.map endTime
+                                        -- is now correct here?
+                                        |> Maybe.withDefault now
+                                    )
+
+                        newCursor =
+                            overEventsHelper
+                                capturing
+                                maybeInterruption
+                                lookup
+                                maybeAdjustor
+                                interpolate
+                                now
+                                cursor
+
+                        framesTillEndOfEvent =
+                            framesBetween fps now eventEndTime
+                                |> Debug.log ":::::: framecount"
+
+                        iterator =
+                            overEventsHelper
+                                capturing
+                                maybeInterruption
+                                lookup
+                                maybeAdjustor
+                                interpolate
+
+                        frames =
+                            List.foldl
+                                (captureEvents fps iterator now cursor)
+                                []
+                                (List.range 1 (floor framesTillEndOfEvent))
+                                |> List.reverse
+                                |> Debug.log "final frames"
+                    in
+                    { newCursor
+                        | captured =
+                            Just
+                                (Future
+                                    { mostRecent = newCursor.state
+                                    , frames = newCursor.state :: frames
+                                    , dwell = Nothing
+                                    }
+                                )
+                    }
 
         Interrupted ->
             cursor
 
         NotDone ->
-            case cursor.events of
-                [] ->
-                    cursor
+            let
+                newCursor =
+                    overEventsHelper
+                        capturing
+                        maybeInterruption
+                        lookup
+                        maybeAdjustor
+                        interpolate
+                        now
+                        cursor
+            in
+            if newCursor.status == Finished then
+                case capturing of
+                    CaptureNow ->
+                        newCursor
 
-                target :: remaining ->
-                    let
-                        lookAhead =
-                            List.head remaining
+                    CaptureFuture fps ->
+                        -- capture events till the end
+                        let
+                            eventEndTime =
+                                maybeInterruption
+                                    |> Maybe.withDefault
+                                        (List.head newCursor.events
+                                            |> Maybe.map endTime
+                                            -- is now correct here?
+                                            |> Maybe.withDefault now
+                                        )
 
-                        adjustedLookAhead =
-                            Maybe.map applyLookAheadAdjustment lookAhead
+                            -- _ =
+                            --     Debug.log "last" newCursor.events
+                            framesTillEndOfEvent =
+                                1
+                                    -- framesBetween fps now eventEndTime
+                                    |> Debug.log "frame count"
 
-                        applyLookAheadAdjustment ahead =
-                            case maybeAdjustment of
+                            iterator =
+                                overEventsHelper
+                                    capturing
+                                    maybeInterruption
+                                    lookup
+                                    maybeAdjustor
+                                    interpolate
+
+                            frames =
+                                List.foldl
+                                    (captureEvents fps iterator now cursor)
+                                    []
+                                    (List.range 1 (floor framesTillEndOfEvent))
+                                    |> List.reverse
+
+                            -- |> Debug.log "----> frames"
+                        in
+                        -- { newCursor
+                        --     | captured =
+                        --         Just
+                        --             (Future
+                        --                 { mostRecent = newCursor.state
+                        --                 , frames = frames
+                        --                 , dwell = Nothing
+                        --                 }
+                        --             )
+                        -- }
+                        newCursor
+
+            else
+                newCursor
+
+
+captureEvents fps fn now cursor frameIndex frames =
+    let
+        newNow =
+            now
+                |> Time.advanceBy (Duration.seconds ((1 / fps) * toFloat frameIndex))
+
+        newCursor =
+            fn newNow cursor
+    in
+    newCursor.state :: frames
+
+
+framesBetween fps start end =
+    let
+        _ =
+            Debug.log "frm" ( start, end )
+
+        seconds =
+            Time.duration start end
+                |> Duration.inSeconds
+    in
+    seconds * fps
+
+
+overEventsHelper :
+    Capturing
+    -> Maybe Time.Absolute
+    -> (event -> anchor)
+    -> Maybe (TimeAdjustor anchor)
+    -> Interpolator event anchor motion
+    -> Time.Absolute
+    -> Cursor event motion
+    -> Cursor event motion
+overEventsHelper capturing maybeInterruption lookup maybeAdjustor interpolate now cursor =
+    case cursor.events of
+        [] ->
+            cursor
+
+        target :: remaining ->
+            let
+                lookAhead =
+                    List.head remaining
+
+                adjustedLookAhead =
+                    Maybe.map applyLookAheadAdjustment lookAhead
+
+                applyLookAheadAdjustment ahead =
+                    case maybeAdjustment of
+                        Nothing ->
+                            ahead
+
+                        Just targetAdjustment ->
+                            case maybeAdjustor of
                                 Nothing ->
                                     ahead
 
-                                Just targetAdjustment ->
-                                    case maybeAdjustor of
-                                        Nothing ->
+                                Just adjustor ->
+                                    Tuple.first
+                                        (applyAdjustment lookup
+                                            adjustor
+                                            { previousEventTime = endTime target
+                                            , applied = targetAdjustment
+                                            }
                                             ahead
+                                            Nothing
+                                        )
 
-                                        Just adjustor ->
-                                            Tuple.first
-                                                (applyAdjustment lookup
-                                                    adjustor
-                                                    { previousEventTime = endTime target
-                                                    , applied = targetAdjustment
-                                                    }
-                                                    ahead
-                                                    Nothing
-                                                )
+                ( adjustedTarget, maybeAdjustment ) =
+                    case maybeAdjustor of
+                        Nothing ->
+                            ( target, Nothing )
 
-                        ( adjustedTarget, maybeAdjustment ) =
-                            case maybeAdjustor of
+                        Just adjustor ->
+                            case cursor.previousAdjustment of
                                 Nothing ->
                                     ( target, Nothing )
 
-                                Just adjustor ->
-                                    case cursor.previousAdjustment of
-                                        Nothing ->
-                                            ( target, Nothing )
+                                Just previousAdjustment ->
+                                    applyAdjustment lookup adjustor previousAdjustment target lookAhead
 
-                                        Just previousAdjustment ->
-                                            applyAdjustment lookup adjustor previousAdjustment target lookAhead
-                    in
-                    case getPhase cursor.beginning adjustedTarget now maybeInterruption of
-                        ( status, phase, currentTime ) ->
-                            { state =
-                                interpolate
-                                    lookup
-                                    cursor.previous
-                                    adjustedTarget
-                                    adjustedLookAhead
-                                    phase
-                                    currentTime
-                                    cursor.state
-                            , events = remaining
-                            , previous =
-                                -- This is preemptively setting the "previous" target
-                                -- however, if there has been an interruption, our previous doesn't change
-                                case status of
-                                    Interrupted ->
-                                        PreviouslyInterrupted currentTime
+                ( status, phase, currentTime ) =
+                    getPhase cursor.beginning adjustedTarget now maybeInterruption
 
-                                    _ ->
-                                        Previous adjustedTarget
-                            , status = status
-                            , beginning = Continuing
-                            , previousAdjustment =
-                                case maybeAdjustment of
-                                    Nothing ->
-                                        Nothing
+                newState =
+                    interpolate
+                        lookup
+                        cursor.previous
+                        adjustedTarget
+                        adjustedLookAhead
+                        phase
+                        currentTime
+                        cursor.state
+            in
+            { state =
+                newState
+            , captured =
+                case capturing of
+                    CaptureNow ->
+                        Nothing
 
-                                    Just adjustment ->
-                                        Just
-                                            { previousEventTime = endTime target
-                                            , applied = adjustment
-                                            }
+                    CaptureFuture fps ->
+                        if status == Finished then
+                            -- gather all frames
+                            Nothing
+
+                        else
+                            Nothing
+            , events = remaining
+            , previous =
+                -- This is preemptively setting the "previous" target
+                -- however, if there has been an interruption, our previous doesn't change
+                case status of
+                    Interrupted ->
+                        PreviouslyInterrupted currentTime
+
+                    _ ->
+                        Previous adjustedTarget
+            , status = status
+            , beginning = Continuing
+            , previousAdjustment =
+                case maybeAdjustment of
+                    Nothing ->
+                        Nothing
+
+                    Just adjustment ->
+                        Just
+                            { previousEventTime = endTime target
+                            , applied = adjustment
                             }
+            }
 
 
 zeroDuration : Duration.Duration
@@ -1507,11 +1774,14 @@ getPhase beginning target now maybeInterruption =
 
 current : Timeline event -> Occurring event
 current timeline =
-    foldp identity
-        startPass
-        Nothing
-        pass
-        timeline
+    mostRecentlyCaptured <|
+        foldp
+            CaptureNow
+            identity
+            startPass
+            Nothing
+            pass
+            timeline
 
 
 startPass : (event -> event) -> Occurring event -> Occurring event
@@ -1532,11 +1802,14 @@ currentAndPrevious :
         , target : Occurring event
         }
 currentAndPrevious timeline =
-    foldp identity
-        startCurrentAndPrevious
-        Nothing
-        passCurrentAndPrevious
-        timeline
+    mostRecentlyCaptured <|
+        foldp
+            CaptureNow
+            identity
+            startCurrentAndPrevious
+            Nothing
+            passCurrentAndPrevious
+            timeline
 
 
 startCurrentAndPrevious :

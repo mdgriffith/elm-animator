@@ -280,32 +280,39 @@ type alias Description state =
 {-| -}
 describe : Timeline state -> List (Description state)
 describe timeline =
-    Timeline.foldp identity
-        Interpolate.startDescription
-        Nothing
-        Interpolate.describe
-        timeline
+    Timeline.mostRecentlyCaptured <|
+        Timeline.foldp Timeline.CaptureNow
+            identity
+            Interpolate.startDescription
+            Nothing
+            Interpolate.describe
+            timeline
 
 
 {-| -}
 color : Timeline state -> (state -> Color) -> Color
 color timeline lookup =
-    Timeline.foldp lookup
-        Interpolate.startColoring
-        Nothing
-        Interpolate.color
-        timeline
+    Timeline.mostRecentlyCaptured <|
+        Timeline.foldp Timeline.CaptureNow
+            lookup
+            Interpolate.startColoring
+            Nothing
+            Interpolate.color
+            timeline
 
 
 {-| Interpolate a float linearly between destinations.
 -}
 linear : Timeline state -> (state -> Float) -> Float
 linear timeline lookup =
-    Timeline.foldp lookup
-        Interpolate.startLinear
-        Nothing
-        Interpolate.linearly
-        timeline
+    Timeline.mostRecentlyCaptured <|
+        Timeline.foldp
+            Timeline.CaptureNow
+            lookup
+            Interpolate.startLinear
+            Nothing
+            Interpolate.linearly
+            timeline
 
 
 {-| -}
@@ -331,11 +338,14 @@ xy timeline lookup =
         }
     )
     <|
-        Timeline.foldp lookup
-            Interpolate.startMovingXy
-            Nothing
-            Interpolate.xy
-            timeline
+        Timeline.mostRecentlyCaptured <|
+            Timeline.foldp
+                Timeline.CaptureNow
+                lookup
+                Interpolate.startMovingXy
+                Nothing
+                Interpolate.xy
+                timeline
 
 
 {-| -}
@@ -348,22 +358,27 @@ xyz timeline lookup =
         }
     )
     <|
-        Timeline.foldp lookup
-            Interpolate.startMovingXyz
-            Nothing
-            Interpolate.xyz
-            timeline
+        Timeline.mostRecentlyCaptured <|
+            Timeline.foldp Timeline.CaptureNow
+                lookup
+                Interpolate.startMovingXyz
+                Nothing
+                Interpolate.xyz
+                timeline
 
 
 {-| -}
 details : Timeline state -> (state -> Movement) -> { position : Float, velocity : Float }
 details timeline lookup =
     unwrapUnits
-        (Timeline.foldp lookup
-            Interpolate.startMoving
-            (Just Interpolate.adjustTiming)
-            Interpolate.move
-            timeline
+        (Timeline.mostRecentlyCaptured <|
+            Timeline.foldp
+                Timeline.CaptureNow
+                lookup
+                Interpolate.startMoving
+                (Just Interpolate.adjustTiming)
+                Interpolate.move
+                timeline
         )
 
 

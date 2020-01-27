@@ -5,6 +5,7 @@ import Array
 import Benchmark exposing (..)
 import Benchmark.Runner exposing (BenchmarkProgram, program)
 import Internal.Spring as Spring
+import Internal.Timeline as Timeline
 import Random
 import Time
 

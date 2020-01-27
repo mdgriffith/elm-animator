@@ -3,7 +3,7 @@ module Checkbox exposing (main)
 {-| -}
 
 import Animator
-import Animator.CSS
+import Animator.Inline
 import Browser
 import Color
 import Html exposing (..)
@@ -421,7 +421,7 @@ viewHugeCheckbox spin checked =
             , Events.onClick (Check (not (Animator.current checked)))
             ]
             [ div
-                [ Animator.CSS.backgroundColor checked <|
+                [ Animator.Inline.backgroundColor checked <|
                     \state ->
                         case state of
                             True ->
@@ -429,7 +429,7 @@ viewHugeCheckbox spin checked =
 
                             False ->
                                 Color.white
-                , Animator.CSS.borderColor checked <|
+                , Animator.Inline.borderColor checked <|
                     \state ->
                         case state of
                             True ->
@@ -448,7 +448,7 @@ viewHugeCheckbox spin checked =
                 , Attr.style "text-align" "center"
                 ]
                 [ div
-                    [ Animator.CSS.opacity checked <|
+                    [ Animator.Inline.opacity checked <|
                         \state ->
                             case state of
                                 True ->
@@ -456,7 +456,7 @@ viewHugeCheckbox spin checked =
 
                                 False ->
                                     0
-                    , Animator.CSS.transform
+                    , Animator.Inline.transform
                         { position = { x = 0, y = 0 }
                         , rotate =
                             Animator.linear checked <|
@@ -487,7 +487,7 @@ viewHugeCheckbox spin checked =
                 [ text "Click me" ]
             ]
         , div
-            [ Animator.CSS.opacity checked <|
+            [ Animator.Inline.opacity checked <|
                 \state ->
                     case state of
                         True ->
@@ -532,7 +532,7 @@ viewCheckbox label checked onClick =
         , Events.onClick (onClick (not (Animator.current checked)))
         ]
         [ div
-            [ Animator.CSS.backgroundColor checked <|
+            [ Animator.Inline.backgroundColor checked <|
                 \state ->
                     case state of
                         True ->
@@ -540,7 +540,7 @@ viewCheckbox label checked onClick =
 
                         False ->
                             Color.white
-            , Animator.CSS.borderColor checked <|
+            , Animator.Inline.borderColor checked <|
                 \state ->
                     case state of
                         True ->
@@ -559,7 +559,7 @@ viewCheckbox label checked onClick =
             , Attr.style "text-align" "center"
             ]
             [ div
-                [ Animator.CSS.opacity checked <|
+                [ Animator.Inline.opacity checked <|
                     \state ->
                         case state of
                             True ->
@@ -567,7 +567,7 @@ viewCheckbox label checked onClick =
 
                             False ->
                                 0
-                , Animator.CSS.transform
+                , Animator.Inline.transform
                     { position = { x = 0, y = 0 }
                     , rotate =
                         Animator.linear checked <|
