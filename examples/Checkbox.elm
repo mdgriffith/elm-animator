@@ -3,7 +3,7 @@ module Checkbox exposing (main)
 {-| -}
 
 import Animator
-import Animator.CSS
+import Animator.Inline
 import Browser
 import Color
 import Html exposing (..)
@@ -130,14 +130,14 @@ viewHugeCheckbox checked =
             , Events.onClick (Check (not (Animator.current checked)))
             ]
             [ div
-                [ Animator.CSS.backgroundColor checked <|
+                [ Animator.Inline.backgroundColor checked <|
                     \state ->
                         if state then
                             Color.rgb255 255 96 96
 
                         else
                             Color.white
-                , Animator.CSS.borderColor checked <|
+                , Animator.Inline.borderColor checked <|
                     \state ->
                         if state then
                             Color.rgb255 255 96 96
@@ -155,14 +155,14 @@ viewHugeCheckbox checked =
                 , Attr.style "text-align" "center"
                 ]
                 [ div
-                    [ Animator.CSS.opacity checked <|
+                    [ Animator.Inline.opacity checked <|
                         \state ->
                             if state then
                                 1
 
                             else
                                 0
-                    , Animator.CSS.transform
+                    , Animator.Inline.transform
                         { position = { x = 0, y = 0 }
                         , rotate =
                             Animator.linear checked <|
@@ -191,7 +191,7 @@ viewHugeCheckbox checked =
                 [ text "Click me" ]
             ]
         , div
-            [ Animator.CSS.opacity checked <|
+            [ Animator.Inline.opacity checked <|
                 \state ->
                     if state then
                         1
