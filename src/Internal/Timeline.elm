@@ -1318,33 +1318,29 @@ foldOverLines capturing beginning lookup maybeAdjustor interpolate timeline star
                         )
                         (startingEvent :: events)
             in
-            if Debug.log "finished" (cursor.status == Finished) then
+            if cursor.status == Finished then
                 case capturing of
                     CaptureNow ->
                         Single cursor.state
 
                     CaptureFuture fps ->
-                        -- let
-                        --     _ =
-                        --         Debug.log "--------" " forward for capture"
-                        -- in
-                        -- foldOverLines capturing
-                        --     cursor.beginning
-                        --     lookup
-                        --     maybeAdjustor
-                        --     interpolate
-                        --     timeline
-                        --     cursor.state
-                        --     remaining
-                        --     (Just cursor)
-                        cursor.captured
-                            |> Maybe.withDefault (Single cursor.state)
+                        let
+                            _ =
+                                logIndent 4 "-------->" " forward for capture"
+                        in
+                        foldOverLines capturing
+                            cursor.beginning
+                            lookup
+                            maybeAdjustor
+                            interpolate
+                            timeline
+                            cursor.state
+                            remaining
+                            (Just cursor)
+                -- cursor.captured
+                --     |> Maybe.withDefault (Single cursor.state)
 
             else
-                let
-                    _ =
-                        Debug.log "not finished" "--"
-                in
                 foldOverLines capturing
                     cursor.beginning
                     lookup
@@ -1384,7 +1380,20 @@ overEvents :
     -> Cursor event motion
     -> Cursor event motion
 overEvents capturing now maybeInterruption lookup maybeAdjustor interpolate _ cursor =
-    case Debug.log "over-events" cursor.status of
+    let
+        -- interrupted =
+        --     case maybeInterruption of
+        --         Nothing ->
+        --             False
+        --         Just interruptTime ->
+        --             Time.thisAfterOrEqualThat (previousEndTime cursor.previous) interruptTime
+        _ =
+            logSpace "Over events" ( cursor.status, cursor.previous, List.head cursor.events )
+
+        _ =
+            logIndent 4 "now, interruption" ( now, maybeInterruption )
+    in
+    case cursor.status of
         Finished ->
             case capturing of
                 CaptureNow ->
@@ -1392,55 +1401,79 @@ overEvents capturing now maybeInterruption lookup maybeAdjustor interpolate _ cu
 
                 CaptureFuture fps ->
                     let
-                        eventEndTime =
-                            maybeInterruption
-                                |> Maybe.withDefault
-                                    (List.head cursor.events
-                                        |> Maybe.map endTime
-                                        -- is now correct here?
-                                        |> Maybe.withDefault now
-                                    )
+                        interrupted =
+                            Debug.log "finished, interrupted" <|
+                                case maybeInterruption of
+                                    Nothing ->
+                                        False
 
-                        newCursor =
-                            overEventsHelper
-                                capturing
-                                maybeInterruption
-                                lookup
-                                maybeAdjustor
-                                interpolate
-                                now
-                                cursor
-
-                        framesTillEndOfEvent =
-                            framesBetween fps now eventEndTime
-                                |> Debug.log ":::::: framecount"
-
-                        iterator =
-                            overEventsHelper
-                                capturing
-                                maybeInterruption
-                                lookup
-                                maybeAdjustor
-                                interpolate
-
-                        frames =
-                            List.foldl
-                                (captureEvents fps iterator now cursor)
-                                []
-                                (List.range 1 (floor framesTillEndOfEvent))
-                                |> List.reverse
-                                |> Debug.log "final frames"
+                                    Just interruptTime ->
+                                        Time.thisAfterThat (previousEndTime cursor.previous) interruptTime
                     in
-                    { newCursor
-                        | captured =
-                            Just
-                                (Future
-                                    { mostRecent = newCursor.state
-                                    , frames = newCursor.state :: frames
-                                    , dwell = Nothing
-                                    }
-                                )
-                    }
+                    if interrupted then
+                        cursor
+
+                    else
+                        let
+                            eventEndTime =
+                                maybeInterruption
+                                    |> Maybe.withDefault
+                                        (List.head cursor.events
+                                            |> Maybe.map endTime
+                                            -- is now correct here?
+                                            |> Maybe.withDefault now
+                                        )
+
+                            newCursor =
+                                overEventsHelper
+                                    capturing
+                                    maybeInterruption
+                                    lookup
+                                    maybeAdjustor
+                                    interpolate
+                                    now
+                                    cursor
+
+                            _ =
+                                Debug.log "times" ( previousEndTime cursor.previous, eventEndTime )
+
+                            _ =
+                                Debug.log "capture events with" cursor
+
+                            _ =
+                                Debug.log "newcursor" newCursor
+
+                            framesTillEndOfEvent =
+                                framesBetween fps (previousEndTime cursor.previous) eventEndTime
+                                    |> Debug.log "---Finished-------------------> frame count"
+
+                            iterator =
+                                overEventsHelper
+                                    capturing
+                                    maybeInterruption
+                                    lookup
+                                    maybeAdjustor
+                                    interpolate
+
+                            frames =
+                                List.foldl
+                                    (captureEvents fps iterator (previousEndTime cursor.previous) cursor)
+                                    []
+                                    (List.range 1 (floor framesTillEndOfEvent))
+                                    |> List.reverse
+                                    |> logIndent 4 "----> found frames"
+                        in
+                        { newCursor
+                            | captured =
+                                Just
+                                    (mergeCaptures
+                                        { mostRecent = newCursor.state
+                                        , frames = newCursor.state :: frames
+                                        , dwell = Nothing
+                                        }
+                                        cursor.captured
+                                    )
+                        }
 
         Interrupted ->
             cursor
@@ -1463,59 +1496,126 @@ overEvents capturing now maybeInterruption lookup maybeAdjustor interpolate _ cu
                         newCursor
 
                     CaptureFuture fps ->
-                        -- capture events till the end
+                        -- capture events till the end or interrupted
                         let
-                            eventEndTime =
-                                maybeInterruption
-                                    |> Maybe.withDefault
-                                        (List.head newCursor.events
-                                            |> Maybe.map endTime
-                                            -- is now correct here?
-                                            |> Maybe.withDefault now
-                                        )
+                            interrupted =
+                                Debug.log "ND, interrupted" <|
+                                    case maybeInterruption of
+                                        Nothing ->
+                                            False
 
-                            -- _ =
-                            --     Debug.log "last" newCursor.events
-                            framesTillEndOfEvent =
-                                1
-                                    -- framesBetween fps now eventEndTime
-                                    |> Debug.log "frame count"
-
-                            iterator =
-                                overEventsHelper
-                                    capturing
-                                    maybeInterruption
-                                    lookup
-                                    maybeAdjustor
-                                    interpolate
-
-                            frames =
-                                List.foldl
-                                    (captureEvents fps iterator now cursor)
-                                    []
-                                    (List.range 1 (floor framesTillEndOfEvent))
-                                    |> List.reverse
-
-                            -- |> Debug.log "----> frames"
+                                        Just interruptTime ->
+                                            Time.thisAfterOrEqualThat now interruptTime
                         in
-                        -- { newCursor
-                        --     | captured =
-                        --         Just
-                        --             (Future
-                        --                 { mostRecent = newCursor.state
-                        --                 , frames = frames
-                        --                 , dwell = Nothing
-                        --                 }
-                        --             )
-                        -- }
-                        newCursor
+                        if logIndent 8 "SKIPPING" interrupted then
+                            newCursor
+
+                        else
+                            let
+                                eventEndTime =
+                                    maybeInterruption
+                                        |> Maybe.withDefault
+                                            (List.head cursor.events
+                                                |> Maybe.map endTime
+                                                -- is now correct here?
+                                                |> Maybe.withDefault now
+                                            )
+
+                                framesTillEndOfEvent =
+                                    framesBetween fps now eventEndTime
+                                        |> logIndent 4 "ND -> frame count"
+
+                                _ =
+                                    logIndent 4 "ND times" ( now, eventEndTime )
+
+                                iterator =
+                                    overEventsHelper
+                                        capturing
+                                        maybeInterruption
+                                        lookup
+                                        maybeAdjustor
+                                        interpolate
+
+                                frames =
+                                    List.foldl
+                                        (captureEvents fps iterator now cursor)
+                                        []
+                                        (List.range 1 (floor framesTillEndOfEvent))
+                                        |> List.reverse
+                                        |> logIndent 4 "ND ----> found frames"
+
+                                cursorAtEndOfEvent =
+                                    overEventsHelper
+                                        capturing
+                                        maybeInterruption
+                                        lookup
+                                        maybeAdjustor
+                                        interpolate
+                                        eventEndTime
+                                        cursor
+
+                                _ =
+                                    logIndent 4
+                                        "prevs"
+                                        ( cursor.previous, newCursor.previous, cursorAtEndOfEvent.previous )
+
+                                -- |> Debug.log "cursor at end"
+                            in
+                            { --newCursor
+                              cursorAtEndOfEvent
+                                | captured =
+                                    Just
+                                        (Future
+                                            { mostRecent = newCursor.state
+                                            , frames = frames
+                                            , dwell = Nothing
+                                            }
+                                        )
+                            }
 
             else
                 newCursor
 
 
+logSpace label val =
+    -- let
+    --     _ = Debug.log "\n" " "
+    -- in
+    let
+        x =
+            Debug.log ("{-\n    " ++ label) val
+
+        _ =
+            Debug.log "\n-}" ""
+    in
+    val
+
+
+logIndent n label val =
+    Debug.log (String.repeat n " " ++ label) val
+
+
+mergeCaptures details maybeCaptured =
+    case maybeCaptured of
+        Nothing ->
+            Future details
+
+        Just (Single motion) ->
+            Future details
+
+        Just (Future motion) ->
+            -- let
+            --     _ =
+            --         Debug.log "merge frames" ( motion.frames, details.frames )
+            -- in
+            Future { details | frames = motion.frames ++ details.frames }
+
+
 captureEvents fps fn now cursor frameIndex frames =
     let
+        _ =
+            Debug.log "             : cap -> " ( now, newNow )
+
         newNow =
             now
                 |> Time.advanceBy (Duration.seconds ((1 / fps) * toFloat frameIndex))
@@ -1528,9 +1628,6 @@ captureEvents fps fn now cursor frameIndex frames =
 
 framesBetween fps start end =
     let
-        _ =
-            Debug.log "frm" ( start, end )
-
         seconds =
             Time.duration start end
                 |> Duration.inSeconds
