@@ -9,7 +9,8 @@ module Internal.Timeline exposing
     , current, startPass, pass
     , Phase(..), Adjustment, Line(..), Timetable(..)
     , Capturing(..), Captured(..), mostRecentlyCaptured
-    , Description(..), Previous(..), atTime, currentAndPrevious, gc, gcLog, getDwell, linesAreActive, previousEndTime, previousStartTime, updateNoGC
+    , foldpSlim
+    , Description(..), Interp, Period(..), Previous(..), atTime, currentAndPrevious, gc, gcLog, getDwell, linesAreActive, previousEndTime, previousStartTime, updateNoGC
     )
 
 {-|
@@ -34,6 +35,8 @@ module Internal.Timeline exposing
 
 @docs Capturing, Captured, mostRecentlyCaptured
 
+@docs foldpSlim
+
 -}
 
 import Duration
@@ -51,6 +54,11 @@ type Schedule event
 {-| -}
 type Event event
     = Event Time.Duration event (Maybe Time.Duration)
+
+
+type Period
+    = Loop Time.Duration
+    | Repeat Int Time.Duration
 
 
 getScheduledEvent (Event _ ev _) =
@@ -122,6 +130,53 @@ type alias Interpolator event anchor state =
     -> Time.Absolute
     -> state
     -> state
+
+
+type alias DwellFor anchor state =
+    anchor -> Time.Duration -> state
+
+
+type alias After event anchor state =
+    (event -> anchor) -> Occurring event -> List (Occurring event) -> state
+
+
+type alias Lerp event anchor state =
+    (event -> anchor) -> Previous event -> Occurring event -> List (Occurring event) -> Time.Absolute -> state -> state
+
+
+type alias DwellPeriod anchor =
+    anchor -> Maybe Period
+
+
+type alias Start anchor state =
+    anchor -> state
+
+
+foldpSlim :
+    Capturing
+    -> (state -> anchor)
+    -> Interp state anchor motion
+    -> Timeline state
+    -> motion
+foldpSlim capturing lookup fn ((Timeline timelineDetails) as timeline) =
+    case timelineDetails.events of
+        Timetable timetable ->
+            let
+                start =
+                    fn.start (lookup timelineDetails.initial)
+            in
+            case timetable of
+                [] ->
+                    start
+
+                firstLine :: remainingLines ->
+                    foldOverLinesSingle
+                        fn
+                        lookup
+                        timelineDetails
+                        firstLine
+                        remainingLines
+                        start
 
 
 type Previous event
@@ -1182,7 +1237,8 @@ type Beginning
 type Captured motion
     = Single motion
     | Future
-        { mostRecent : motion
+        { fps : Float
+        , mostRecent : motion
         , frames : List motion
         , dwell :
             Maybe
@@ -1246,6 +1302,183 @@ type Status
     | Interrupted
 
 
+type alias Interp state anchor motion =
+    { start : anchor -> motion
+    , adjustor : TimeAdjustor anchor
+    , dwellFor : DwellFor anchor motion
+    , dwellPeriod : DwellPeriod anchor
+    , after : After state anchor motion
+    , lerp : Lerp state anchor motion
+    }
+
+
+foldOverLinesSingle :
+    Interp state anchor motion
+    -> (state -> anchor)
+    -> TimelineDetails state
+    -- current line
+    -> Line state
+    -> List (Line state)
+    -> motion
+    -> motion
+foldOverLinesSingle fn lookup details (Line lineStart lineStartEv lineRemain) futureLines state =
+    -- futureStart starts a new line.
+    -- if an interruption occurs, we want to interpolate to the point of the interruption
+    -- then transition over to the new line.
+    let
+        transition newState =
+            case futureLines of
+                [] ->
+                    newState
+
+                ((Line futureStart futureStartEv futureRemain) as future) :: restOfFuture ->
+                    if Time.thisBeforeThat futureStart details.now then
+                        foldOverLinesSingle fn lookup details future restOfFuture newState
+
+                    else
+                        newState
+
+        now =
+            case futureLines of
+                [] ->
+                    details.now
+
+                (Line futureStart futureStartEv futureRemain) :: restOfFuture ->
+                    if Time.thisBeforeThat futureStart details.now then
+                        futureStart
+
+                    else
+                        details.now
+    in
+    let
+        eventStartTime =
+            startTime lineStartEv
+    in
+    if Time.thisBeforeThat now eventStartTime then
+        -- lerp from state to lineStartEv
+        -- *Note*, the occurring event we're creating here probably wants soemthing like details.originTime and a real dwell time.
+        -- If we're coming in from a transition
+        fn.lerp lookup
+            (Previous (Occurring details.initial lineStart Nothing))
+            lineStartEv
+            lineRemain
+            now
+            state
+            |> transition
+
+    else
+        let
+            eventEndTime =
+                endTime lineStartEv
+        in
+        if Time.thisAfterOrEqualThat now eventEndTime then
+            -- after linestartEv
+            case lineRemain of
+                [] ->
+                    -- dwell at lineStartEv, there's nothing to transition to
+                    fn.dwellFor (lookup (getEvent lineStartEv)) (Time.duration eventStartTime now)
+                        |> transition
+
+                next :: lineRemain2 ->
+                    if Time.thisBeforeThat now (startTime next) then
+                        -- Before next.starTime
+                        --     -> lerp start to next
+                        fn.lerp
+                            lookup
+                            (Previous lineStartEv)
+                            next
+                            lineRemain2
+                            now
+                            state
+                            |> transition
+
+                    else if Time.thisBeforeThat now (endTime next) then
+                        -- After next.startTime
+                        --- Before next.endTime
+                        --      -> we're dwelling at `next`
+                        fn.dwellFor
+                            (lookup (getEvent next))
+                            (Time.duration (startTime next) now)
+                            |> transition
+
+                    else
+                        -- After lineStart.endTime
+                        -- After next.startTime
+                        -- After next.endTime
+                        case lineRemain2 of
+                            [] ->
+                                -- Nothing to continue on to,
+                                --      -> we're dwelling at `next`
+                                fn.dwellFor (lookup (getEvent next))
+                                    (Time.duration (startTime next) now)
+                                    |> transition
+
+                            next2 :: lineRemain3 ->
+                                -- continue on
+                                if Time.thisBeforeThat now (startTime next2) then
+                                    let
+                                        after =
+                                            fn.after lookup next lineRemain2
+                                    in
+                                    fn.lerp
+                                        lookup
+                                        (Previous next)
+                                        next2
+                                        lineRemain3
+                                        now
+                                        after
+                                        |> transition
+
+                                else if Time.thisBeforeThat now (endTime next2) then
+                                    -- we're dwelling at `next2`
+                                    fn.dwellFor
+                                        (lookup (getEvent next2))
+                                        (Time.duration (startTime next2) now)
+                                        |> transition
+
+                                else
+                                    let
+                                        after =
+                                            fn.after lookup next2 lineRemain3
+                                    in
+                                    foldOverLinesSingle
+                                        fn
+                                        lookup
+                                        details
+                                        (Line (endTime next) next2 lineRemain3)
+                                        futureLines
+                                        after
+
+        else
+            -- dwell at linestartEv
+            -- we've checked that it's not after or before, so it has to be between the start and end
+            case lineStartEv of
+                Occurring _ _ maybeDwell ->
+                    case maybeDwell of
+                        Nothing ->
+                            fn.dwellFor (lookup (getEvent lineStartEv)) zeroDuration
+                                |> transition
+
+                        Just dur ->
+                            fn.dwellFor (lookup (getEvent lineStartEv)) dur
+                                |> transition
+
+
+capture : Captured motion -> motion -> Captured motion
+capture cap new =
+    case cap of
+        Single _ ->
+            Single new
+
+        Future details ->
+            Future
+                { fps = details.fps
+                , mostRecent = new
+                , frames = details.frames
+                , dwell = details.dwell
+                }
+
+
 foldOverLines :
     Capturing
     -> Beginning
@@ -1258,12 +1491,12 @@ foldOverLines :
     -> Maybe (Cursor event motion)
     -> Captured motion
 foldOverLines capturing beginning lookup maybeAdjustor interpolate timeline startingState lines existingCursor =
-    case Debug.log "lines" lines of
+    case lines of
         [] ->
             -- Generally, this shouldn't be reachable because we require an event on initialization
             -- likely we'll want to change events to `(start, [remaining])` at some point in the future
             -- interpolate lookup (Occurring timeline.initial timeline.now Nothing) Nothing Start
-            case Debug.log "existing" existingCursor of
+            case existingCursor of
                 Nothing ->
                     Single startingState
 
@@ -1324,10 +1557,10 @@ foldOverLines capturing beginning lookup maybeAdjustor interpolate timeline star
                         Single cursor.state
 
                     CaptureFuture fps ->
-                        let
-                            _ =
-                                logIndent 4 "-------->" " forward for capture"
-                        in
+                        -- let
+                        --     _ =
+                        --         logIndent 4 "-------->" " forward for capture"
+                        -- in
                         foldOverLines capturing
                             cursor.beginning
                             lookup
@@ -1380,19 +1613,18 @@ overEvents :
     -> Cursor event motion
     -> Cursor event motion
 overEvents capturing now maybeInterruption lookup maybeAdjustor interpolate _ cursor =
-    let
-        -- interrupted =
-        --     case maybeInterruption of
-        --         Nothing ->
-        --             False
-        --         Just interruptTime ->
-        --             Time.thisAfterOrEqualThat (previousEndTime cursor.previous) interruptTime
-        _ =
-            logSpace "Over events" ( cursor.status, cursor.previous, List.head cursor.events )
-
-        _ =
-            logIndent 4 "now, interruption" ( now, maybeInterruption )
-    in
+    -- let
+    -- interrupted =
+    --     case maybeInterruption of
+    --         Nothing ->
+    --             False
+    --         Just interruptTime ->
+    --             Time.thisAfterOrEqualThat (previousEndTime cursor.previous) interruptTime
+    -- _ =
+    --     logSpace "Over events" ( cursor.status, cursor.previous, List.head cursor.events )
+    -- _ =
+    --     logIndent 4 "now, interruption" ( now, maybeInterruption )
+    -- in
     case cursor.status of
         Finished ->
             case capturing of
@@ -1402,13 +1634,13 @@ overEvents capturing now maybeInterruption lookup maybeAdjustor interpolate _ cu
                 CaptureFuture fps ->
                     let
                         interrupted =
-                            Debug.log "finished, interrupted" <|
-                                case maybeInterruption of
-                                    Nothing ->
-                                        False
+                            -- Debug.log "finished, interrupted" <|
+                            case maybeInterruption of
+                                Nothing ->
+                                    False
 
-                                    Just interruptTime ->
-                                        Time.thisAfterThat (previousEndTime cursor.previous) interruptTime
+                                Just interruptTime ->
+                                    Time.thisAfterThat (previousEndTime cursor.previous) interruptTime
                     in
                     if interrupted then
                         cursor
@@ -1434,19 +1666,16 @@ overEvents capturing now maybeInterruption lookup maybeAdjustor interpolate _ cu
                                     now
                                     cursor
 
-                            _ =
-                                Debug.log "times" ( previousEndTime cursor.previous, eventEndTime )
-
-                            _ =
-                                Debug.log "capture events with" cursor
-
-                            _ =
-                                Debug.log "newcursor" newCursor
-
+                            -- _ =
+                            --     Debug.log "times" ( previousEndTime cursor.previous, eventEndTime )
+                            -- _ =
+                            --     Debug.log "capture events with" cursor
+                            -- _ =
+                            --     Debug.log "newcursor" newCursor
                             framesTillEndOfEvent =
                                 framesBetween fps (previousEndTime cursor.previous) eventEndTime
-                                    |> Debug.log "---Finished-------------------> frame count"
 
+                            -- |> Debug.log "---Finished-------------------> frame count"
                             iterator =
                                 overEventsHelper
                                     capturing
@@ -1461,13 +1690,15 @@ overEvents capturing now maybeInterruption lookup maybeAdjustor interpolate _ cu
                                     []
                                     (List.range 1 (floor framesTillEndOfEvent))
                                     |> List.reverse
-                                    |> logIndent 4 "----> found frames"
+
+                            -- |> logIndent 4 "----> found frames"
                         in
                         { newCursor
                             | captured =
                                 Just
                                     (mergeCaptures
                                         { mostRecent = newCursor.state
+                                        , fps = fps
                                         , frames = newCursor.state :: frames
                                         , dwell = Nothing
                                         }
@@ -1499,15 +1730,16 @@ overEvents capturing now maybeInterruption lookup maybeAdjustor interpolate _ cu
                         -- capture events till the end or interrupted
                         let
                             interrupted =
-                                Debug.log "ND, interrupted" <|
-                                    case maybeInterruption of
-                                        Nothing ->
-                                            False
+                                -- Debug.log "ND, interrupted" <|
+                                case maybeInterruption of
+                                    Nothing ->
+                                        False
 
-                                        Just interruptTime ->
-                                            Time.thisAfterOrEqualThat now interruptTime
+                                    Just interruptTime ->
+                                        Time.thisAfterOrEqualThat now interruptTime
                         in
-                        if logIndent 8 "SKIPPING" interrupted then
+                        -- if logIndent 8 "SKIPPING" interrupted then
+                        if interrupted then
                             newCursor
 
                         else
@@ -1523,11 +1755,10 @@ overEvents capturing now maybeInterruption lookup maybeAdjustor interpolate _ cu
 
                                 framesTillEndOfEvent =
                                     framesBetween fps now eventEndTime
-                                        |> logIndent 4 "ND -> frame count"
 
-                                _ =
-                                    logIndent 4 "ND times" ( now, eventEndTime )
-
+                                -- |> logIndent 4 "ND -> frame count"
+                                -- _ =
+                                -- logIndent 4 "ND times" ( now, eventEndTime )
                                 iterator =
                                     overEventsHelper
                                         capturing
@@ -1542,8 +1773,8 @@ overEvents capturing now maybeInterruption lookup maybeAdjustor interpolate _ cu
                                         []
                                         (List.range 1 (floor framesTillEndOfEvent))
                                         |> List.reverse
-                                        |> logIndent 4 "ND ----> found frames"
 
+                                -- |> logIndent 4 "ND ----> found frames"
                                 cursorAtEndOfEvent =
                                     overEventsHelper
                                         capturing
@@ -1554,11 +1785,10 @@ overEvents capturing now maybeInterruption lookup maybeAdjustor interpolate _ cu
                                         eventEndTime
                                         cursor
 
-                                _ =
-                                    logIndent 4
-                                        "prevs"
-                                        ( cursor.previous, newCursor.previous, cursorAtEndOfEvent.previous )
-
+                                -- _ =
+                                --     logIndent 4
+                                --         "prevs"
+                                --         ( cursor.previous, newCursor.previous, cursorAtEndOfEvent.previous )
                                 -- |> Debug.log "cursor at end"
                             in
                             { --newCursor
@@ -1567,6 +1797,7 @@ overEvents capturing now maybeInterruption lookup maybeAdjustor interpolate _ cu
                                     Just
                                         (Future
                                             { mostRecent = newCursor.state
+                                            , fps = fps
                                             , frames = frames
                                             , dwell = Nothing
                                             }
@@ -1613,9 +1844,8 @@ mergeCaptures details maybeCaptured =
 
 captureEvents fps fn now cursor frameIndex frames =
     let
-        _ =
-            Debug.log "             : cap -> " ( now, newNow )
-
+        -- _ =
+        --     Debug.log "             : cap -> " ( now, newNow )
         newNow =
             now
                 |> Time.advanceBy (Duration.seconds ((1 / fps) * toFloat frameIndex))

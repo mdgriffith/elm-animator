@@ -85,41 +85,46 @@ progress (Quantity.Quantity start) (Quantity.Quantity end) (Quantity.Quantity cu
 
 
 latest : Absolute -> Absolute -> Absolute
-latest one two =
-    if thisBeforeOrEqualThat one two then
-        two
+latest ((Quantity.Quantity one) as oneQty) ((Quantity.Quantity two) as twoQty) =
+    if one <= two then
+        twoQty
 
     else
-        one
+        oneQty
 
 
 earliest : Absolute -> Absolute -> Absolute
-earliest one two =
-    if thisBeforeOrEqualThat one two then
-        one
+earliest ((Quantity.Quantity one) as oneQty) ((Quantity.Quantity two) as twoQty) =
+    if one >= two then
+        twoQty
 
     else
-        two
+        oneQty
+
+
+testBefore : Float -> Float -> Bool
+testBefore one two =
+    (one - two) < 0
 
 
 thisBeforeThat : Absolute -> Absolute -> Bool
-thisBeforeThat this that =
-    this |> Quantity.lessThan that
+thisBeforeThat (Quantity.Quantity this) (Quantity.Quantity that) =
+    this < that
 
 
 thisAfterThat : Absolute -> Absolute -> Bool
-thisAfterThat this that =
-    this |> Quantity.greaterThan that
+thisAfterThat (Quantity.Quantity this) (Quantity.Quantity that) =
+    this > that
 
 
 thisBeforeOrEqualThat : Absolute -> Absolute -> Bool
-thisBeforeOrEqualThat this that =
-    this |> Quantity.lessThanOrEqualTo that
+thisBeforeOrEqualThat (Quantity.Quantity this) (Quantity.Quantity that) =
+    this <= that
 
 
 thisAfterOrEqualThat : Absolute -> Absolute -> Bool
-thisAfterOrEqualThat this that =
-    this |> Quantity.greaterThanOrEqualTo that
+thisAfterOrEqualThat (Quantity.Quantity this) (Quantity.Quantity that) =
+    this >= that
 
 
 equal : Absolute -> Absolute -> Bool

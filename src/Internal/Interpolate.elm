@@ -5,7 +5,9 @@ module Internal.Interpolate exposing
     , startDescription, describe
     , startLinear, linearly
     , defaultArrival, defaultDeparture
-    , Period(..), adjustTiming
+    , adjustTiming
+    , startMoving2, dwellMove2, dwellPeriod, afterMove, lerp
+    , createSpline, findAtXOnSpline, moving
     )
 
 {-|
@@ -24,13 +26,15 @@ module Internal.Interpolate exposing
 
 @docs Period, adjustTiming
 
+@docs startMoving2, dwellMove2, dwellPeriod, afterMove, lerp
+
 -}
 
 import Color
 import Duration
 import Internal.Spring as Spring
 import Internal.Time as Time
-import Internal.Timeline as Timeline
+import Internal.Timeline as Timeline exposing (Period(..))
 import Pixels
 import Quantity
 
@@ -45,11 +49,6 @@ import Quantity
 type Movement
     = Oscillate Departure Arrival Period (Float -> Float)
     | Position Departure Arrival Float
-
-
-type Period
-    = Loop Time.Duration
-    | Repeat Int Time.Duration
 
 
 {-| Number betwen 0 and 1
@@ -287,9 +286,22 @@ startMoving lookup (Timeline.Occurring start startTime _) =
     }
 
 
+startMoving2 : Movement -> State
+startMoving2 movement =
+    { position =
+        case movement of
+            Oscillate _ _ _ toX ->
+                Pixels.pixels (toX 0)
+
+            Position depart arrive x ->
+                Pixels.pixels x
+    , velocity = Pixels.pixelsPerSecond 0
+    }
+
+
 adjustTiming : Movement -> Timeline.Adjustment
-adjustTiming moving =
-    case moving of
+adjustTiming m =
+    case m of
         Oscillate departure arrival _ _ ->
             { arrivingEarly = arrival.early
             , leavingLate = departure.late
@@ -323,6 +335,102 @@ notInterrupted prev =
 
         Timeline.PreviouslyInterrupted _ ->
             False
+
+
+moving : Timeline.Interp event Movement State
+moving =
+    { start = startMoving2
+    , dwellFor = dwellMove2
+    , dwellPeriod = dwellPeriod
+    , adjustor = adjustTiming
+    , after = afterMove
+    , lerp = lerp
+    }
+
+
+dwellPeriod : Movement -> Maybe Period
+dwellPeriod movement =
+    case movement of
+        Position _ _ _ ->
+            Nothing
+
+        Oscillate _ _ period _ ->
+            Just period
+
+
+dwellMove2 : Movement -> Time.Duration -> State
+dwellMove2 movement duration =
+    case movement of
+        Position _ _ pos ->
+            { position = Pixels.pixels pos
+            , velocity = Pixels.pixelsPerSecond 0
+            }
+
+        Oscillate _ _ period toX ->
+            case period of
+                Loop periodDuration ->
+                    let
+                        progress =
+                            wrapUnitAfter periodDuration duration
+                    in
+                    { position = Pixels.pixels (toX progress)
+                    , velocity = derivativeOfEasing toX periodDuration progress
+                    }
+
+                Repeat n periodDuration ->
+                    let
+                        iterationTimeMS =
+                            Duration.inMilliseconds periodDuration
+
+                        totalMS =
+                            Duration.inMilliseconds duration
+
+                        iteration =
+                            floor (totalMS / iterationTimeMS)
+                    in
+                    if iteration >= n then
+                        { position = Pixels.pixels (toX 1)
+                        , velocity = Pixels.pixelsPerSecond 0
+                        }
+
+                    else
+                        let
+                            progress =
+                                wrapUnitAfter periodDuration duration
+                        in
+                        { position = Pixels.pixels (toX progress)
+                        , velocity = derivativeOfEasing toX periodDuration progress
+                        }
+
+
+lerp lookup previous target future now state =
+    let
+        wobble =
+            case lookup (Timeline.getEvent target) of
+                Oscillate _ arrival _ _ ->
+                    arrival.wobbliness
+
+                Position _ arrival _ ->
+                    arrival.wobbliness
+    in
+    if future == [] && wobble /= 0 then
+        springInterpolation lookup previous target now state
+
+    else
+        interpolateBetween lookup previous target (List.head future) now state
+
+
+afterMove lookup target future =
+    { position =
+        case lookup (Timeline.getEvent target) of
+            Oscillate depart arrive period toX ->
+                Pixels.pixels (toX 0)
+
+            Position _ _ x ->
+                Pixels.pixels x
+    , velocity =
+        velocityAtTarget lookup target (List.head future)
+    }
 
 
 {-| -}
@@ -764,29 +872,41 @@ createSpline config =
             if config.departure.slowly == 0 then
                 config.startVelocity
 
-            else if config.startVelocity == zeroPoint then
-                scaleBy (config.departure.slowly * 3)
-                    { x = totalX
-                    , y = 0
-                    }
+            else if
+                ((config.startVelocity.x - zeroPoint.x) == 0)
+                    && ((config.startVelocity.y - zeroPoint.y) == 0)
+            then
+                -- scaleBy (config.departure.slowly * 3)
+                { x = totalX * (config.departure.slowly * 3)
+                , y = 0
+                }
 
             else
-                config.startVelocity
-                    |> scaleBy (config.departure.slowly * 3)
+                -- config.startVelocity
+                --     |> scaleBy (config.departure.slowly * 3)
+                { x = config.startVelocity.x * (config.departure.slowly * 3)
+                , y = config.startVelocity.y * (config.departure.slowly * 3)
+                }
 
         endVelocity =
             if config.arrival.slowly == 0 then
                 config.endVelocity
 
-            else if config.endVelocity == zeroPoint then
-                scaleBy (config.arrival.slowly * 3)
-                    { x = totalX
-                    , y = 0
-                    }
+            else if
+                ((config.endVelocity.x - zeroPoint.x) == 0)
+                    && ((config.endVelocity.y - zeroPoint.y) == 0)
+            then
+                -- scaleBy
+                { x = totalX * (config.arrival.slowly * 3)
+                , y = 0
+                }
 
             else
-                config.endVelocity
-                    |> scaleBy (config.arrival.slowly * 3)
+                -- config.endVelocity
+                --     |> scaleBy (config.arrival.slowly * 3)
+                { x = config.endVelocity.x * (config.arrival.slowly * 3)
+                , y = config.endVelocity.y * (config.arrival.slowly * 3)
+                }
     in
     {-
        the `fromEndpoints` definition from elm-geometry
@@ -801,8 +921,14 @@ createSpline config =
     -}
     Spline
         config.start
-        (config.start |> translateBy (scaleBy (1 / 3) startVelocity))
-        (config.end |> translateBy (scaleBy (-1 / 3) endVelocity))
+        { x = config.start.x + ((1 / 3) * startVelocity.x)
+        , y = config.start.y + ((1 / 3) * startVelocity.y)
+        }
+        { x = config.end.x + ((-1 / 3) * endVelocity.x)
+        , y = config.end.y + ((-1 / 3) * endVelocity.y)
+        }
+        -- (config.start |> translateBy (scaleBy (1 / 3) startVelocity))
+        -- (config.end |> translateBy (scaleBy (-1 / 3) endVelocity))
         config.end
 
 
@@ -821,7 +947,7 @@ within tolerance anchor at =
 bezier : Float -> Float -> Float -> Float -> Float -> Float
 bezier x1 y1 x2 y2 time =
     let
-        lerp from to v =
+        interp from to v =
             from + (to - from) * v
 
         pair interpolate ( a0, b0 ) ( a1, b1 ) v =
@@ -833,7 +959,7 @@ bezier x1 y1 x2 y2 time =
                     y
 
                 xs ->
-                    List.map2 (\x y -> pair lerp x y time) xs (Maybe.withDefault [] (List.tail xs))
+                    List.map2 (\x y -> pair interp x y time) xs (Maybe.withDefault [] (List.tail xs))
                         |> casteljau
     in
     casteljau [ ( 0, 0 ), ( x1, y1 ), ( x2, y2 ), ( 1, 1 ) ]
@@ -1166,22 +1292,82 @@ as explained here:
 
 -}
 findAtXOnSpline : Spline -> Float -> Float -> Float -> Float -> Int -> { point : { x : Float, y : Float }, t : Float }
-findAtXOnSpline spline desiredX tolerance jumpSize t depth =
+findAtXOnSpline ((Spline p1 p2 p3 p4) as spline) desiredX tolerance jumpSize t depth =
     let
         point =
-            pointOn spline t
+            if t <= 0.5 then
+                let
+                    q1 =
+                        { x = p1.x + t * (p2.x - p1.x)
+                        , y = p1.y + t * (p2.y - p1.y)
+                        }
+
+                    q2 =
+                        { x = p2.x + t * (p3.x - p2.x)
+                        , y = p2.y + t * (p3.y - p2.y)
+                        }
+
+                    q3 =
+                        { x = p3.x + t * (p4.x - p3.x)
+                        , y = p3.y + t * (p4.y - p3.y)
+                        }
+
+                    r1 =
+                        { x = q1.x + t * (q2.x - q1.x)
+                        , y = q1.y + t * (q2.y - q1.y)
+                        }
+
+                    r2 =
+                        { x = q2.x + t * (q3.x - q2.x)
+                        , y = q2.y + t * (q3.y - q2.y)
+                        }
+                in
+                { x = r1.x + t * (r2.x - r1.x)
+                , y = r1.y + t * (r2.y - r1.y)
+                }
+
+            else
+                let
+                    q1 =
+                        { x = p2.x + (1 - t) * (p1.x - p2.x)
+                        , y = p2.y + (1 - t) * (p1.y - p2.y)
+                        }
+
+                    q2 =
+                        { x = p3.x + (1 - t) * (p2.x - p3.x)
+                        , y = p3.y + (1 - t) * (p2.y - p3.y)
+                        }
+
+                    q3 =
+                        { x = p4.x + (1 - t) * (p3.x - p4.x)
+                        , y = p4.y + (1 - t) * (p3.y - p4.y)
+                        }
+
+                    r1 =
+                        { x = q2.x + (1 - t) * (q1.x - q2.x)
+                        , y = q2.y + (1 - t) * (q1.y - q2.y)
+                        }
+
+                    r2 =
+                        { x = q3.x + (1 - t) * (q2.x - q3.x)
+                        , y = q3.y + (1 - t) * (q2.y - q3.y)
+                        }
+                in
+                { x = r2.x + (1 - t) * (r1.x - r2.x)
+                , y = r2.y + (1 - t) * (r1.y - r2.y)
+                }
     in
     if depth == 10 then
         { point = point
         , t = t
         }
 
-    else if within tolerance point.x desiredX then
+    else if (point.x - desiredX) < 1 && (point.x - desiredX) >= 0 then
         { point = point
         , t = t
         }
 
-    else if point.x > desiredX then
+    else if (point.x - desiredX) > 0 then
         findAtXOnSpline spline desiredX tolerance (jumpSize / 2) (t - jumpSize) (depth + 1)
 
     else

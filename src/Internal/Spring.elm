@@ -190,7 +190,7 @@ settlesAt { stiffness, damping, mass } =
         -- more tolerant
         1000 * (8.5 / springAspect)
 
-    else if c > cCritical then
+    else if (c - cCritical) > 0 then
         -- overdamped
         -- *NOTE* this branch is definitely not correct.
         -- this equation only applies to underdamped springs

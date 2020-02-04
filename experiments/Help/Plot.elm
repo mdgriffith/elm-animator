@@ -219,9 +219,9 @@ timeline config =
             }
             (renderedEvents
                 ++ [ LineChart.line Color.purple Dots.none "Position" points
-                   , LineChart.dash Color.blue Dots.none "Velocity" [ 4, 2 ] velocities
-                   , LineChart.dash Color.red Dots.none "Est. Vel." [ 4, 4 ] estimatedVelocities
 
+                   --    , LineChart.dash Color.blue Dots.none "Velocity" [ 4, 2 ] velocities
+                   --    , LineChart.dash Color.red Dots.none "Est. Vel." [ 4, 4 ] estimatedVelocities
                    -- , LineChart.line Color.red Dots.none "Calc - Velocity" calcVelocities
                    -- , LineChart.line Color.orange Dots.none "Accel" acceleration
                    ]

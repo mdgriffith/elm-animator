@@ -371,14 +371,10 @@ xyz timeline lookup =
 details : Timeline state -> (state -> Movement) -> { position : Float, velocity : Float }
 details timeline lookup =
     unwrapUnits
-        (Timeline.mostRecentlyCaptured <|
-            Timeline.foldp
-                Timeline.CaptureNow
-                lookup
-                Interpolate.startMoving
-                (Just Interpolate.adjustTiming)
-                Interpolate.move
-                timeline
+        (Timeline.foldpSlim Timeline.CaptureNow
+            lookup
+            Interpolate.moving
+            timeline
         )
 
 
@@ -531,7 +527,7 @@ once activeDuration osc =
     in
     Interpolate.Oscillate Interpolate.defaultDeparture
         Interpolate.defaultArrival
-        (Interpolate.Repeat 1 totalDuration)
+        (Timeline.Repeat 1 totalDuration)
         fn
 
 
@@ -544,7 +540,7 @@ loop activeDuration osc =
     in
     Interpolate.Oscillate Interpolate.defaultDeparture
         Interpolate.defaultArrival
-        (Interpolate.Loop totalDuration)
+        (Timeline.Loop totalDuration)
         fn
 
 
@@ -557,7 +553,7 @@ repeat n activeDuration osc =
     in
     Interpolate.Oscillate Interpolate.defaultDeparture
         Interpolate.defaultArrival
-        (Interpolate.Repeat n totalDuration)
+        (Timeline.Repeat n totalDuration)
         fn
 
 
@@ -739,7 +735,7 @@ type Frames item
 
 {-| -}
 type Resting item
-    = Cycle Interpolate.Period (List (Frames item))
+    = Cycle Timeline.Period (List (Frames item))
 
 
 {-| -}
@@ -790,7 +786,7 @@ cycle (FramesPerSecond framesPerSecond) frames =
         duration =
             Duration.seconds (toFloat (List.length frames) / framesPerSecond)
     in
-    Cycle (Interpolate.Loop duration) frames
+    Cycle (Timeline.Loop duration) frames
 
 
 {-| -}
@@ -800,7 +796,7 @@ cycleN n (FramesPerSecond framesPerSecond) frames =
         duration =
             Duration.seconds (toFloat (List.length frames) / framesPerSecond)
     in
-    Cycle (Interpolate.Repeat n duration) frames
+    Cycle (Timeline.Repeat n duration) frames
 
 
 {-| -}
@@ -842,7 +838,7 @@ restFrames currentFrameSet restingTimeMs =
                     totalFrames cycleFrameList
             in
             case period of
-                Interpolate.Loop dur ->
+                Timeline.Loop dur ->
                     let
                         iterationTimeMS =
                             Duration.inMilliseconds dur
@@ -855,7 +851,7 @@ restFrames currentFrameSet restingTimeMs =
                     in
                     getItemAtIndex targetIndex transitionFrames 0 cycleFrameList
 
-                Interpolate.Repeat n dur ->
+                Timeline.Repeat n dur ->
                     let
                         iterationTimeMS =
                             Duration.inMilliseconds dur
