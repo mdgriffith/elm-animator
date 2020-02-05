@@ -4,8 +4,11 @@ import Animator
 import Array
 import Benchmark exposing (..)
 import Benchmark.Runner exposing (BenchmarkProgram, program)
+import Internal.Interpolate as Interpolate
 import Internal.Spring as Spring
+import Internal.Time as Time
 import Internal.Timeline as Timeline
+import Pixels
 import Random
 import Time
 
@@ -17,6 +20,8 @@ main =
             [ springs
             , randomness
             , basicInterpolation
+            , floatComparison
+            , interpolationComponents
             , functionCalling
             ]
 
@@ -84,6 +89,39 @@ randomness =
         ]
 
 
+beforeMinus : Float -> Float -> Bool
+beforeMinus one two =
+    (one - two) < 0
+
+
+before : Float -> Float -> Bool
+before one two =
+    one < two
+
+
+timeOne =
+    Time.absolute (Time.millisToPosix 0)
+
+
+timeTwo =
+    Time.absolute (Time.millisToPosix 500)
+
+
+floatComparison : Benchmark
+floatComparison =
+    describe "Comparing Floats"
+        [ benchmark "Normal float compare" <|
+            \_ ->
+                before 5 20
+        , benchmark "Minus trick, float compare" <|
+            \_ ->
+                beforeMinus 5 20
+        , benchmark "Unwrapping and comparison" <|
+            \_ ->
+                Time.thisBeforeThat timeOne timeTwo
+        ]
+
+
 {-| -}
 basicInterpolation : Benchmark
 basicInterpolation =
@@ -100,12 +138,31 @@ basicInterpolation =
                     , Animator.wait (Animator.seconds 1)
                     ]
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Timeline.update (Time.millisToPosix 3400)
+                |> Timeline.update (Time.millisToPosix 1400)
     in
     describe "Interpolate to a point on a 4 event timeline"
-        [ benchmark "interpolate to position" <|
+        [ benchmark "new interpolate to position" <|
             \_ ->
                 Animator.details timeline toPos
+        , benchmark "interpolate to position" <|
+            \_ ->
+                Timeline.foldp
+                    Timeline.CaptureNow
+                    toPos
+                    Interpolate.startMoving
+                    Nothing
+                    Interpolate.move
+                    timeline
+
+        -- , benchmark "iterating generation" <|
+        --     \_ ->
+        --         Timeline.foldp
+        --             (Timeline.CaptureFuture 60)
+        --             toPos
+        --             Interpolate.startMoving
+        --             Nothing
+        --             Interpolate.move
+        --             timeline
         ]
 
 
@@ -176,4 +233,70 @@ functionCalling =
         , benchmark "Function with positional" <|
             \_ ->
                 functionWithArgs one two three four five six
+        ]
+
+
+baseSpline =
+    Interpolate.createSpline
+        { start =
+            { x = 0
+            , y = 2
+            }
+        , startVelocity =
+            { x = 1000
+            , y = 250
+            }
+        , departure =
+            Interpolate.defaultDeparture
+        , end =
+            { x = 1000
+            , y = 1000
+            }
+        , endVelocity =
+            { x = 1000
+            , y = 0
+            }
+        , arrival =
+            Interpolate.defaultArrival
+        }
+
+
+interpolationComponents =
+    describe "How fast are the differnt steps of interpolation"
+        [ benchmark "Create spline" <|
+            \_ ->
+                Interpolate.createSpline
+                    { start =
+                        { x = 0
+                        , y = 2
+                        }
+                    , startVelocity =
+                        { x = 1000
+                        , y = 250
+                        }
+                    , departure =
+                        Interpolate.defaultDeparture
+                    , end =
+                        { x = 1000
+                        , y = 1000
+                        }
+                    , endVelocity =
+                        { x = 1000
+                        , y = 0
+                        }
+                    , arrival =
+                        Interpolate.defaultArrival
+                    }
+        , benchmark "Find x on spline" <|
+            \_ ->
+                Interpolate.findAtXOnSpline baseSpline
+                    625
+                    -- tolerance
+                    1
+                    -- jumpSize
+                    0.25
+                    -- starting t
+                    0.5
+                    -- depth
+                    0
         ]
