@@ -1349,15 +1349,16 @@ foldOverLinesSingle fn lookup details (Line lineStart lineStartEv lineRemain) fu
 
                     else
                         details.now
-    in
-    let
+
         eventStartTime =
             startTime lineStartEv
     in
     if Time.thisBeforeThat now eventStartTime then
         -- lerp from state to lineStartEv
-        -- *Note*, the occurring event we're creating here probably wants soemthing like details.originTime and a real dwell time.
-        -- If we're coming in from a transition
+        -- now is before the first event start time.
+        -- either this is an interruption, in which case we lerp.
+        -- Or this is the
+        -- if we're
         fn.lerp lookup
             (Previous (Occurring details.initial lineStart Nothing))
             lineStartEv
@@ -1376,12 +1377,14 @@ foldOverLinesSingle fn lookup details (Line lineStart lineStartEv lineRemain) fu
             case lineRemain of
                 [] ->
                     -- dwell at lineStartEv, there's nothing to transition to
-                    fn.dwellFor (lookup (getEvent lineStartEv)) (Time.duration eventStartTime now)
+                    fn.dwellFor
+                        (lookup (getEvent lineStartEv))
+                        (Time.duration eventStartTime now)
                         |> transition
 
                 next :: lineRemain2 ->
                     if Time.thisBeforeThat now (startTime next) then
-                        -- Before next.starTime
+                        -- Before next.startTime
                         --     -> lerp start to next
                         fn.lerp
                             lookup
@@ -1389,7 +1392,12 @@ foldOverLinesSingle fn lookup details (Line lineStart lineStartEv lineRemain) fu
                             next
                             lineRemain2
                             now
-                            state
+                            (if hasDwell lineStartEv then
+                                fn.dwellFor (lookup (getEvent lineStartEv)) (Time.duration eventStartTime eventEndTime)
+
+                             else
+                                state
+                            )
                             |> transition
 
                     else if Time.thisBeforeThat now (endTime next) then
@@ -1409,7 +1417,8 @@ foldOverLinesSingle fn lookup details (Line lineStart lineStartEv lineRemain) fu
                             [] ->
                                 -- Nothing to continue on to,
                                 --      -> we're dwelling at `next`
-                                fn.dwellFor (lookup (getEvent next))
+                                fn.dwellFor
+                                    (lookup (getEvent next))
                                     (Time.duration (startTime next) now)
                                     |> transition
 
@@ -1418,7 +1427,13 @@ foldOverLinesSingle fn lookup details (Line lineStart lineStartEv lineRemain) fu
                                 if Time.thisBeforeThat now (startTime next2) then
                                     let
                                         after =
-                                            fn.after lookup next lineRemain2
+                                            if hasDwell next then
+                                                fn.dwellFor
+                                                    (lookup (getEvent next))
+                                                    (Time.duration (startTime next) (endTime next))
+
+                                            else
+                                                fn.after lookup next lineRemain2
                                     in
                                     fn.lerp
                                         lookup
@@ -1439,7 +1454,12 @@ foldOverLinesSingle fn lookup details (Line lineStart lineStartEv lineRemain) fu
                                 else
                                     let
                                         after =
-                                            fn.after lookup next2 lineRemain3
+                                            if hasDwell next2 then
+                                                fn.dwellFor (lookup (getEvent next2))
+                                                    (Time.duration (startTime next2) (endTime next2))
+
+                                            else
+                                                fn.after lookup next2 lineRemain3
                                     in
                                     foldOverLinesSingle
                                         fn
@@ -1451,17 +1471,13 @@ foldOverLinesSingle fn lookup details (Line lineStart lineStartEv lineRemain) fu
 
         else
             -- dwell at linestartEv
-            -- we've checked that it's not after or before, so it has to be between the start and end
+            -- we've checked that it's not after or before,
+            -- so it has to be between the start and end
             case lineStartEv of
                 Occurring _ _ maybeDwell ->
-                    case maybeDwell of
-                        Nothing ->
-                            fn.dwellFor (lookup (getEvent lineStartEv)) zeroDuration
-                                |> transition
-
-                        Just dur ->
-                            fn.dwellFor (lookup (getEvent lineStartEv)) dur
-                                |> transition
+                    fn.dwellFor (lookup (getEvent lineStartEv))
+                        (Time.duration (startTime lineStartEv) now)
+                        |> transition
 
 
 capture : Captured motion -> motion -> Captured motion
