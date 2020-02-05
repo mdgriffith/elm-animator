@@ -86,7 +86,7 @@ progress (Quantity.Quantity start) (Quantity.Quantity end) (Quantity.Quantity cu
 
 latest : Absolute -> Absolute -> Absolute
 latest ((Quantity.Quantity one) as oneQty) ((Quantity.Quantity two) as twoQty) =
-    if one <= two then
+    if (one - two) <= 0 then
         twoQty
 
     else
@@ -95,7 +95,7 @@ latest ((Quantity.Quantity one) as oneQty) ((Quantity.Quantity two) as twoQty) =
 
 earliest : Absolute -> Absolute -> Absolute
 earliest ((Quantity.Quantity one) as oneQty) ((Quantity.Quantity two) as twoQty) =
-    if one >= two then
+    if (one - two) >= 0 then
         twoQty
 
     else
@@ -109,24 +109,24 @@ testBefore one two =
 
 thisBeforeThat : Absolute -> Absolute -> Bool
 thisBeforeThat (Quantity.Quantity this) (Quantity.Quantity that) =
-    this < that
+    (this - that) < 0
 
 
 thisAfterThat : Absolute -> Absolute -> Bool
 thisAfterThat (Quantity.Quantity this) (Quantity.Quantity that) =
-    this > that
+    (this - that) > 0
 
 
 thisBeforeOrEqualThat : Absolute -> Absolute -> Bool
 thisBeforeOrEqualThat (Quantity.Quantity this) (Quantity.Quantity that) =
-    this <= that
+    (this - that) <= 0
 
 
 thisAfterOrEqualThat : Absolute -> Absolute -> Bool
 thisAfterOrEqualThat (Quantity.Quantity this) (Quantity.Quantity that) =
-    this >= that
+    (this - that) >= 0
 
 
 equal : Absolute -> Absolute -> Bool
-equal =
-    (==)
+equal (Quantity.Quantity this) (Quantity.Quantity that) =
+    (this - that) == 0
