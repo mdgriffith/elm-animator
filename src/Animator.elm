@@ -292,27 +292,20 @@ describe timeline =
 {-| -}
 color : Timeline state -> (state -> Color) -> Color
 color timeline lookup =
-    Timeline.mostRecentlyCaptured <|
-        Timeline.foldp Timeline.CaptureNow
-            lookup
-            Interpolate.startColoring
-            Nothing
-            Interpolate.color
-            timeline
+    Timeline.foldpSlim Timeline.CaptureNow
+        lookup
+        Interpolate.coloring
+        timeline
 
 
 {-| Interpolate a float linearly between destinations.
 -}
 linear : Timeline state -> (state -> Float) -> Float
 linear timeline lookup =
-    Timeline.mostRecentlyCaptured <|
-        Timeline.foldp
-            Timeline.CaptureNow
-            lookup
-            Interpolate.startLinear
-            Nothing
-            Interpolate.linearly
-            timeline
+    Timeline.foldpSlim Timeline.CaptureNow
+        lookup
+        Interpolate.linearly2
+        timeline
 
 
 {-| -}
@@ -332,39 +325,48 @@ move timeline lookup =
 {-| -}
 xy : Timeline state -> (state -> { x : Movement, y : Movement }) -> { x : Float, y : Float }
 xy timeline lookup =
-    (\{ x, y } ->
-        { x = unwrapUnits x |> .position
-        , y = unwrapUnits y |> .position
-        }
-    )
-    <|
-        Timeline.mostRecentlyCaptured <|
-            Timeline.foldp
-                Timeline.CaptureNow
-                lookup
-                Interpolate.startMovingXy
-                Nothing
-                Interpolate.xy
-                timeline
+    { x =
+        Timeline.foldpSlim Timeline.CaptureNow
+            (lookup >> .x)
+            Interpolate.moving
+            timeline
+            |> unwrapUnits
+            |> .position
+    , y =
+        Timeline.foldpSlim Timeline.CaptureNow
+            (lookup >> .y)
+            Interpolate.moving
+            timeline
+            |> unwrapUnits
+            |> .position
+    }
 
 
 {-| -}
 xyz : Timeline state -> (state -> { x : Movement, y : Movement, z : Movement }) -> { x : Float, y : Float, z : Float }
 xyz timeline lookup =
-    (\{ x, y, z } ->
-        { x = unwrapUnits x |> .position
-        , y = unwrapUnits y |> .position
-        , z = unwrapUnits z |> .position
-        }
-    )
-    <|
-        Timeline.mostRecentlyCaptured <|
-            Timeline.foldp Timeline.CaptureNow
-                lookup
-                Interpolate.startMovingXyz
-                Nothing
-                Interpolate.xyz
-                timeline
+    { x =
+        Timeline.foldpSlim Timeline.CaptureNow
+            (lookup >> .x)
+            Interpolate.moving
+            timeline
+            |> unwrapUnits
+            |> .position
+    , y =
+        Timeline.foldpSlim Timeline.CaptureNow
+            (lookup >> .y)
+            Interpolate.moving
+            timeline
+            |> unwrapUnits
+            |> .position
+    , z =
+        Timeline.foldpSlim Timeline.CaptureNow
+            (lookup >> .z)
+            Interpolate.moving
+            timeline
+            |> unwrapUnits
+            |> .position
+    }
 
 
 {-| -}

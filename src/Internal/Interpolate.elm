@@ -1,20 +1,17 @@
 module Internal.Interpolate exposing
-    ( startColoring, color
-    , Movement(..), startMoving, move, startMovingXy, xy, startMovingXyz, xyz
+    ( Movement(..), startMoving, move
     , derivativeOfEasing
     , startDescription, describe
     , startLinear, linearly
     , defaultArrival, defaultDeparture
     , adjustTiming
     , startMoving2, dwellMove2, dwellPeriod, afterMove, lerp
-    , createSpline, findAtXOnSpline, moving
+    , coloring, createSpline, findAtXOnSpline, linearly2, moving
     )
 
 {-|
 
-@docs startColoring, color
-
-@docs Movement, startMoving, move, startMovingXy, xy, startMovingXyz, xyz
+@docs Movement, startMoving, move
 
 @docs derivativeOfEasing
 
@@ -192,6 +189,32 @@ describe _ previous target _ _ _ events =
                             events ++ [ Timeline.DescribeEvent (Time.toPosix targetTime) targetEv ]
 
 
+linearly2 : Timeline.Interp event Float Float
+linearly2 =
+    { start = identity
+    , dwellFor = \point duration -> point
+    , dwellPeriod = \_ -> Nothing
+    , adjustor =
+        \_ ->
+            { arrivingEarly = 0
+            , leavingLate = 0
+            }
+    , after =
+        \lookup target future ->
+            lookup (Timeline.getEvent target)
+    , lerp =
+        \lookup previous ((Timeline.Occurring target targetTime maybeDwell) as targetOccurring) future now state ->
+            let
+                progress =
+                    Time.progress
+                        (Timeline.previousEndTime previous)
+                        targetTime
+                        now
+            in
+            linear state (lookup target) progress
+    }
+
+
 startLinear : (event -> Float) -> Timeline.Occurring event -> Float
 startLinear lookup (Timeline.Occurring start startTime _) =
     lookup start
@@ -220,43 +243,6 @@ linearly lookup previous ((Timeline.Occurring target targetTime maybeDwell) as t
                             now
                 in
                 linear state (lookup target) progress
-
-
-startMovingXy : (event -> XY Movement) -> Timeline.Occurring event -> XY State
-startMovingXy lookup start =
-    { x = startMoving (lookup >> .x) start
-    , y = startMoving (lookup >> .y) start
-    }
-
-
-xy : (event -> XY Movement) -> Timeline.Previous event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> XY State -> XY State
-xy lookup prev current maybeLookAhead phase now state =
-    { x = move (lookup >> .x) prev current maybeLookAhead phase now state.x
-    , y = move (lookup >> .y) prev current maybeLookAhead phase now state.y
-    }
-
-
-type alias XYZ thing =
-    { x : thing
-    , y : thing
-    , z : thing
-    }
-
-
-startMovingXyz : (event -> XYZ Movement) -> Timeline.Occurring event -> XYZ State
-startMovingXyz lookup start =
-    { x = startMoving (lookup >> .x) start
-    , y = startMoving (lookup >> .y) start
-    , z = startMoving (lookup >> .z) start
-    }
-
-
-xyz : (event -> XYZ Movement) -> Timeline.Previous event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> XYZ State -> XYZ State
-xyz lookup prev current maybeLookAhead phase now state =
-    { x = move (lookup >> .x) prev current maybeLookAhead phase now state.x
-    , y = move (lookup >> .y) prev current maybeLookAhead phase now state.y
-    , z = move (lookup >> .z) prev current maybeLookAhead phase now state.z
-    }
 
 
 {-| We need some way to start our iterating over the timeline.
@@ -1045,44 +1031,42 @@ velocityBetween one oneTime two twoTime =
         vel
 
 
-startColoring : (event -> Color.Color) -> Timeline.Occurring event -> Color.Color
-startColoring lookup (Timeline.Occurring start startTime _) =
-    lookup start
+coloring : Timeline.Interp event Color.Color Color.Color
+coloring =
+    { start = identity
+    , dwellFor = \clr duration -> clr
+    , dwellPeriod = \_ -> Nothing
+    , adjustor =
+        \_ ->
+            { arrivingEarly = 0
+            , leavingLate = 0
+            }
+    , after =
+        \lookup target future ->
+            lookup (Timeline.getEvent target)
+    , lerp = lerpColor
+    }
 
 
-color : (event -> Color.Color) -> Timeline.Previous event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> Color.Color -> Color.Color
-color lookup previous ((Timeline.Occurring target targetTime maybeDwell) as targetOccurring) maybeLookAhead phase now state =
-    case phase of
-        Timeline.Start ->
-            lookup target
+lerpColor lookup previous ((Timeline.Occurring target targetTime maybeDwell) as targetOccurring) future now state =
+    let
+        progress =
+            Time.progress
+                (Timeline.previousEndTime previous)
+                targetTime
+                now
 
-        Timeline.Transitioning ->
-            let
-                eventEndTime =
-                    Timeline.endTime targetOccurring
-            in
-            if Time.thisAfterOrEqualThat now eventEndTime || Time.thisAfterOrEqualThat now targetTime then
-                lookup target
+        one =
+            Color.toRgba state
 
-            else
-                let
-                    progress =
-                        Time.progress
-                            (Timeline.previousEndTime previous)
-                            targetTime
-                            now
-
-                    one =
-                        Color.toRgba state
-
-                    two =
-                        Color.toRgba (lookup target)
-                in
-                Color.rgba
-                    (average one.red two.red progress)
-                    (average one.green two.green progress)
-                    (average one.blue two.blue progress)
-                    (average one.alpha two.alpha progress)
+        two =
+            Color.toRgba (lookup target)
+    in
+    Color.rgba
+        (average one.red two.red progress)
+        (average one.green two.green progress)
+        (average one.blue two.blue progress)
+        (average one.alpha two.alpha progress)
 
 
 average : Float -> Float -> Float -> Float
@@ -1362,7 +1346,7 @@ findAtXOnSpline ((Spline p1 p2 p3 p4) as spline) desiredX tolerance jumpSize t d
         , t = t
         }
 
-    else if (point.x - desiredX) < 1 && (point.x - desiredX) >= 0 then
+    else if abs (point.x - desiredX) < 1 && abs (point.x - desiredX) >= 0 then
         { point = point
         , t = t
         }
