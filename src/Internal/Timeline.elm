@@ -10,7 +10,20 @@ module Internal.Timeline exposing
     , Phase(..), Adjustment, Line(..), Timetable(..)
     , Capturing(..), Captured(..), mostRecentlyCaptured
     , foldpSlim
-    , Description(..), Interp, Period(..), Previous(..), atTime, currentAndPrevious, gc, gcLog, getDwell, linesAreActive, previousEndTime, previousStartTime, updateNoGC
+    ,  Description(..)
+      , Interp
+      , Period(..)
+      , Previous(..)
+      , atTime
+      , currentAndPrevious
+      , gc
+        --   , gcLog
+      , -- getDwell,
+        linesAreActive
+      , previousEndTime
+      , previousStartTime
+      , updateNoGC
+
     )
 
 {-|
@@ -100,10 +113,10 @@ type Line event
     = Line Time.Absolute (Occurring event) (List (Occurring event))
 
 
-{-| When the event occurs, and how long we're dwelling at this event (or no dwelling at all)
+{-| When the event occurs and the end
 -}
 type Occurring event
-    = Occurring event Time.Absolute (Maybe Time.Duration)
+    = Occurring event Time.Absolute Time.Absolute
 
 
 
@@ -158,7 +171,7 @@ foldpSlim :
     -> Interp state anchor motion
     -> Timeline state
     -> motion
-foldpSlim capturing lookup fn ((Timeline timelineDetails) as timeline) =
+foldpSlim capturing lookup fn (Timeline timelineDetails) =
     case timelineDetails.events of
         Timetable timetable ->
             let
@@ -240,21 +253,6 @@ mapLineWith fn initial (Line start startingEvent remaining) =
             ( Line start newStartingEvent (List.reverse reversedEvents), newState )
 
 
-foldLine : (Occurring a -> b -> b) -> b -> Line a -> b
-foldLine fn cursor (Line start startingEvent remaining) =
-    List.foldl fn cursor (startingEvent :: remaining)
-
-
-filterMapOccurring : (event -> Maybe newEvent) -> Occurring event -> Maybe (Occurring newEvent)
-filterMapOccurring fn (Occurring ev time maybeDwell) =
-    case fn ev of
-        Nothing ->
-            Nothing
-
-        Just newEv ->
-            Just (Occurring newEv time maybeDwell)
-
-
 getEvent : Occurring event -> event
 getEvent (Occurring ev _ _) =
     ev
@@ -269,29 +267,24 @@ extendEventDwell extendBy ((Event at ev maybeDwell) as thisEvent) =
         Event at ev (addToDwell extendBy maybeDwell)
 
 
-getDwell : Occurring event -> Maybe Time.Duration
-getDwell (Occurring _ _ maybeDwell) =
-    maybeDwell
+getDwell : Occurring event -> Time.Duration
+getDwell (Occurring _ start end) =
+    Time.duration start end
 
 
 hasDwell : Occurring event -> Bool
-hasDwell (Occurring _ _ maybeDwell) =
-    maybeDwell /= Nothing
+hasDwell (Occurring _ (Quantity.Quantity start) (Quantity.Quantity end)) =
+    (start - end) /= 0
 
 
 startTime : Occurring event -> Time.Absolute
-startTime (Occurring _ time maybeDwell) =
+startTime (Occurring _ time _) =
     time
 
 
 endTime : Occurring event -> Time.Absolute
-endTime (Occurring _ time maybeDwell) =
-    case maybeDwell of
-        Nothing ->
-            time
-
-        Just dwell ->
-            Time.advanceBy dwell time
+endTime (Occurring _ _ end) =
+    end
 
 
 previousEndTime : Previous event -> Time.Absolute
@@ -338,7 +331,7 @@ getEvents (Timeline timeline) =
         Timetable lines ->
             lines
                 |> List.map (\(Line _ start ev) -> start :: ev)
-                |> List.map (List.map (\(Occurring evt time maybeDwell) -> ( Time.toPosix time, evt )))
+                |> List.map (List.map (\(Occurring evt time _) -> ( Time.toPosix time, evt )))
 
 
 atTime : Time.Posix -> Timeline event -> Timeline event
@@ -363,7 +356,7 @@ update possiblyNow (Timeline timeline) =
             , events =
                 let
                     firstOccurring =
-                        Occurring timeline.initial now Nothing
+                        Occurring timeline.initial now now
                 in
                 Timetable
                     [ Line now firstOccurring []
@@ -384,16 +377,20 @@ update possiblyNow (Timeline timeline) =
 
 updateNoGC : Time.Posix -> Timeline event -> Timeline event
 updateNoGC now (Timeline timeline) =
+    let
+        absoluteNow =
+            Time.absolute now
+    in
     if timeline.events == Timetable [] then
         { timeline
-            | now = Time.absolute now
+            | now = absoluteNow
             , events =
                 let
                     firstOccurring =
-                        Occurring timeline.initial (Time.absolute now) Nothing
+                        Occurring timeline.initial absoluteNow absoluteNow
                 in
                 Timetable
-                    [ Line (Time.absolute now) firstOccurring []
+                    [ Line absoluteNow firstOccurring []
                     ]
         }
             |> applyQueued
@@ -402,7 +399,7 @@ updateNoGC now (Timeline timeline) =
             |> Timeline
 
     else
-        { timeline | now = Time.absolute now }
+        { timeline | now = absoluteNow }
             |> applyQueued
             |> applyInterruptions
             |> clean False
@@ -444,17 +441,6 @@ gc (Timeline details) =
                     evs
     in
     Timeline { details | events = Timetable (garbageCollectOldEvents details.now [] events) }
-
-
-gcLog : Timeline event -> Timeline event
-gcLog (Timeline details) =
-    let
-        events =
-            case details.events of
-                Timetable evs ->
-                    evs
-    in
-    Timeline { details | events = Timetable (garbageCollectOldEventsLog details.now [] events) }
 
 
 log str x =
@@ -545,84 +531,6 @@ garbageCollectOldEvents now droppable lines =
 
                             Captured capturedLine ->
                                 capturedLine :: remaining
-
-
-{-| If we're dwelling at an event, we can reset the event we're dwelling on to the base of the timeline.
-
-All previous lines can be dropped.
-
-However, if we're not dwelling, we want to keep the previous lines.
-
-So we track "droppable" lines until we meet a dwell.
-
--}
-garbageCollectOldEventsLog : Time.Absolute -> List (Line event) -> List (Line event) -> List (Line event)
-garbageCollectOldEventsLog now droppable lines =
-    let
-        _ =
-            Debug.log "gc" "now"
-    in
-    case lines of
-        [] ->
-            List.reverse droppable
-
-        (Line startAt startingEvent events) :: remaining ->
-            if Debug.log "starting" <| Time.thisAfterOrEqualThat startAt now then
-                -- this line hasn't happened yet
-                List.map (Debug.log "lines") (List.reverse droppable ++ lines)
-
-            else if Debug.log "dwelling at" <| dwellingAt now startingEvent then
-                -- we can safetly drop the droppables
-                lines
-                -- List.reverse droppable ++ lines
-
-            else
-                let
-                    maybeInterruptionTime =
-                        remaining
-                            |> List.head
-                            |> Maybe.map lineStartTime
-
-                    interrupted =
-                        case maybeInterruptionTime of
-                            Nothing ->
-                                False
-
-                            Just interruptionTime ->
-                                Time.thisAfterOrEqualThat now interruptionTime
-                in
-                if Debug.log "interrupted" interrupted then
-                    -- reduce a
-                    garbageCollectOldEvents now (Line startAt startingEvent events :: droppable) remaining
-
-                else
-                    case Debug.log "shorten" <| List.foldl (shortenLine now) NotFinished events of
-                        NotFinished ->
-                            List.reverse droppable ++ lines
-
-                        AfterLine ->
-                            case List.head remaining of
-                                Nothing ->
-                                    case List.head (List.reverse events) of
-                                        Nothing ->
-                                            lines
-
-                                        Just last ->
-                                            [ Line (startTime last) last [] ]
-
-                                Just (Line startNext next _) ->
-                                    if Time.thisAfterOrEqualThat now startNext then
-                                        -- the next line has started
-                                        -- this current line can be dropped if we're dwelling
-                                        garbageCollectOldEvents now (Line startAt startingEvent events :: droppable) remaining
-
-                                    else
-                                        List.reverse droppable ++ lines
-
-                        -- List.reverse droppable ++ lines
-                        DwellingAt newLine ->
-                            -- newLine :: lines
-                            reverseEvents newLine :: remaining
 
 
 reverseEvents (Line start event evs) =
@@ -961,21 +869,6 @@ findInterruptedTransition startInterruption events =
             Nothing
 
 
-getLastEventTime : List (Line event) -> Maybe Time.Absolute
-getLastEventTime lines =
-    case List.head (List.reverse lines) of
-        Nothing ->
-            Nothing
-
-        Just (Line start startEvent trailing) ->
-            case List.reverse trailing of
-                [] ->
-                    Just (startTime startEvent)
-
-                (Occurring _ at maybeDwell) :: _ ->
-                    Just at
-
-
 {-| Queue a list of events to be played after everything.
 
     - add events to the timeline that is currently active.
@@ -1037,7 +930,7 @@ createLine now (Schedule _ (Event dur startEvent maybeDwell) reverseQueued) =
                 |> Tuple.second
                 |> List.reverse
     in
-    Line now (Occurring startEvent start maybeDwell) events
+    Line now (Occurring startEvent start startNextEvent) events
 
 
 addEventsToLine : Time.Absolute -> Schedule events -> Line events -> Line events
@@ -1060,19 +953,19 @@ addEventsToLine now (Schedule delay scheduledStartingEvent reverseQueued) (Line 
 
                 startingEventWithDwell =
                     case startingEvent of
-                        Occurring ev lastEventTime maybeDwell ->
+                        Occurring ev lastEventTime _ ->
                             if Time.thisAfterThat start lastEventTime then
-                                Occurring ev lastEventTime (Just (Time.duration start lastEventTime))
+                                Occurring ev lastEventTime start
 
                             else
-                                Occurring ev lastEventTime Nothing
+                                Occurring ev lastEventTime lastEventTime
             in
             List.foldl toOccurring ( startNewEventsAt, [] ) queued
                 |> Tuple.second
                 |> List.reverse
                 |> Line startLineAt startingEventWithDwell
 
-        (Occurring lastEvent lastEventTime finalEventDwell) :: eventTail ->
+        (Occurring lastEvent lastEventTime _) :: eventTail ->
             let
                 startNewEventsAt =
                     Time.latest lastEventTime start
@@ -1090,10 +983,10 @@ addEventsToLine now (Schedule delay scheduledStartingEvent reverseQueued) (Line 
                         Occurring lastEvent
                             lastEventTime
                             (if Time.thisAfterThat start lastEventTime then
-                                Just (Time.duration start lastEventTime)
+                                start
 
                              else
-                                Nothing
+                                lastEventTime
                             )
                 in
                 Line startLineAt
@@ -1122,24 +1015,15 @@ toOccurring (Event duration event maybeDwell) ( now, events ) =
     in
     case events of
         [] ->
-            ( endsAt, [ Occurring event occursAt maybeDwell ] )
+            ( endsAt, [ Occurring event occursAt endsAt ] )
 
         prev :: remain ->
             if startTime prev == occursAt then
                 -- then this event would supercede the previous one
-                ( endsAt, Occurring event occursAt maybeDwell :: remain )
+                ( endsAt, Occurring event occursAt endsAt :: remain )
 
             else
-                ( endsAt, Occurring event occursAt maybeDwell :: events )
-
-
-extendDwell : Time.Duration -> Occurring a -> Occurring a
-extendDwell newDwell ((Occurring at ev maybeDwell) as occur) =
-    if Duration.inMilliseconds newDwell == 0 then
-        occur
-
-    else
-        Occurring at ev (addToDwell newDwell maybeDwell)
+                ( endsAt, Occurring event occursAt endsAt :: events )
 
 
 addToDwell : Time.Duration -> Maybe Time.Duration -> Maybe Time.Duration
@@ -1154,10 +1038,6 @@ addToDwell duration maybeDwell =
 
             Just existing ->
                 Just (Quantity.plus duration existing)
-
-
-getOccurringTime (Occurring _ t _) =
-    t
 
 
 {-| This is a "Fold from the past", just like foldl is "fold from the left".
@@ -1205,13 +1085,10 @@ foldp capturing lookup starter maybeAdjustTiming interpolate ((Timeline timeline
     case timelineDetails.events of
         Timetable timetable ->
             let
-                maybeNextEvent =
-                    Nothing
-
                 startingEvent =
                     case List.head timetable of
                         Nothing ->
-                            Occurring timelineDetails.initial timelineDetails.now Nothing
+                            Occurring timelineDetails.initial timelineDetails.now timelineDetails.now
 
                         Just (Line _ start _) ->
                             start
@@ -1360,7 +1237,7 @@ foldOverLinesSingle fn lookup details (Line lineStart lineStartEv lineRemain) fu
         -- Or this is the
         -- if we're
         fn.lerp lookup
-            (Previous (Occurring details.initial lineStart Nothing))
+            (Previous (Occurring details.initial lineStart lineStart))
             lineStartEv
             lineRemain
             now
@@ -2013,13 +1890,13 @@ applyAdjustment :
     -> Occurring event
     -> Maybe (Occurring event)
     -> ( Occurring event, Maybe Adjustment )
-applyAdjustment lookup adjustor { previousEventTime, applied } ((Occurring event time maybeDwell) as target) maybeLookAhead =
+applyAdjustment lookup adjustor { previousEventTime, applied } ((Occurring event start end) as target) maybeLookAhead =
     let
         targetAdjustments =
             adjustor (lookup event)
 
         totalDuration =
-            Time.duration previousEventTime time
+            Time.duration previousEventTime start
 
         totalPortions =
             max
@@ -2053,7 +1930,9 @@ applyAdjustment lookup adjustor { previousEventTime, applied } ((Occurring event
                         (targetAdjustments.leavingLate / totalLookAheadPortions)
                         totalLookAheadDuration
     in
-    ( Occurring event (Time.rollbackBy earlyBy time) (addToDwell (Quantity.plus earlyBy lateBy) maybeDwell)
+    ( Occurring event
+        (Time.rollbackBy earlyBy start)
+        (Time.advanceBy (Quantity.plus earlyBy lateBy) end)
     , Just targetAdjustments
     )
 
@@ -2240,12 +2119,7 @@ dwellingTime ((Timeline deets) as tl) =
             (Time.duration (startTime cursor.target) deets.now)
 
     else if Time.thisAfterOrEqualThat deets.now (startTime cursor.target) then
-        case getDwell cursor.target of
-            Nothing ->
-                0
-
-            Just dwell ->
-                Duration.inMilliseconds dwell
+        Duration.inMilliseconds (getDwell cursor.target)
 
     else
         0

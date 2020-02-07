@@ -754,72 +754,72 @@ interpolateBetween lookup previous ((Timeline.Occurring target targetTime maybeT
 
 
 velocityAtTarget : (event -> Movement) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> PixelsPerSecond
-velocityAtTarget lookup ((Timeline.Occurring target targetTime maybeTargetDwell) as t) maybeLookAhead =
+velocityAtTarget lookup ((Timeline.Occurring target targetTime targetEndTime) as t) maybeLookAhead =
     -- This is the velocity we're shooting for.
-    case maybeTargetDwell of
-        Nothing ->
-            case maybeLookAhead of
-                Nothing ->
-                    case lookup target of
-                        Position _ _ _ ->
-                            Pixels.pixelsPerSecond 0
+    -- case maybeTargetDwell of
+    -- Nothing ->
+    if targetEndTime == targetTime then
+        case maybeLookAhead of
+            Nothing ->
+                case lookup target of
+                    Position _ _ _ ->
+                        Pixels.pixelsPerSecond 0
 
-                        Oscillate _ _ period toX ->
-                            -- if there's no dwell and no lookahead,
-                            -- then we're approaching the last event
-                            -- which will "dwell" automatically
-                            -- until something happens
-                            case period of
-                                Loop dur ->
+                    Oscillate _ _ period toX ->
+                        -- if there's no dwell and no lookahead,
+                        -- then we're approaching the last event
+                        -- which will "dwell" automatically
+                        -- until something happens
+                        case period of
+                            Loop dur ->
+                                derivativeOfEasing toX dur 0
+
+                            Repeat n dur ->
+                                if n == 0 then
+                                    Pixels.pixelsPerSecond 0
+
+                                else
                                     derivativeOfEasing toX dur 0
 
-                                Repeat n dur ->
-                                    if n == 0 then
-                                        Pixels.pixelsPerSecond 0
+            Just (Timeline.Occurring lookAhead aheadTime aheadEndTime) ->
+                let
+                    targetPosition =
+                        case lookup target of
+                            Oscillate _ _ _ toX ->
+                                Pixels.pixels (toX 0)
 
-                                    else
-                                        derivativeOfEasing toX dur 0
+                            Position _ _ x ->
+                                Pixels.pixels x
+                in
+                case lookup lookAhead of
+                    Position _ _ aheadPosition ->
+                        -- our target velocity is the linear velocity between target and lookahead
+                        velocityBetween targetPosition targetTime (Pixels.pixels aheadPosition) aheadTime
 
-                Just (Timeline.Occurring lookAhead aheadTime maybeLookAheadDwell) ->
-                    let
-                        targetPosition =
-                            case lookup target of
-                                Oscillate _ _ _ toX ->
-                                    Pixels.pixels (toX 0)
+                    Oscillate _ _ period toX ->
+                        if aheadEndTime == aheadTime then
+                            velocityBetween targetPosition targetTime (Pixels.pixels (toX 0)) aheadTime
 
-                                Position _ _ x ->
-                                    Pixels.pixels x
-                    in
-                    case lookup lookAhead of
-                        Position _ _ aheadPosition ->
-                            -- our target velocity is the linear velocity between target and lookahead
-                            velocityBetween targetPosition targetTime (Pixels.pixels aheadPosition) aheadTime
+                        else
+                            case period of
+                                Loop periodDuration ->
+                                    derivativeOfEasing toX periodDuration 0
 
-                        Oscillate _ _ period toX ->
-                            case maybeLookAheadDwell of
-                                Nothing ->
-                                    velocityBetween targetPosition targetTime (Pixels.pixels (toX 0)) aheadTime
+                                Repeat n periodDuration ->
+                                    derivativeOfEasing toX periodDuration 0
 
-                                Just _ ->
-                                    case period of
-                                        Loop periodDuration ->
-                                            derivativeOfEasing toX periodDuration 0
+    else
+        case lookup target of
+            Position _ _ _ ->
+                Pixels.pixelsPerSecond 0
 
-                                        Repeat n periodDuration ->
-                                            derivativeOfEasing toX periodDuration 0
+            Oscillate _ _ period toX ->
+                case period of
+                    Loop periodDuration ->
+                        derivativeOfEasing toX periodDuration 0
 
-        Just dwell ->
-            case lookup target of
-                Position _ _ _ ->
-                    Pixels.pixelsPerSecond 0
-
-                Oscillate _ _ period toX ->
-                    case period of
-                        Loop periodDuration ->
-                            derivativeOfEasing toX periodDuration 0
-
-                        Repeat n periodDuration ->
-                            derivativeOfEasing toX periodDuration 0
+                    Repeat n periodDuration ->
+                        derivativeOfEasing toX periodDuration 0
 
 
 getLeave lookup (Timeline.Occurring event _ _) =
