@@ -170,42 +170,40 @@ frames =
                             (Just 2)
                     ]
                     resultFrames
-        , only <|
-            test "Transitioning to two events, interruption" <|
-                \_ ->
-                    let
-                        timeline =
-                            Animator.init Starting
-                                |> Timeline.update (Time.millisToPosix 0)
-                                |> Animator.queue
-                                    [ Animator.event (Animator.seconds 1) One
-                                    , Animator.event (Animator.seconds 1) Two
-                                    ]
-                                -- NOTE* possible schduling bug
-                                -- scheduling an event
-                                |> Timeline.update (Time.millisToPosix 1)
-                                |> Animator.to (Animator.seconds 1) Three
-                                |> Timeline.updateNoGC (Time.millisToPosix 500)
+        , test "Transitioning to two events, interruption" <|
+            \_ ->
+                let
+                    timeline =
+                        Animator.init Starting
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.queue
+                                [ Animator.event (Animator.seconds 1) One
+                                , Animator.event (Animator.seconds 1) Two
+                                ]
+                            -- NOTE* possible schduling bug
+                            -- scheduling an event
+                            |> Timeline.update (Time.millisToPosix 1)
+                            |> Animator.to (Animator.seconds 1) Three
+                            |> Timeline.updateNoGC (Time.millisToPosix 500)
 
-                        val =
-                            Timeline.foldp
-                                (Timeline.CaptureFuture 60)
-                                toVals
-                                Interpolate.startLinear
-                                Nothing
-                                Interpolate.linearly
-                                timeline
+                    val =
+                        Timeline.foldp
+                            (Timeline.CaptureFuture 60)
+                            toVals
+                            Interpolate.startLinear
+                            Nothing
+                            Interpolate.linearly
+                            timeline
 
-                        resultFrames =
-                            Debug.log "frames" <|
-                                case val of
-                                    Timeline.Future details ->
-                                        details.frames
+                    resultFrames =
+                        case val of
+                            Timeline.Future details ->
+                                details.frames
 
-                                    Timeline.Single single ->
-                                        [ single ]
-                    in
-                    Expect.equal
-                        (List.length resultFrames)
-                        60
+                            Timeline.Single single ->
+                                [ single ]
+                in
+                Expect.equal
+                    (List.length resultFrames)
+                    60
         ]

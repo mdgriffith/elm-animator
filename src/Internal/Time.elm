@@ -3,7 +3,7 @@ module Internal.Time exposing
     , Absolute, AbsoluteTime(..), Duration, absolute, duration, progress
     , inMilliseconds
     , latest, earliest, toPosix
-    , advanceBy, rollbackBy, thisAfterThat, thisBeforeThat
+    , advanceBy, numberOfFrames, rollbackBy, thisAfterThat, thisBeforeThat
     )
 
 {-|
@@ -130,3 +130,29 @@ thisAfterOrEqualThat (Quantity.Quantity this) (Quantity.Quantity that) =
 equal : Absolute -> Absolute -> Bool
 equal (Quantity.Quantity this) (Quantity.Quantity that) =
     (this - that) == 0
+
+
+{-| The number of frames, and the offset that's needed to preserve the framerate.
+
+Offset
+
+-}
+numberOfFrames : Float -> Absolute -> Absolute -> Absolute -> ( Float, Int )
+numberOfFrames fps lastFrameTime startAt endAt =
+    let
+        millisecondsPerFrame =
+            1000 / fps
+
+        totalDurationInMs =
+            Duration.inMilliseconds (duration startAt endAt)
+
+        framesSinceLastFrame =
+            max 0 (Duration.inMilliseconds (duration lastFrameTime startAt))
+                / millisecondsPerFrame
+
+        offset =
+            1 - (framesSinceLastFrame - toFloat (floor framesSinceLastFrame))
+    in
+    ( offset * millisecondsPerFrame
+    , floor (totalDurationInMs / millisecondsPerFrame)
+    )
