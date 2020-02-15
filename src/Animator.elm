@@ -24,7 +24,7 @@ module Animator exposing
 
 {-|
 
-@docs Timeline, init
+@docs Timeline, init, initWith
 
 @docs current
 
@@ -113,6 +113,21 @@ init first =
         , interruption = []
         , running = True
         }
+
+
+{-| -}
+initWith : Time.Posix -> state -> Timeline state
+initWith now first =
+    Timeline.Timeline
+        { initial = first
+        , now = Time.absolute (Time.millisToPosix 0)
+        , events =
+            Timeline.Timetable []
+        , queued = Nothing
+        , interruption = []
+        , running = True
+        }
+        |> Timeline.update now
 
 
 {-| -}
