@@ -6,11 +6,11 @@ module Internal.Timeline exposing
     , startTime, endTime, getEvent, extendEventDwell, hasDwell
     , addToDwell
     , progress, dwellingTime
-    , current, startPass, pass
+    , current
     , Phase(..), Adjustment, Line(..), Timetable(..)
     , Capturing(..), Captured(..), mostRecentlyCaptured
     , foldpSlim, capture
-    , Description(..), Interp, Period(..), Previous(..), atTime, currentAndPrevious, gc, linesAreActive, previousEndTime, previousStartTime, updateNoGC
+    , Animator(..), Description(..), Frames, Interp, Period(..), Previous(..), atTime, currentAndPrevious, gc, hasChanged, linesAreActive, previousEndTime, previousStartTime, updateNoGC
     )
 
 {-|
@@ -29,7 +29,7 @@ module Internal.Timeline exposing
 
 @docs progress, dwellingTime
 
-@docs current, startPass, pass
+@docs current
 
 @docs Phase, Adjustment, Line, Timetable
 
@@ -265,13 +265,6 @@ previousStartTime prev =
 
         PreviouslyInterrupted time ->
             time
-
-
-{-| -}
-needsUpdate : Timeline event -> Bool
-needsUpdate (Timeline timeline) =
-    (timeline.queued /= Nothing)
-        || timeline.running
 
 
 type Description event
@@ -1195,7 +1188,7 @@ foldOverLinesSingle fn lookup details (Line lineStart lineStartEv lineRemain) fu
                     newState
 
                 ((Line futureStart futureStartEv futureRemain) as future) :: restOfFuture ->
-                    if Time.thisBeforeThat futureStart details.now then
+                    if Time.thisBeforeOrEqualThat futureStart details.now then
                         foldOverLinesSingle fn lookup details future restOfFuture newState
 
                     else
@@ -1342,10 +1335,8 @@ foldOverLinesSingle fn lookup details (Line lineStart lineStartEv lineRemain) fu
 
 
 type alias Frames motion =
-    { started : Bool
-    , lastFrameAt : Time.Absolute
-    , mostRecent : motion
-    , frames : List motion
+    { frames : List motion
+    , duration : Time.Duration
     , dwell :
         Maybe
             { period : Period
@@ -1373,10 +1364,8 @@ capture fps lookup fn (Timeline timelineDetails) =
             in
             case timetable of
                 [] ->
-                    { started = True
-                    , lastFrameAt = timelineDetails.now
-                    , mostRecent = start
-                    , frames = [ start ]
+                    { frames = [ start ]
+                    , duration = zeroDuration
                     , dwell = Nothing
                     }
 
@@ -1386,10 +1375,14 @@ capture fps lookup fn (Timeline timelineDetails) =
                             findLastEventInLines firstLine remainingLines
 
                         ( _, numberOfFrames ) =
-                            Time.numberOfFrames fps
-                                timelineDetails.now
-                                timelineDetails.now
-                                (startTime lastEvent)
+                            if Time.thisAfterThat timelineDetails.now (startTime lastEvent) then
+                                ( 0, 1 )
+
+                            else
+                                Time.numberOfFrames fps
+                                    timelineDetails.now
+                                    timelineDetails.now
+                                    (startTime lastEvent)
 
                         millisecondsPerFrame =
                             1000 / fps
@@ -1412,10 +1405,13 @@ capture fps lookup fn (Timeline timelineDetails) =
                                 )
                                 []
                     in
-                    { started = True
-                    , lastFrameAt = timelineDetails.now
-                    , mostRecent = start
-                    , frames = frames
+                    { frames = frames
+                    , duration =
+                        if Time.thisAfterThat timelineDetails.now (startTime lastEvent) then
+                            zeroDuration
+
+                        else
+                            Time.duration timelineDetails.now (startTime lastEvent)
                     , dwell =
                         case fn.dwellPeriod (lookup (getEvent lastEvent)) of
                             Nothing ->
@@ -1440,7 +1436,6 @@ capture fps lookup fn (Timeline timelineDetails) =
                                     ( dwellOffset, numberOfDwellFrames ) =
                                         Time.numberOfFrames fps
                                             -- TODO: we might need some sort of correction
-                                            -- if
                                             -- frames.lastFrameTime
                                             dwellStartTime
                                             dwellStartTime
@@ -1502,301 +1497,6 @@ getFrames i config fn newFrames =
                 fn currentTime
         in
         getFrames (i - 1) config fn (new :: newFrames)
-
-
-
--- captureDwell fn lookup fps event startAt endAt frames =
---     if frames.started then
---         let
---             ev =
---                 lookup event
--- ( offset, numberOfFrames ) =
---     Time.numberOfFrames fps
---         frames.lastFrameTime
---         startAt
---         endAt
--- millisecondsPerFrame =
---     1000 / fps
---             ( mostRecent, newFrames, lastFrameAt ) =
--- getFrames
---     { msPerFrame = millisecondsPerFrame
---     , offset = offset
---     , startTime = startAt
---     }
---     numberOfFrames
---     (\currentTime ->
---         fn.dwellFor ev
---             (Time.duration startAt currentTime)
---     )
---                     ( frames.mostRecent, frames.frames, startAt )
---         in
---         { frames
---             | mostRecent =
---                 fn.dwellFor ev (Time.duration startAt endAt)
---             , lastFrameAt = lastFrameAt
---             , frames =
---                 newFrames
---         }
---     else
---         { frames
---             | lastFrameAt = endAt
---             , mostRecent =
---                 fn.dwellFor
---                     (lookup event)
---                     (Time.duration startAt endAt)
---         }
--- {-| This function only makes sense if we've already started capturing events, so there's no check of `started`
--- -}
--- captureDwellOpen fn lookup fps event startAt maybePeriod frames =
---     case maybePeriod of
---         Nothing ->
---             frames
---         Just period ->
---             let
---                 endAt =
---                     case period of
---                         Repeat n totalDur ->
---                             Time.advanceBy totalDur startAt
---                         Loop totalDur ->
---                             Time.advanceBy totalDur startAt
---                 ev =
---                     lookup event
---                 ( offset, numberOfFrames ) =
---                     Time.numberOfFrames fps
---                         frames.lastFrameTime
---                         startAt
---                         endAt
---                 millisecondsPerFrame =
---                     1000 / fps
---                 ( mostRecent, newFrames, lastFrameAt ) =
---                     getFrames
---                         { msPerFrame = millisecondsPerFrame
---                         , offset = offset
---                         , startTime = startAt
---                         }
---                         numberOfFrames
---                         (\currentTime ->
---                             fn.dwellFor ev
---                                 (Time.duration startAt currentTime)
---                         )
---                         ( frames.mostRecent, frames.frames, startAt )
---             in
---             { frames
---                 | dwell =
---                     Just
---                         { period = period
---                         , frames = frames
---                         }
---             }
--- captureLerp fps lerp startAt endAt frames =
---     if frames.started then
---         let
---             ( offset, numberOfFrames ) =
---                 Time.numberOfFrames fps
---                     frames.lastFrameTime
---                     startAt
---                     endAt
---             millisecondsPerFrame =
---                 1000 / fps
---             ( mostRecent, newFrames, lastFrameAt ) =
---                 getFrames
---                     { msPerFrame = millisecondsPerFrame
---                     , offset = offset
---                     , startTime = startAt
---                     }
---                     numberOfFrames
---                     (\currentTime ->
---                         lerp currentTime frames.mostRecent
---                     )
---                     ( frames.mostRecent, frames.frames, startAt )
---         in
---         { frames
---             | mostRecent =
---                 lerp endTime frames.mostRecent
---             , lastFrameAt = lastFrameAt
---             , frames =
---                 newFrames
---         }
---     else
---         { frames
---             | lastFrameAt = endAt
---             , mostRecent =
---                 lerp endTime frames.mostRecent
---         }
-
-
-{-| We fold as normal until we hit `now`, then we begin capturing frames.
-
-    - fold as normal until we're traditionally `done`.
-    -
-
-    - captureDwell ->
-    - captureDwellOpenEnded ->
-    - captureLerp -> startTime, endTime
-
---
-
--}
-
-
-
--- foldOverLinesCapture :
---     FramesPerSecond
---     -> Interp state anchor motion
---     -> (state -> anchor)
---     -> TimelineDetails state
---     -- current line
---     -> Line state
---     -> List (Line state)
---     -> Frames motion
---     -> Frames motion
--- foldOverLinesCapture fps fn lookup details (Line lineStart lineStartEv lineRemain) futureLines incomingFrames =
---     -- futureStart starts a new line.
---     -- if an interruption occurs, we want to interpolate to the point of the interruption
---     -- then transition over to the new line.
---     let
---         transition newState =
---             -- if we're passed `details.now`, set `started`
---             -- capture till the end of the event or to an interruption
---             case futureLines of
---                 [] ->
---                     newState
---                 ((Line futureStart futureStartEv futureRemain) as future) :: restOfFuture ->
---                     if Time.thisBeforeThat futureStart details.now then
---                         foldOverLinesCapture fps fn lookup details future restOfFuture newState
---                     else
---                         newState
---         now =
---             case futureLines of
---                 [] ->
---                     details.now
---                 (Line futureStart futureStartEv futureRemain) :: restOfFuture ->
---                     if Time.thisBeforeThat futureStart details.now then
---                         futureStart
---                     else
---                         details.now
---         checkStarted time =
---             -- we start capturing frames when we're passed the current event
---             if Time.thisBeforeOrEqualThat details.now time then
---                 { incomingFrames | started = True }
---             else
---                 incomingFrames
---         eventStartTime =
---             startTime lineStartEv
---     in
---     if Time.thisBeforeThat now eventStartTime then
---         -- lerp from state to lineStartEv
---         -- now is before the first event start time.
---         -- either this is an interruption, in which case we lerp.
---         fn.lerp lookup
---             (Previous (Occurring details.initial lineStart lineStart))
---             lineStartEv
---             lineRemain
---             now
---             state
---             |> transition
---     else
---         let
---             eventEndTime =
---                 endTime lineStartEv
---         in
---         if Time.thisAfterOrEqualThat now eventEndTime then
---             -- after linestartEv
---             case lineRemain of
---                 [] ->
---                     -- dwell at lineStartEv, there's nothing to transition to
---                     fn.dwellFor
---                         (lookup (getEvent lineStartEv))
---                         (Time.duration eventStartTime now)
---                         |> transition
---                 next :: lineRemain2 ->
---                     if Time.thisBeforeThat now (startTime next) then
---                         -- Before next.startTime
---                         --     -> lerp start to next
---                         fn.lerp
---                             lookup
---                             (Previous lineStartEv)
---                             next
---                             lineRemain2
---                             now
---                             (if hasDwell lineStartEv then
---                                 fn.dwellFor
---                                     (lookup (getEvent lineStartEv))
---                                     (Time.duration eventStartTime eventEndTime)
---                              else
---                                 state
---                             )
---                             |> transition
---                     else if Time.thisBeforeThat now (endTime next) then
---                         -- After next.startTime
---                         --- Before next.endTime
---                         --      -> we're dwelling at `next`
---                         fn.dwellFor
---                             (lookup (getEvent next))
---                             (Time.duration (startTime next) now)
---                             |> transition
---                     else
---                         -- After lineStart.endTime
---                         -- After next.startTime
---                         -- After next.endTime
---                         case lineRemain2 of
---                             [] ->
---                                 -- Nothing to continue on to,
---                                 --      -> we're dwelling at `next`
---                                 fn.dwellFor
---                                     (lookup (getEvent next))
---                                     (Time.duration (startTime next) now)
---                                     |> transition
---                             next2 :: lineRemain3 ->
---                                 -- continue on
---                                 if Time.thisBeforeThat now (startTime next2) then
---                                     let
---                                         after =
---                                             if hasDwell next then
---                                                 fn.dwellFor
---                                                     (lookup (getEvent next))
---                                                     (Time.duration (startTime next) (endTime next))
---                                             else
---                                                 fn.after lookup next lineRemain2
---                                     in
---                                     fn.lerp
---                                         lookup
---                                         (Previous next)
---                                         next2
---                                         lineRemain3
---                                         now
---                                         after
---                                         |> transition
---                                 else if Time.thisBeforeThat now (endTime next2) then
---                                     -- we're dwelling at `next2`
---                                     fn.dwellFor
---                                         (lookup (getEvent next2))
---                                         (Time.duration (startTime next2) now)
---                                         |> transition
---                                 else
---                                     let
---                                         after =
---                                             if hasDwell next2 then
---                                                 fn.dwellFor (lookup (getEvent next2))
---                                                     (Time.duration (startTime next2) (endTime next2))
---                                             else
---                                                 fn.after lookup next2 lineRemain3
---                                     in
---                                     foldOverLinesCapture
---                                         fps
---                                         fn
---                                         lookup
---                                         details
---                                         (Line (endTime next) next2 lineRemain3)
---                                         futureLines
---                                         after
---         else
---             -- dwell at linestartEv
---             -- we've checked that it's not after or before,
---             -- so it has to be between the start and end
---             fn.dwellFor (lookup (getEvent lineStartEv))
---                 (Time.duration (startTime lineStartEv) now)
---                 |> transition
 
 
 foldOverLines :
@@ -2128,22 +1828,20 @@ overEvents capturing now maybeInterruption lookup maybeAdjustor interpolate _ cu
                 newCursor
 
 
-logSpace label val =
-    -- let
-    --     _ = Debug.log "\n" " "
-    -- in
-    let
-        x =
-            Debug.log ("{-\n    " ++ label) val
 
-        _ =
-            Debug.log "\n-}" ""
-    in
-    val
-
-
-logIndent n label val =
-    Debug.log (String.repeat n " " ++ label) val
+-- logSpace label val =
+--     -- let
+--     --     _ = Debug.log "\n" " "
+--     -- in
+--     let
+--         x =
+--             Debug.log ("{-\n    " ++ label) val
+--         _ =
+--             Debug.log "\n-}" ""
+--     in
+--     val
+-- logIndent n label val =
+--     Debug.log (String.repeat n " " ++ label) val
 
 
 mergeCaptures details maybeCaptured =
@@ -2421,26 +2119,32 @@ getPhase beginning target now maybeInterruption =
 {- BOOKKEEPING -}
 
 
-current : Timeline event -> Occurring event
-current timeline =
-    mostRecentlyCaptured <|
-        foldp
-            CaptureNow
-            identity
-            startPass
-            Nothing
-            pass
-            timeline
+current : Timeline event -> event
+current ((Timeline details) as timeline) =
+    foldpSlim
+        identity
+        { start =
+            \_ ->
+                details.initial
+        , dwellFor =
+            \cur duration ->
+                cur
+        , dwellPeriod = \_ -> Nothing
+        , adjustor =
+            \_ ->
+                { arrivingEarly = 0
+                , leavingLate = 0
+                }
+        , after =
+            \lookup target future ->
+                getEvent target
+        , lerp = pass
+        }
+        timeline
 
 
-startPass : (event -> event) -> Occurring event -> Occurring event
-startPass lookup start =
-    start
-
-
-pass : (event -> event) -> Previous event -> Occurring event -> Maybe (Occurring event) -> Phase -> Time.Absolute -> Occurring event -> Occurring event
-pass _ _ target _ _ _ _ =
-    target
+pass _ _ target _ _ _ =
+    getEvent target
 
 
 currentAndPrevious :
@@ -2550,3 +2254,59 @@ dwellingTime ((Timeline deets) as tl) =
 
     else
         0
+
+
+
+{- ANIMATOR -}
+{- The animator checks to see if any timelines are running and also has the ability to update the animation state.
+
+
+   Different animators can do different things
+
+
+      - Normal -> always on
+      - Inline -> on when moving (require anotation of dwelling events)
+      - CSS    -> single update when timeline is updated
+
+
+
+
+
+-}
+
+
+{-| -}
+type Animator model
+    = Animator (model -> Bool) (Time.Posix -> model -> model)
+
+
+{-| -}
+needsUpdate : Timeline event -> Bool
+needsUpdate ((Timeline timeline) as tl) =
+    case timeline.queued of
+        Nothing ->
+            case timeline.interruption of
+                [] ->
+                    timeline.running
+
+                _ ->
+                    True
+
+        Just _ ->
+            True
+
+
+{-| -}
+hasChanged : Timeline event -> Bool
+hasChanged (Timeline timeline) =
+    case timeline.queued of
+        Nothing ->
+            case timeline.interruption of
+                [] ->
+                    False
+
+                _ ->
+                    True
+
+        Just _ ->
+            True

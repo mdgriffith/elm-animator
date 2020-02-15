@@ -118,7 +118,7 @@ init first =
 {-| -}
 current : Timeline state -> state
 current =
-    Timeline.getEvent << Timeline.current
+    Timeline.current
 
 
 {-| -}
@@ -275,18 +275,6 @@ type alias Schedule state =
 
 type alias Description state =
     Timeline.Description state
-
-
-{-| -}
-describe : Timeline state -> List (Description state)
-describe timeline =
-    Timeline.mostRecentlyCaptured <|
-        Timeline.foldp Timeline.CaptureNow
-            identity
-            Interpolate.startDescription
-            Nothing
-            Interpolate.describe
-            timeline
 
 
 {-| -}
@@ -997,20 +985,24 @@ subscription toMsg timeline =
 
 
 {-| -}
-type Animator model
-    = Animator (model -> Bool) (Time.Posix -> model -> model)
+type alias Animator model =
+    Timeline.Animator model
+
+
+
+-- Animator (model -> Bool) (Time.Posix -> model -> model)
 
 
 {-| -}
 animator : Animator model
 animator =
-    Animator (always False) (\now model -> model)
+    Timeline.Animator (always False) (\now model -> model)
 
 
 {-| -}
 with : (model -> Timeline state) -> (Timeline state -> model -> model) -> Animator model -> Animator model
-with get set (Animator isRunning updateModel) =
-    Animator
+with get set (Timeline.Animator isRunning updateModel) =
+    Timeline.Animator
         (\model ->
             if isRunning model then
                 True
@@ -1029,7 +1021,7 @@ with get set (Animator isRunning updateModel) =
 
 {-| -}
 toSubscription : (Time.Posix -> msg) -> model -> Animator model -> Sub msg
-toSubscription toMsg model (Animator isRunning _) =
+toSubscription toMsg model (Timeline.Animator isRunning _) =
     if isRunning model then
         Browser.Events.onAnimationFrame
             toMsg
@@ -1040,5 +1032,5 @@ toSubscription toMsg model (Animator isRunning _) =
 
 {-| -}
 update : Time.Posix -> Animator model -> model -> model
-update newTime (Animator _ updateModel) model =
+update newTime (Timeline.Animator _ updateModel) model =
     updateModel newTime model

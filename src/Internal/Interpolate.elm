@@ -6,7 +6,7 @@ module Internal.Interpolate exposing
     , defaultArrival, defaultDeparture
     , adjustTiming
     , startMoving2, dwellMove2, dwellPeriod, afterMove, lerp
-    , coloring, createSpline, findAtXOnSpline, linearly2, moving
+    , State, coloring, createSpline, findAtXOnSpline, linearly2, moving
     )
 
 {-|

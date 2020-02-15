@@ -1,79 +1,399 @@
 module Animator.CSS exposing
-    ( opacity
-    , backgroundColor, textColor, borderColor
-    , translate, rotate, scale, transform
+    ( animated
+    , Attribute, opacity, fontColor, backgroundColor
+    , with
+    , y
     )
 
 {-|
 
 
-# Inline CSS
-
-@docs opacity
-
-@docs backgroundColor, textColor, borderColor
-
-
-## Transformations
-
-@docs translate, rotate, scale, transform
-
-
 # CSS Animations
+
+@docs div, animated
+
+@docs Attribute, opacity, fontColor, backgroundColor
+
+@docs with
 
 -}
 
 import Animator exposing (..)
 import Color exposing (Color)
+import Duration
 import Html exposing (Html)
 import Html.Attributes as Attr
 import Html.Keyed
+import Internal.Interpolate as Interpolate
+import Internal.Time as Time
+import Internal.Timeline as Timeline
+import Pixels
 
 
-type Attribute
-    = Attribute
+type Attribute event
+    = ColorAttribute String (event -> Color)
+    | Attribute String (event -> Float) (Float -> String)
+    | Movement String (event -> Movement) (Float -> String)
 
 
-type Animated msg
-    = Animated String (List Attribute) (List (Html.Attribute msg)) (List (Html msg))
+
+-- | Transform
+--     { origin : (Origin)
+--     , rotation : (Timeline state -> Timeline.Frames Float )
+--     , scale : (Timeline state -> Timeline.Frames Float )
+--     , x : (Timeline state -> Timeline.Frames Float )
+--     , y : (Timeline state -> Timeline.Frames Float )
+--     , z : (Timeline state -> Timeline.Frames Float )
+--     }
 
 
-div : List (Html.Attribute msg) -> List ( String, Animated msg ) -> Html msg
-div attrs children =
+type Origin
+    = Origin
+
+
+type Animated event msg
+    = Animated String (List (Attribute event)) (List (Html.Attribute msg)) (List (Html msg))
+
+
+
+-- div : List (Html.Attribute msg) -> List ( String, Animated event msg ) -> Html msg
+-- div attrs children =
+--     let
+--         ( htmlChildren, styles ) =
+--             List.foldl gatherChildren ( [], "" ) children
+--     in
+--     Html.Keyed.node "div"
+--         attrs
+--         (( "animator-stylesheet", stylesheet styles ) :: List.reverse htmlChildren)
+-- gatherChildren : ( String, Animated msg ) -> ( List ( String, Html msg ), String ) -> ( List ( String, Html msg ), String )
+-- gatherChildren ( key, animatedNode ) ( existingChildren, existingStyles ) =
+--     let
+--         ( newStyles, newNode ) =
+--             render animatedNode
+--     in
+--     ( ( key, newNode ) :: existingChildren
+--     , newStyles ++ existingStyles
+--     )
+-- render : Animated msg -> ( String, Html msg )
+-- render (Animated name animAttrs htmlAttrs children) =
+--     let
+--         ( class, keyframes ) =
+--             List.foldl renderAttrs ( "", "" ) animAttrs
+--     in
+--     ( keyframes
+--     , Html.node name (Attr.class class :: htmlAttrs) children
+--     )
+{- Example keyframes ->
+
+
+   @keyframes identifier {
+     0% { top: 0; }
+     50% { top: 30px; left: 20px; }
+     50% { top: 10px; }
+     100% { top: 0; }
+   }
+
+
+-}
+
+
+type alias Anim =
+    { name : String
+    , duration : Float
+    , delay : Float
+    , repeat : Repeat
+    , timingFn : TimingFn
+    , keyframes : String
+    }
+
+
+type Repeat
+    = Loop
+    | Repeat Int
+
+
+type TimingFn
+    = Linear
+
+
+renderAnimations : List Anim -> String
+renderAnimations animations =
+    renderKeyframes "" animations
+        ++ "\n."
+        ++ (renderClassName "" animations ++ """{
+            animation-name: """ ++ renderName "" animations ++ """;
+            animation-delay: """ ++ renderDelay "" animations ++ """;
+            animation-duration: """ ++ renderDuration "" animations ++ """;
+            animation-timing-function: """ ++ renderTiming "" animations ++ """;
+            animation-fill-mode: forwards;
+            animation-iteration-count: """ ++ renderIterations "" animations ++ """;
+        }
+        """)
+
+
+renderKeyframes : String -> List Anim -> String
+renderKeyframes str anim =
+    case anim of
+        [] ->
+            str
+
+        top :: remain ->
+            renderKeyframes (str ++ "\n" ++ top.keyframes) remain
+
+
+renderClassName : String -> List Anim -> String
+renderClassName str anim =
     let
-        ( htmlChildren, styles ) =
-            List.foldl gatherChildren ( [], "" ) children
+        _ =
+            Debug.log "names" ( List.map .name anim, str )
     in
-    Html.Keyed.node "div"
-        attrs
-        (( "animator-stylesheet", stylesheet styles ) :: List.reverse htmlChildren)
+    Debug.log "final class name" <|
+        case anim of
+            [] ->
+                str
+
+            top :: [] ->
+                if str == "" then
+                    top.name
+
+                else
+                    str ++ top.name
+
+            top :: next :: remaining ->
+                renderClassName (str ++ top.name ++ "-") (next :: remaining)
 
 
-gatherChildren ( key, animatedNode ) ( existingChildren, existingStyles ) =
+renderName : String -> List Anim -> String
+renderName str anim =
+    case anim of
+        [] ->
+            str
+
+        top :: [] ->
+            if str == "" then
+                top.name
+
+            else
+                str ++ top.name
+
+        top :: next :: remaining ->
+            renderName (str ++ top.name ++ ", ") (next :: remaining)
+
+
+renderDelay : String -> List Anim -> String
+renderDelay str anim =
+    case anim of
+        [] ->
+            str
+
+        top :: [] ->
+            if str == "" then
+                String.fromFloat top.delay ++ "ms"
+
+            else
+                str ++ (String.fromFloat top.delay ++ "ms")
+
+        top :: next :: remaining ->
+            renderDelay (str ++ String.fromFloat top.delay ++ "ms, ") (next :: remaining)
+
+
+renderDuration : String -> List Anim -> String
+renderDuration str anim =
+    case anim of
+        [] ->
+            str
+
+        top :: [] ->
+            if str == "" then
+                String.fromFloat top.duration ++ "ms"
+
+            else
+                str ++ String.fromFloat top.duration ++ "ms"
+
+        top :: next :: remaining ->
+            renderDuration (str ++ String.fromFloat top.duration ++ "ms, ") (next :: remaining)
+
+
+renderTiming : String -> List Anim -> String
+renderTiming str anim =
+    case anim of
+        [] ->
+            str
+
+        top :: [] ->
+            if str == "" then
+                timingFnName top.timingFn
+
+            else
+                str ++ timingFnName top.timingFn
+
+        top :: next :: remaining ->
+            renderTiming (str ++ timingFnName top.timingFn ++ ", ") (next :: remaining)
+
+
+timingFnName : TimingFn -> String
+timingFnName fn =
+    case fn of
+        Linear ->
+            "linear"
+
+
+renderIterations : String -> List Anim -> String
+renderIterations str anim =
+    case anim of
+        [] ->
+            str
+
+        top :: [] ->
+            if str == "" then
+                repeatToString top.repeat
+
+            else
+                str ++ repeatToString top.repeat
+
+        top :: next :: remaining ->
+            renderIterations (str ++ repeatToString top.repeat ++ ", ") (next :: remaining)
+
+
+repeatToString : Repeat -> String
+repeatToString repeat =
+    case repeat of
+        Loop ->
+            "infinite"
+
+        Repeat n ->
+            String.fromInt n
+
+
+{-| -}
+renderAttrs : Timeline event -> Attribute event -> List Anim -> List Anim
+renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
+    case attr of
+        ColorAttribute attrName lookup ->
+            renderAnimation details.now
+                attrName
+                (Timeline.capture 15 lookup Interpolate.coloring timeline)
+                Color.toCssString
+                anim
+
+        Attribute attrName lookup toString ->
+            renderAnimation details.now
+                attrName
+                (Timeline.capture 15 lookup Interpolate.linearly2 timeline)
+                toString
+                anim
+
+        Movement attrName lookup toString ->
+            renderAnimation details.now
+                attrName
+                (Timeline.capture 15 lookup Interpolate.moving timeline)
+                (.position >> Pixels.inPixels >> toString)
+                anim
+
+
+renderAnimation : Time.Absolute -> String -> Timeline.Frames value -> (value -> String) -> List Anim -> List Anim
+renderAnimation now attrName frames renderer anims =
     let
-        ( newStyles, newNode ) =
-            render animatedNode
+        renderedFrames =
+            renderFrame 0
+                (List.length frames.frames)
+                attrName
+                frames.frames
+                renderer
+                ""
+
+        name =
+            attrName ++ "-" ++ String.fromInt (floor (Time.inMilliseconds now))
+
+        newKeyFrames =
+            "@keyframes " ++ name ++ " {\n" ++ renderedFrames ++ "\n}"
+
+        duration =
+            Duration.inMilliseconds frames.duration
+
+        anim =
+            { name = name
+            , duration = duration
+            , delay = 0
+            , repeat = Repeat 1
+            , timingFn = Linear
+            , keyframes = newKeyFrames
+            }
     in
-    ( ( key, newNode ) :: existingChildren
-    , newStyles ++ existingStyles
-    )
+    case frames.dwell of
+        Nothing ->
+            anim :: anims
+
+        Just details ->
+            let
+                _ =
+                    Debug.log "add dwell" details
+
+                dwellFrames =
+                    renderFrame 0
+                        (List.length details.frames)
+                        attrName
+                        details.frames
+                        renderer
+                        ""
+
+                dwell =
+                    { name = name ++ "-dwell"
+                    , duration =
+                        case details.period of
+                            Timeline.Repeat _ dwellDur ->
+                                Duration.inMilliseconds dwellDur
+
+                            Timeline.Loop dwellDur ->
+                                Duration.inMilliseconds dwellDur
+                    , delay = duration
+                    , repeat =
+                        case details.period of
+                            Timeline.Repeat n _ ->
+                                Repeat n
+
+                            Timeline.Loop _ ->
+                                Loop
+                    , timingFn = Linear
+                    , keyframes = "@keyframes " ++ name ++ "-dwell" ++ " {\n" ++ dwellFrames ++ "\n}"
+                    }
+            in
+            dwell :: anim :: anims
 
 
-render (Animated name animAttrs htmlAttrs children) =
-    let
-        ( class, keyframes ) =
-            List.foldl renderAttrs ( "", "" ) animAttrs
-    in
-    ( keyframes
-    , Html.node name (Attr.class class :: htmlAttrs) children
-    )
+{-| We always want to plot out frames so that 0% and 100% are present.
+
+`i` always starts at 0
+
+    i @ total = 1
+        0/1 ->
+
+-}
+renderFrame i total name frames renderer rendered =
+    case frames of
+        [] ->
+            rendered
+
+        frm :: remain ->
+            if total == 1 then
+                let
+                    keyframe =
+                        ("0% {" ++ name ++ ": " ++ renderer frm ++ ";}\n")
+                            ++ ("100% {" ++ name ++ ": " ++ renderer frm ++ ";}\n")
+                in
+                -- renderFrame (i + 1) total name remain renderer (rendered ++ keyframe)
+                keyframe
+
+            else
+                let
+                    keyframe =
+                        String.fromFloat (100 * (toFloat i / toFloat (total - 1))) ++ "% {" ++ name ++ ": " ++ renderer frm ++ ";}\n"
+                in
+                renderFrame (i + 1) total name remain renderer (rendered ++ keyframe)
 
 
-renderAttrs attr ( class, keyframes ) =
-    ( class, keyframes )
 
-
-
+-- keyframe
 {- CSS animation generation
 
    animation-timing-function: linear;
@@ -96,45 +416,6 @@ renderAttrs attr ( class, keyframes ) =
 -}
 
 
-renderAttribute :
-    (Timeline state -> (state -> anchor) -> value)
-    -> Timeline state
-    -> (state -> anchor)
-    -> (value -> ( String, String ))
-    ->
-        { framesPerSecond : Float
-        }
-    -> ( String, String )
-renderAttribute myTimeline toPos renderer config =
-    -- let
-    --     startTimeInMs =
-    --         Time.posixToMillis config.start
-    --     durationInMs =
-    --         Time.posixToMillis config.end
-    --             - startTimeInMs
-    --     frameCount =
-    --         (toFloat durationInMs / 1000) * config.framesPerSecond
-    --     frameSize =
-    --         1000 / config.framesPerSecond
-    --     frames =
-    --         List.range 0 (ceiling frameCount)
-    -- in
-    -- List.foldl
-    --     (\i rendered ->
-    --         let
-    --             currentTime =
-    --                 Time.millisToPosix (round (toFloat startTimeInMs + (toFloat i * frameSize)))
-    --         in
-    --         { time = currentTime
-    --         , value = Animator.details (Internal.Timeline.atTime currentTime myTimeline) toPos
-    --         }
-    --             :: rendered
-    --     )
-    --     []
-    --     frames
-    Debug.todo ""
-
-
 stylesheet : String -> Html msg
 stylesheet str =
     Html.node "style"
@@ -143,78 +424,76 @@ stylesheet str =
         ]
 
 
-animated : List Attribute -> List (Html.Attribute msg) -> List (Html msg) -> Animated msg
-animated =
-    Animated "div"
-
-
-{-| -}
-opacity : Timeline event -> (event -> Float) -> Html.Attribute msg
-opacity timeline lookup =
-    Attr.style "opacity"
-        (String.fromFloat (Animator.linear timeline lookup))
-
-
-{-| -}
-textColor : Timeline event -> (event -> Color) -> Html.Attribute msg
-textColor timeline lookup =
-    Attr.style "color"
-        (Color.toCssString (Animator.color timeline lookup))
-
-
-{-| -}
-backgroundColor : Timeline event -> (event -> Color) -> Html.Attribute msg
-backgroundColor timeline lookup =
-    Attr.style "background-color"
-        (Color.toCssString (Animator.color timeline lookup))
-
-
-{-| -}
-borderColor : Timeline event -> (event -> Color) -> Html.Attribute msg
-borderColor timeline lookup =
-    Attr.style "border-color"
-        (Color.toCssString (Animator.color timeline lookup))
-
-
-{-| -}
-rotate : Timeline event -> (event -> Float) -> Html.Attribute msg
-rotate timeline lookup =
-    Attr.style "transform"
-        ("rotate(" ++ String.fromFloat (Animator.float timeline lookup) ++ "rad)")
-
-
-{-| -}
-scale : Timeline event -> (event -> Float) -> Html.Attribute msg
-scale timeline lookup =
-    Attr.style "transform"
-        ("scale(" ++ String.fromFloat (Animator.float timeline lookup) ++ ")")
-
-
-{-| -}
-translate : Timeline event -> (event -> { x : Movement, y : Movement }) -> Html.Attribute msg
-translate timeline lookup =
+animated :
+    Timeline event
+    -> List (Attribute event)
+    -> List (Html.Attribute msg)
+    -> List (Html msg)
+    -> Html msg
+animated timeline animatedAttrs attrs children =
     let
-        pos =
-            Animator.xy timeline lookup
+        animations =
+            List.foldl (renderAttrs timeline) [] animatedAttrs
+                |> List.reverse
     in
-    Attr.style "transform"
-        ("translate(" ++ String.fromFloat pos.x ++ "px, " ++ String.fromFloat pos.y ++ "px)")
+    Html.Keyed.node "div"
+        attrs
+        [ ( "animator-stylesheet", stylesheet (renderAnimations animations) )
+        , ( "animated-node"
+          , Html.div (Attr.class (renderClassName "" animations) :: attrs) children
+          )
+        ]
 
 
 {-| -}
-transform :
-    { scale : Float
-    , rotate : Float
-    , position : { x : Float, y : Float }
-    }
-    -> Html.Attribute msg
-transform transmogrify =
-    Attr.style "transform"
-        (("rotate(" ++ String.fromFloat transmogrify.rotate ++ "rad)")
-            ++ ("translate(" ++ String.fromFloat transmogrify.position.x ++ "px, " ++ String.fromFloat transmogrify.position.y ++ "px)")
-            ++ ("scale(" ++ String.fromFloat transmogrify.scale ++ ")")
+opacity : (event -> Float) -> Attribute event
+opacity lookup =
+    Attribute
+        "opacity"
+        lookup
+        String.fromFloat
+
+
+{-| -}
+y : (event -> Movement) -> Attribute event
+y lookup =
+    Movement "transform" lookup (\f -> "translateY(" ++ String.fromFloat f ++ "px)")
+
+
+{-| -}
+backgroundColor : (event -> Color.Color) -> Attribute event
+backgroundColor lookup =
+    ColorAttribute "background-color" lookup
+
+
+{-| -}
+fontColor : (event -> Color.Color) -> Attribute event
+fontColor lookup =
+    ColorAttribute "color" lookup
+
+
+
+{- ANIMATOR -}
+
+
+with :
+    (model -> Timeline state)
+    -> (Timeline state -> model -> model)
+    -> Animator model
+    -> Animator model
+with get set (Timeline.Animator isRunning updateModel) =
+    Timeline.Animator
+        (\model ->
+            if isRunning model then
+                True
+
+            else
+                Timeline.hasChanged (get model)
         )
-
-
-
-{- Generating CSS Animations -}
+        (\now model ->
+            let
+                newModel =
+                    updateModel now model
+            in
+            set (Timeline.update now (get newModel)) newModel
+        )

@@ -154,5 +154,5 @@ numberOfFrames fps lastFrameTime startAt endAt =
             1 - (framesSinceLastFrame - toFloat (floor framesSinceLastFrame))
     in
     ( offset * millisecondsPerFrame
-    , floor (totalDurationInMs / millisecondsPerFrame)
+    , max 1 (floor (totalDurationInMs / millisecondsPerFrame))
     )
