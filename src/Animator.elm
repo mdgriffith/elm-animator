@@ -1,5 +1,5 @@
 module Animator exposing
-    ( Timeline, init
+    ( Timeline, init, initWith
     , current
     , Animator, animator, with, toSubscription, update
     , to
@@ -14,7 +14,7 @@ module Animator exposing
     , leaveSmoothly, leaveLate
     , arriveSmoothly, arriveEarly
     , withWobble
-    , wave, wrap, zigzag
+    , wave, wrap, zigzag, interpolate
     , loop, repeat, once
     , pause, shift
     , step
@@ -69,7 +69,7 @@ module Animator exposing
 
 # Resting at a state
 
-@docs wave, wrap, zigzag
+@docs wave, wrap, zigzag, interpolate
 
 @docs loop, repeat, once
 
@@ -726,6 +726,12 @@ zigzag start end =
         )
 
 
+{-| -}
+interpolate : (Proportion -> Float) -> Oscillator
+interpolate interp =
+    Oscillator [] interp
+
+
 
 {- SPRITES -}
 
@@ -987,25 +993,8 @@ lastFrame myFrame =
 
 
 {-| -}
-subscription : (Timeline state -> msg) -> Timeline state -> Sub msg
-subscription toMsg timeline =
-    if Timeline.needsUpdate timeline then
-        Browser.Events.onAnimationFrame
-            (\newTime ->
-                toMsg (Timeline.update newTime timeline)
-            )
-
-    else
-        Sub.none
-
-
-{-| -}
 type alias Animator model =
     Timeline.Animator model
-
-
-
--- Animator (model -> Bool) (Time.Posix -> model -> model)
 
 
 {-| -}
