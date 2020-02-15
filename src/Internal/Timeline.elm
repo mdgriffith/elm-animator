@@ -10,7 +10,7 @@ module Internal.Timeline exposing
     , Phase(..), Adjustment, Line(..), Timetable(..)
     , Capturing(..), Captured(..), mostRecentlyCaptured
     , foldpSlim, capture
-    , Animator(..), Description(..), Frames, Interp, Period(..), Previous(..), atTime, currentAndPrevious, gc, hasChanged, linesAreActive, previousEndTime, previousStartTime, updateNoGC
+    , Animator(..), Description(..), Frames, Interp, Period(..), Previous(..), atTime, currentAndPrevious, gc, hasChanged, justInitialized, linesAreActive, previousEndTime, previousStartTime, updateNoGC
     )
 
 {-|
@@ -2310,3 +2310,11 @@ hasChanged (Timeline timeline) =
 
         Just _ ->
             True
+
+
+{-| -}
+justInitialized : Timeline event -> Bool
+justInitialized (Timeline timeline) =
+    case timeline.now of
+        Quantity.Quantity qty ->
+            qty == 0
