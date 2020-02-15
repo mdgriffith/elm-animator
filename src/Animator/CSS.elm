@@ -1,4 +1,4 @@
-module Animator.CSS exposing
+module Animator.Css exposing
     ( animated
     , Attribute, opacity, fontColor, backgroundColor
     , with
@@ -143,24 +143,19 @@ renderKeyframes str anim =
 
 renderClassName : String -> List Anim -> String
 renderClassName str anim =
-    let
-        _ =
-            Debug.log "names" ( List.map .name anim, str )
-    in
-    Debug.log "final class name" <|
-        case anim of
-            [] ->
-                str
+    case anim of
+        [] ->
+            str
 
-            top :: [] ->
-                if str == "" then
-                    top.name
+        top :: [] ->
+            if str == "" then
+                top.name
 
-                else
-                    str ++ top.name
+            else
+                str ++ top.name
 
-            top :: next :: remaining ->
-                renderClassName (str ++ top.name ++ "-") (next :: remaining)
+        top :: next :: remaining ->
+            renderClassName (str ++ top.name ++ "-") (next :: remaining)
 
 
 renderName : String -> List Anim -> String
@@ -272,21 +267,21 @@ renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
         ColorAttribute attrName lookup ->
             renderAnimation details.now
                 attrName
-                (Timeline.capture 15 lookup Interpolate.coloring timeline)
+                (Timeline.capture 60 lookup Interpolate.coloring timeline)
                 Color.toCssString
                 anim
 
         Attribute attrName lookup toString ->
             renderAnimation details.now
                 attrName
-                (Timeline.capture 15 lookup Interpolate.linearly2 timeline)
+                (Timeline.capture 60 lookup Interpolate.linearly2 timeline)
                 toString
                 anim
 
         Movement attrName lookup toString ->
             renderAnimation details.now
                 attrName
-                (Timeline.capture 15 lookup Interpolate.moving timeline)
+                (Timeline.capture 60 lookup Interpolate.moving timeline)
                 (.position >> Pixels.inPixels >> toString)
                 anim
 
@@ -326,9 +321,6 @@ renderAnimation now attrName frames renderer anims =
 
         Just details ->
             let
-                _ =
-                    Debug.log "add dwell" details
-
                 dwellFrames =
                     renderFrame 0
                         (List.length details.frames)
@@ -488,7 +480,11 @@ with get set (Timeline.Animator isRunning updateModel) =
                 True
 
             else
-                Timeline.hasChanged (get model)
+                let
+                    tl =
+                        get model
+                in
+                Timeline.hasChanged tl || Timeline.justInitialized tl
         )
         (\now model ->
             let
