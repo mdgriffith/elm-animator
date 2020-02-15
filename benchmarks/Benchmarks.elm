@@ -1,6 +1,7 @@
 module Benchmarks exposing (main)
 
 import Animator
+import Animator.CSS
 import Array
 import Benchmark exposing (..)
 import Benchmark.Runner exposing (BenchmarkProgram, program)
@@ -20,6 +21,7 @@ main =
             [ springs
             , randomness
             , basicInterpolation
+            , unwrappingValues
             , floatComparison
             , interpolationComponents
             , functionCalling
@@ -153,16 +155,18 @@ basicInterpolation =
                     Nothing
                     Interpolate.move
                     timeline
-
-        -- , benchmark "iterating generation" <|
-        --     \_ ->
-        --         Timeline.foldp
-        --             (Timeline.CaptureFuture 60)
-        --             toPos
-        --             Interpolate.startMoving
-        --             Nothing
-        --             Interpolate.move
-        --             timeline
+        , benchmark "iterating generation(60fps)" <|
+            \_ ->
+                Timeline.capture 60
+                    toPos
+                    Interpolate.moving
+                    timeline
+        , benchmark "iterating generation(15fps), but interpolated" <|
+            \_ ->
+                Timeline.capture 15
+                    toPos
+                    Interpolate.moving
+                    timeline
         ]
 
 
@@ -233,6 +237,48 @@ functionCalling =
         , benchmark "Function with positional" <|
             \_ ->
                 functionWithArgs one two three four five six
+        ]
+
+
+type Wrapped
+    = Wrapped Int Int Int
+
+
+wrapped =
+    Wrapped 1 2 3
+
+
+getY (Wrapped x y z) =
+    y
+
+
+record =
+    WrappedRecord 1 2 3
+
+
+type alias WrappedRecord =
+    { x : Int
+    , y : Int
+    , z : Int
+    }
+
+
+unwrappingValues =
+    describe "Is having records in a type faster than a record?"
+        -- Normally we shouldnt consider this, but for lib internals, why not?
+        -- records are twice as fast!
+        -- my guess is because they skip the wrapping of functions that elm does for currying.
+        [ benchmark "Wrapped in type" <|
+            \_ ->
+                case wrapped of
+                    Wrapped x y z ->
+                        y
+        , benchmark "Wrapped in type, accessor fn" <|
+            \_ ->
+                getY wrapped
+        , benchmark "Wrapped in record" <|
+            \_ ->
+                record.y
         ]
 
 
