@@ -1,29 +1,23 @@
 module Internal.Interpolate exposing
-    ( Movement(..), startMoving, move
-    , derivativeOfEasing
-    , startDescription, describe
-    , startLinear, linearly
+    ( Movement(..), State, derivativeOfEasing
     , defaultArrival, defaultDeparture
     , adjustTiming
-    , startMoving2, dwellMove2, dwellPeriod, afterMove, lerp
-    , State, coloring, createSpline, findAtXOnSpline, linearly2, moving
+    , dwellPeriod, afterMove, lerp
+    , coloring, linearly, moving
+    , createSpline, findAtXOnSpline
     )
 
 {-|
 
-@docs Movement, startMoving, move
-
-@docs derivativeOfEasing
-
-@docs startDescription, describe
-
-@docs startLinear, linearly
+@docs Movement, State, derivativeOfEasing
 
 @docs defaultArrival, defaultDeparture
 
 @docs Period, adjustTiming
 
-@docs startMoving2, dwellMove2, dwellPeriod, afterMove, lerp
+@docs startMoving, dwellFor, dwellPeriod, afterMove, lerp
+
+@docs coloring, linearly, moving
 
 -}
 
@@ -149,48 +143,8 @@ type alias XY thing =
     }
 
 
-startDescription : (event -> event) -> Timeline.Occurring event -> List (Timeline.Description event)
-startDescription lookup (Timeline.Occurring start startTime _) =
-    []
-
-
-describe :
-    (event -> event)
-    -> Timeline.Previous event
-    -> Timeline.Occurring event
-    -> Maybe (Timeline.Occurring event)
-    -> Timeline.Phase
-    -> Time.Absolute
-    -> List (Timeline.Description event)
-    -> List (Timeline.Description event)
-describe _ previous target _ _ _ events =
-    case target of
-        Timeline.Occurring targetEv targetTime _ ->
-            case previous of
-                Timeline.Previous _ ->
-                    events ++ [ Timeline.DescribeEvent (Time.toPosix targetTime) targetEv ]
-
-                Timeline.PreviouslyInterrupted interruptionTime ->
-                    case List.reverse events of
-                        [] ->
-                            [ Timeline.DescribeEvent (Time.toPosix targetTime) targetEv ]
-
-                        (Timeline.DescribeEvent interruptionTargetTime interruptedEv) :: remaining ->
-                            List.reverse remaining
-                                ++ [ Timeline.DescribeInterruption
-                                        { interruption = Time.toPosix interruptionTime
-                                        , target = interruptedEv
-                                        , newTarget = targetEv
-                                        , newTargetTime = Time.toPosix targetTime
-                                        }
-                                   ]
-
-                        _ ->
-                            events ++ [ Timeline.DescribeEvent (Time.toPosix targetTime) targetEv ]
-
-
-linearly2 : Timeline.Interp event Float Float
-linearly2 =
+linearly : Timeline.Interp event Float Float
+linearly =
     { start = identity
     , dwellFor = \point duration -> point
     , dwellPeriod = \_ -> Nothing
@@ -215,65 +169,8 @@ linearly2 =
     }
 
 
-startLinear : (event -> Float) -> Timeline.Occurring event -> Float
-startLinear lookup (Timeline.Occurring start startTime _) =
-    lookup start
-
-
-linearly : (event -> Float) -> Timeline.Previous event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> Float -> Float
-linearly lookup previous ((Timeline.Occurring target targetTime maybeDwell) as targetOccurring) maybeLookAhead phase now state =
-    case phase of
-        Timeline.Start ->
-            lookup target
-
-        Timeline.Transitioning ->
-            let
-                eventEndTime =
-                    Timeline.endTime targetOccurring
-            in
-            if Time.thisAfterOrEqualThat now eventEndTime || Time.thisAfterOrEqualThat now targetTime then
-                lookup target
-
-            else
-                let
-                    progress =
-                        Time.progress
-                            (Timeline.previousEndTime previous)
-                            targetTime
-                            now
-                in
-                linear state (lookup target) progress
-
-
-{-| We need some way to start our iterating over the timeline.
-
-To make writing the interpolation function easier, it's also nice to seed with an initial event.
-
-We always want a previous event, a current target, and a maybe lookahead.
-
-Currently `previous` is used to calculate last minute timing adjustments for interpolation.
-
-i.e. arrive.late
-
--}
-startMoving : (event -> Movement) -> Timeline.Occurring event -> State
-startMoving lookup (Timeline.Occurring start startTime _) =
-    let
-        initPos =
-            case lookup start of
-                Oscillate _ _ _ toX ->
-                    toX 0
-
-                Position depart arrive x ->
-                    x
-    in
-    { position = Pixels.pixels initPos
-    , velocity = Pixels.pixelsPerSecond 0
-    }
-
-
-startMoving2 : Movement -> State
-startMoving2 movement =
+startMoving : Movement -> State
+startMoving movement =
     { position =
         case movement of
             Oscillate _ _ _ toX ->
@@ -325,8 +222,8 @@ notInterrupted prev =
 
 moving : Timeline.Interp event Movement State
 moving =
-    { start = startMoving2
-    , dwellFor = dwellMove2
+    { start = startMoving
+    , dwellFor = dwellFor
     , dwellPeriod = dwellPeriod
     , adjustor = adjustTiming
     , after = afterMove
@@ -344,8 +241,8 @@ dwellPeriod movement =
             Just period
 
 
-dwellMove2 : Movement -> Time.Duration -> State
-dwellMove2 movement duration =
+dwellFor : Movement -> Time.Duration -> State
+dwellFor movement duration =
     case movement of
         Position _ _ pos ->
             { position = Pixels.pixels pos
@@ -417,160 +314,6 @@ afterMove lookup target future =
     , velocity =
         velocityAtTarget lookup target (List.head future)
     }
-
-
-{-| -}
-move : (event -> Movement) -> Timeline.Previous event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Timeline.Phase -> Time.Absolute -> State -> State
-move lookup previous target maybeLookAhead phase now state =
-    case phase of
-        Timeline.Start ->
-            -- because we're starting,
-            -- we know that `now` is *after* targetTime
-            -- also, we don't care about `previous`
-            let
-                endTime =
-                    case maybeLookAhead of
-                        Nothing ->
-                            now
-
-                        Just lookAhead ->
-                            Time.earliest
-                                (Timeline.endTime target)
-                                now
-            in
-            dwellFor (lookup (Timeline.getEvent target))
-                (Time.duration (Timeline.startTime target) endTime)
-
-        Timeline.Transitioning ->
-            -- we're somewhere between prev and target.
-            if log "dwell-prev" <| Time.thisBeforeOrEqualThat now (Timeline.previousEndTime previous) && notInterrupted previous then
-                -- we're dwelling at prev
-                -- dwell till `now`
-                let
-                    previousOccurringEvent =
-                        case previous of
-                            Timeline.Previous p ->
-                                Timeline.getEvent p
-
-                            Timeline.PreviouslyInterrupted _ ->
-                                -- This is incorrect, but this branch is
-                                -- protected by the above if statement
-                                -- sorta awkward
-                                Timeline.getEvent target
-
-                    previousStartTime =
-                        case previous of
-                            Timeline.Previous p ->
-                                Timeline.startTime p
-
-                            Timeline.PreviouslyInterrupted _ ->
-                                -- This is incorrect, but this branch is
-                                -- protected by the above if statement
-                                -- sorta awkward
-                                Timeline.startTime target
-
-                    endTime =
-                        Time.earliest
-                            (Timeline.previousEndTime previous)
-                            now
-                in
-                dwellFor (lookup previousOccurringEvent)
-                    (Time.duration previousStartTime endTime)
-
-            else if log "lerp" <| Time.thisBeforeOrEqualThat now (Timeline.startTime target) then
-                -- we're transitioning between 1 and 2
-                -- transition till now
-                -- with a target velocity based on lookahead
-                let
-                    wobble =
-                        case lookup (Timeline.getEvent target) of
-                            Oscillate _ arrival _ _ ->
-                                arrival.wobbliness
-
-                            Position _ arrival _ ->
-                                arrival.wobbliness
-                in
-                if maybeLookAhead == Nothing && wobble /= 0 then
-                    springInterpolation lookup previous target now state
-
-                else
-                    interpolateBetween lookup previous target maybeLookAhead now state
-
-            else if log "dwell - target" <| Timeline.hasDwell target then
-                dwellFor (lookup (Timeline.getEvent target))
-                    (Time.duration
-                        (Timeline.startTime target)
-                        (Time.earliest now (Timeline.endTime target))
-                    )
-
-            else if log "auto dwell" <| maybeLookAhead == Nothing then
-                dwellFor (lookup (Timeline.getEvent target))
-                    (Time.duration
-                        (Timeline.startTime target)
-                        now
-                    )
-
-            else
-                let
-                    _ =
-                        log "after" target
-                in
-                log "after target"
-                    { position =
-                        case lookup (Timeline.getEvent target) of
-                            Oscillate depart arrive period toX ->
-                                Pixels.pixels (toX 0)
-
-                            Position _ _ x ->
-                                Pixels.pixels x
-                    , velocity =
-                        velocityAtTarget lookup target maybeLookAhead
-                    }
-
-
-dwellFor : Movement -> Time.Duration -> State
-dwellFor movement duration =
-    case movement of
-        Position _ _ pos ->
-            { position = Pixels.pixels pos
-            , velocity = Pixels.pixelsPerSecond 0
-            }
-
-        Oscillate _ _ period toX ->
-            case period of
-                Loop periodDuration ->
-                    let
-                        progress =
-                            wrapUnitAfter periodDuration duration
-                    in
-                    { position = Pixels.pixels (toX progress)
-                    , velocity = derivativeOfEasing toX periodDuration progress
-                    }
-
-                Repeat n periodDuration ->
-                    let
-                        iterationTimeMS =
-                            Duration.inMilliseconds periodDuration
-
-                        totalMS =
-                            Duration.inMilliseconds duration
-
-                        iteration =
-                            floor (totalMS / iterationTimeMS)
-                    in
-                    if iteration >= n then
-                        { position = Pixels.pixels (toX 1)
-                        , velocity = Pixels.pixelsPerSecond 0
-                        }
-
-                    else
-                        let
-                            progress =
-                                wrapUnitAfter periodDuration duration
-                        in
-                        { position = Pixels.pixels (toX progress)
-                        , velocity = derivativeOfEasing toX periodDuration progress
-                        }
 
 
 {-| -}

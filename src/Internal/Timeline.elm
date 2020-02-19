@@ -1,27 +1,23 @@
 module Internal.Timeline exposing
     ( Timeline(..), TimelineDetails, Occurring(..), getEvents
-    , Interpolator
     , Schedule(..), Event(..)
-    , foldp, update, needsUpdate
+    , update, needsUpdate
     , startTime, endTime, getEvent, extendEventDwell, hasDwell
     , addToDwell
     , progress, dwellingTime
     , current
-    , Phase(..), Adjustment, Line(..), Timetable(..)
-    , Capturing(..), Captured(..), mostRecentlyCaptured
-    , foldpSlim, capture
-    , Animator(..), Description(..), Frames, Interp, Period(..), Previous(..), atTime, currentAndPrevious, gc, hasChanged, justInitialized, linesAreActive, previousEndTime, previousStartTime, updateNoGC
+    , Adjustment, Line(..), Timetable(..)
+    , foldp, capture
+    , Animator(..), Description(..), Frames, Interp, Period(..), Previous(..), atTime, gc, hasChanged, justInitialized, linesAreActive, previousEndTime, previousStartTime, updateNoGC
     )
 
 {-|
 
 @docs Timeline, TimelineDetails, Occurring, getEvents
 
-@docs Interpolator
-
 @docs Schedule, Event
 
-@docs foldp, update, needsUpdate
+@docs update, needsUpdate
 
 @docs startTime, endTime, getEvent, extendEventDwell, hasDwell
 
@@ -31,11 +27,9 @@ module Internal.Timeline exposing
 
 @docs current
 
-@docs Phase, Adjustment, Line, Timetable
+@docs Adjustment, Line, Timetable
 
-@docs Capturing, Captured, mostRecentlyCaptured
-
-@docs foldpSlim, capture
+@docs foldp, capture
 
 -}
 
@@ -110,26 +104,14 @@ type Occurring event
 {- TYPES FOR INTERPOLATION -}
 
 
-type Phase
-    = Start
-    | Transitioning
-
-
-type alias Starter event anchor state =
-    (event -> anchor)
-    -> Occurring event
-    -> state
-
-
-type alias Interpolator event anchor state =
-    (event -> anchor)
-    -> Previous event
-    -> Occurring event
-    -> Maybe (Occurring event)
-    -> Phase
-    -> Time.Absolute
-    -> state
-    -> state
+type alias Interp state anchor motion =
+    { start : anchor -> motion
+    , adjustor : TimeAdjustor anchor
+    , dwellFor : DwellFor anchor motion
+    , dwellPeriod : DwellPeriod anchor
+    , after : After state anchor motion
+    , lerp : Lerp state anchor motion
+    }
 
 
 type alias DwellFor anchor state =
@@ -146,10 +128,6 @@ type alias Lerp event anchor state =
 
 type alias DwellPeriod anchor =
     anchor -> Maybe Period
-
-
-type alias Start anchor state =
-    anchor -> state
 
 
 type Previous event
@@ -175,24 +153,6 @@ mapTable fn (Timetable lines) =
 mapLine : (Occurring a -> Occurring b) -> Line a -> Line b
 mapLine fn (Line t startEvent els) =
     Line t (fn startEvent) (List.map fn els)
-
-
-mapTableWith : (Occurring a -> state -> ( Occurring b, state )) -> state -> Timetable a -> ( Timetable b, state )
-mapTableWith fn initial (Timetable lines) =
-    let
-        overLines line ( existingLines, state ) =
-            let
-                ( newLine, newLineState ) =
-                    mapLineWith fn state line
-            in
-            ( newLine :: existingLines, newLineState )
-
-        ( reversedUpdatedLines, finalState ) =
-            List.foldl overLines ( [], initial ) lines
-    in
-    ( Timetable (List.reverse reversedUpdatedLines)
-    , finalState
-    )
 
 
 mapLineWith : (Occurring a -> state -> ( Occurring b, state )) -> state -> Line a -> ( Line b, state )
@@ -225,11 +185,6 @@ extendEventDwell extendBy ((Event at ev maybeDwell) as thisEvent) =
 
     else
         Event at ev (addToDwell extendBy maybeDwell)
-
-
-getDwell : Occurring event -> Time.Duration
-getDwell (Occurring _ start end) =
-    Time.duration start end
 
 
 hasDwell : Occurring event -> Bool
@@ -816,12 +771,6 @@ type LastTwoEvents event
     = LastTwoEvents Time.Absolute event Time.Absolute event
 
 
-findInterruptedTransition startInterruption events =
-    case events of
-        _ ->
-            Nothing
-
-
 {-| Queue a list of events to be played after everything.
 
     - add events to the timeline that is currently active.
@@ -1027,127 +976,11 @@ In that case we also want to capture the dwell state at the end of the timeline 
 
 -}
 foldp :
-    Capturing
-    -> (state -> anchor)
-    -> Starter state anchor motion
-    -> Maybe (TimeAdjustor anchor)
-    -> Interpolator state anchor motion
-    -> Timeline state
-    -> Captured motion
-foldp capturing lookup starter maybeAdjustTiming interpolate ((Timeline timelineDetails) as timeline) =
-    case timelineDetails.events of
-        Timetable timetable ->
-            let
-                startingEvent =
-                    case List.head timetable of
-                        Nothing ->
-                            Occurring timelineDetails.initial timelineDetails.now timelineDetails.now
-
-                        Just (Line _ start _) ->
-                            start
-
-                startingCursor =
-                    starter lookup startingEvent
-            in
-            foldOverLines capturing Beginning lookup maybeAdjustTiming interpolate timelineDetails startingCursor timetable Nothing
-
-
-type Capturing
-    = CaptureNow
-      --              frames per second to capture
-    | CaptureFuture Float
-
-
-{-| -}
-type Beginning
-    = Beginning
-    | Continuing
-
-
-type Captured motion
-    = Single motion
-    | Future
-        { fps : Float
-        , mostRecent : motion
-        , frames : List motion
-        , dwell :
-            Maybe
-                { iterations : Maybe Int
-                , frames : List motion
-                }
-        }
-
-
-mostRecentlyCaptured : Captured motion -> motion
-mostRecentlyCaptured cap =
-    case cap of
-        Single m ->
-            m
-
-        Future details ->
-            details.mostRecent
-
-
-getFuture :
-    Captured motion
-    ->
-        { frames : List motion
-        , dwell :
-            Maybe
-                { iterations : Maybe Int
-                , frames : List motion
-                }
-        }
-getFuture cap =
-    case cap of
-        Single thing ->
-            { frames = [ thing ]
-            , dwell = Nothing
-            }
-
-        Future future ->
-            { frames = future.frames
-            , dwell = future.dwell
-            }
-
-
-type alias Cursor event state =
-    { state : state
-    , captured : Maybe (Captured state)
-    , events : List (Occurring event)
-    , previous : Previous event
-    , status : Status
-    , beginning : Beginning
-    , previousAdjustment :
-        Maybe
-            { previousEventTime : Time.Absolute
-            , applied : Adjustment
-            }
-    }
-
-
-type Status
-    = Finished
-    | NotDone
-    | Interrupted
-
-
-type alias Interp state anchor motion =
-    { start : anchor -> motion
-    , adjustor : TimeAdjustor anchor
-    , dwellFor : DwellFor anchor motion
-    , dwellPeriod : DwellPeriod anchor
-    , after : After state anchor motion
-    , lerp : Lerp state anchor motion
-    }
-
-
-foldpSlim :
     (state -> anchor)
     -> Interp state anchor motion
     -> Timeline state
     -> motion
-foldpSlim lookup fn (Timeline timelineDetails) =
+foldp lookup fn (Timeline timelineDetails) =
     case timelineDetails.events of
         Timetable timetable ->
             let
@@ -1159,7 +992,7 @@ foldpSlim lookup fn (Timeline timelineDetails) =
                     start
 
                 firstLine :: remainingLines ->
-                    foldOverLinesSingle
+                    overLines
                         fn
                         lookup
                         timelineDetails
@@ -1168,7 +1001,7 @@ foldpSlim lookup fn (Timeline timelineDetails) =
                         start
 
 
-foldOverLinesSingle :
+overLines :
     Interp state anchor motion
     -> (state -> anchor)
     -> TimelineDetails state
@@ -1177,7 +1010,7 @@ foldOverLinesSingle :
     -> List (Line state)
     -> motion
     -> motion
-foldOverLinesSingle fn lookup details (Line lineStart lineStartEv lineRemain) futureLines state =
+overLines fn lookup details (Line lineStart lineStartEv lineRemain) futureLines state =
     -- futureStart starts a new line.
     -- if an interruption occurs, we want to interpolate to the point of the interruption
     -- then transition over to the new line.
@@ -1189,7 +1022,7 @@ foldOverLinesSingle fn lookup details (Line lineStart lineStartEv lineRemain) fu
 
                 ((Line futureStart futureStartEv futureRemain) as future) :: restOfFuture ->
                     if Time.thisBeforeOrEqualThat futureStart details.now then
-                        foldOverLinesSingle fn lookup details future restOfFuture newState
+                        overLines fn lookup details future restOfFuture newState
 
                     else
                         newState
@@ -1317,7 +1150,7 @@ foldOverLinesSingle fn lookup details (Line lineStart lineStartEv lineRemain) fu
                                             else
                                                 fn.after lookup next2 lineRemain3
                                     in
-                                    foldOverLinesSingle
+                                    overLines
                                         fn
                                         lookup
                                         details
@@ -1394,7 +1227,7 @@ capture fps lookup fn (Timeline timelineDetails) =
                                 , startTime = timelineDetails.now
                                 }
                                 (\currentTime ->
-                                    foldOverLinesSingle
+                                    overLines
                                         fn
                                         lookup
                                         -- maybe we break this out to a separate param to avoid updating?
@@ -1499,498 +1332,6 @@ getFrames i config fn newFrames =
         getFrames (i - 1) config fn (new :: newFrames)
 
 
-foldOverLines :
-    Capturing
-    -> Beginning
-    -> (event -> anchor)
-    -> Maybe (TimeAdjustor anchor)
-    -> Interpolator event anchor motion
-    -> TimelineDetails event
-    -> motion
-    -> List (Line event)
-    -> Maybe (Cursor event motion)
-    -> Captured motion
-foldOverLines capturing beginning lookup maybeAdjustor interpolate timeline startingState lines existingCursor =
-    case lines of
-        [] ->
-            -- Generally, this shouldn't be reachable because we require an event on initialization
-            -- likely we'll want to change events to `(start, [remaining])` at some point in the future
-            -- interpolate lookup (Occurring timeline.initial timeline.now Nothing) Nothing Start
-            case existingCursor of
-                Nothing ->
-                    Single startingState
-
-                Just exist ->
-                    exist.captured
-                        |> Maybe.withDefault
-                            (Single exist.state)
-
-        (Line startAt startingEvent events) :: remaining ->
-            let
-                maybeInterruption =
-                    case List.head remaining of
-                        Nothing ->
-                            Nothing
-
-                        Just (Line interruptAt interruptEv interruptEvents) ->
-                            Just interruptAt
-
-                cursor =
-                    List.foldl
-                        (overEvents capturing timeline.now maybeInterruption lookup maybeAdjustor interpolate)
-                        (case existingCursor of
-                            Nothing ->
-                                { state = startingState
-                                , captured = Nothing
-                                , events = startingEvent :: events
-                                , previous =
-                                    Previous startingEvent
-                                , beginning = beginning
-                                , status =
-                                    NotDone
-                                , previousAdjustment =
-                                    case maybeAdjustor of
-                                        Nothing ->
-                                            Nothing
-
-                                        Just adjustment ->
-                                            -- Just
-                                            --     { previousEventTime = startTime startingEvent
-                                            --     , applied = adjustment
-                                            --     }
-                                            -- TODO
-                                            Nothing
-                                }
-
-                            Just existing ->
-                                { existing
-                                    | events = startingEvent :: events
-                                    , status =
-                                        NotDone
-                                }
-                        )
-                        (startingEvent :: events)
-            in
-            if cursor.status == Finished then
-                case capturing of
-                    CaptureNow ->
-                        Single cursor.state
-
-                    CaptureFuture fps ->
-                        -- let
-                        --     _ =
-                        --         logIndent 4 "-------->" " forward for capture"
-                        -- in
-                        foldOverLines capturing
-                            cursor.beginning
-                            lookup
-                            maybeAdjustor
-                            interpolate
-                            timeline
-                            cursor.state
-                            remaining
-                            (Just cursor)
-                -- cursor.captured
-                --     |> Maybe.withDefault (Single cursor.state)
-
-            else
-                foldOverLines capturing
-                    cursor.beginning
-                    lookup
-                    maybeAdjustor
-                    interpolate
-                    timeline
-                    cursor.state
-                    remaining
-                    (Just cursor)
-
-
-{-| #1 - foldOverLines - if phase == finished && capturing ~= CaptureFuture then
-
-    - continue to fold over all lines
-
-#2 - overEvents - if phase == fininished && capturing ~= CaptureFuture then
-
-    - if Finished ->
-        if CaptureFuture, then
-            capture all events until interrupted
-        else
-            cursor
-    if NotDone then
-
-        if we Become finished && capturing ~= CaptureFuture:
-            -> Roll forward and collect all frames
-
--}
-overEvents :
-    Capturing
-    -> Time.Absolute
-    -> Maybe Time.Absolute
-    -> (event -> anchor)
-    -> Maybe (TimeAdjustor anchor)
-    -> Interpolator event anchor motion
-    -> Occurring event
-    -> Cursor event motion
-    -> Cursor event motion
-overEvents capturing now maybeInterruption lookup maybeAdjustor interpolate _ cursor =
-    -- let
-    -- interrupted =
-    --     case maybeInterruption of
-    --         Nothing ->
-    --             False
-    --         Just interruptTime ->
-    --             Time.thisAfterOrEqualThat (previousEndTime cursor.previous) interruptTime
-    -- _ =
-    --     logSpace "Over events" ( cursor.status, cursor.previous, List.head cursor.events )
-    -- _ =
-    --     logIndent 4 "now, interruption" ( now, maybeInterruption )
-    -- in
-    case cursor.status of
-        Finished ->
-            case capturing of
-                CaptureNow ->
-                    cursor
-
-                CaptureFuture fps ->
-                    let
-                        interrupted =
-                            -- Debug.log "finished, interrupted" <|
-                            case maybeInterruption of
-                                Nothing ->
-                                    False
-
-                                Just interruptTime ->
-                                    Time.thisAfterThat (previousEndTime cursor.previous) interruptTime
-                    in
-                    if interrupted then
-                        cursor
-
-                    else
-                        let
-                            eventEndTime =
-                                maybeInterruption
-                                    |> Maybe.withDefault
-                                        (List.head cursor.events
-                                            |> Maybe.map endTime
-                                            -- is now correct here?
-                                            |> Maybe.withDefault now
-                                        )
-
-                            newCursor =
-                                overEventsHelper
-                                    capturing
-                                    maybeInterruption
-                                    lookup
-                                    maybeAdjustor
-                                    interpolate
-                                    now
-                                    cursor
-
-                            -- _ =
-                            --     Debug.log "times" ( previousEndTime cursor.previous, eventEndTime )
-                            -- _ =
-                            --     Debug.log "capture events with" cursor
-                            -- _ =
-                            --     Debug.log "newcursor" newCursor
-                            framesTillEndOfEvent =
-                                framesBetween fps (previousEndTime cursor.previous) eventEndTime
-
-                            -- |> Debug.log "---Finished-------------------> frame count"
-                            iterator =
-                                overEventsHelper
-                                    capturing
-                                    maybeInterruption
-                                    lookup
-                                    maybeAdjustor
-                                    interpolate
-
-                            frames =
-                                List.foldl
-                                    (captureEvents fps iterator (previousEndTime cursor.previous) cursor)
-                                    []
-                                    (List.range 1 (floor framesTillEndOfEvent))
-                                    |> List.reverse
-
-                            -- |> logIndent 4 "----> found frames"
-                        in
-                        { newCursor
-                            | captured =
-                                Just
-                                    (mergeCaptures
-                                        { mostRecent = newCursor.state
-                                        , fps = fps
-                                        , frames = newCursor.state :: frames
-                                        , dwell = Nothing
-                                        }
-                                        cursor.captured
-                                    )
-                        }
-
-        Interrupted ->
-            cursor
-
-        NotDone ->
-            let
-                newCursor =
-                    overEventsHelper
-                        capturing
-                        maybeInterruption
-                        lookup
-                        maybeAdjustor
-                        interpolate
-                        now
-                        cursor
-            in
-            if newCursor.status == Finished then
-                case capturing of
-                    CaptureNow ->
-                        newCursor
-
-                    CaptureFuture fps ->
-                        -- capture events till the end or interrupted
-                        let
-                            interrupted =
-                                -- Debug.log "ND, interrupted" <|
-                                case maybeInterruption of
-                                    Nothing ->
-                                        False
-
-                                    Just interruptTime ->
-                                        Time.thisAfterOrEqualThat now interruptTime
-                        in
-                        -- if logIndent 8 "SKIPPING" interrupted then
-                        if interrupted then
-                            newCursor
-
-                        else
-                            let
-                                eventEndTime =
-                                    maybeInterruption
-                                        |> Maybe.withDefault
-                                            (List.head cursor.events
-                                                |> Maybe.map endTime
-                                                -- is now correct here?
-                                                |> Maybe.withDefault now
-                                            )
-
-                                framesTillEndOfEvent =
-                                    framesBetween fps now eventEndTime
-
-                                -- |> logIndent 4 "ND -> frame count"
-                                -- _ =
-                                -- logIndent 4 "ND times" ( now, eventEndTime )
-                                iterator =
-                                    overEventsHelper
-                                        capturing
-                                        maybeInterruption
-                                        lookup
-                                        maybeAdjustor
-                                        interpolate
-
-                                frames =
-                                    List.foldl
-                                        (captureEvents fps iterator now cursor)
-                                        []
-                                        (List.range 1 (floor framesTillEndOfEvent))
-                                        |> List.reverse
-
-                                -- |> logIndent 4 "ND ----> found frames"
-                                cursorAtEndOfEvent =
-                                    overEventsHelper
-                                        capturing
-                                        maybeInterruption
-                                        lookup
-                                        maybeAdjustor
-                                        interpolate
-                                        eventEndTime
-                                        cursor
-
-                                -- _ =
-                                --     logIndent 4
-                                --         "prevs"
-                                --         ( cursor.previous, newCursor.previous, cursorAtEndOfEvent.previous )
-                                -- |> Debug.log "cursor at end"
-                            in
-                            { --newCursor
-                              cursorAtEndOfEvent
-                                | captured =
-                                    Just
-                                        (Future
-                                            { mostRecent = newCursor.state
-                                            , fps = fps
-                                            , frames = frames
-                                            , dwell = Nothing
-                                            }
-                                        )
-                            }
-
-            else
-                newCursor
-
-
-
--- logSpace label val =
---     -- let
---     --     _ = Debug.log "\n" " "
---     -- in
---     let
---         x =
---             Debug.log ("{-\n    " ++ label) val
---         _ =
---             Debug.log "\n-}" ""
---     in
---     val
--- logIndent n label val =
---     Debug.log (String.repeat n " " ++ label) val
-
-
-mergeCaptures details maybeCaptured =
-    case maybeCaptured of
-        Nothing ->
-            Future details
-
-        Just (Single motion) ->
-            Future details
-
-        Just (Future motion) ->
-            -- let
-            --     _ =
-            --         Debug.log "merge frames" ( motion.frames, details.frames )
-            -- in
-            Future { details | frames = motion.frames ++ details.frames }
-
-
-captureEvents fps fn now cursor frameIndex frames =
-    let
-        -- _ =
-        --     Debug.log "             : cap -> " ( now, newNow )
-        newNow =
-            now
-                |> Time.advanceBy (Duration.seconds ((1 / fps) * toFloat frameIndex))
-
-        newCursor =
-            fn newNow cursor
-    in
-    newCursor.state :: frames
-
-
-framesBetween fps start end =
-    let
-        seconds =
-            Time.duration start end
-                |> Duration.inSeconds
-    in
-    seconds * fps
-
-
-overEventsHelper :
-    Capturing
-    -> Maybe Time.Absolute
-    -> (event -> anchor)
-    -> Maybe (TimeAdjustor anchor)
-    -> Interpolator event anchor motion
-    -> Time.Absolute
-    -> Cursor event motion
-    -> Cursor event motion
-overEventsHelper capturing maybeInterruption lookup maybeAdjustor interpolate now cursor =
-    case cursor.events of
-        [] ->
-            cursor
-
-        target :: remaining ->
-            let
-                lookAhead =
-                    List.head remaining
-
-                adjustedLookAhead =
-                    Maybe.map applyLookAheadAdjustment lookAhead
-
-                applyLookAheadAdjustment ahead =
-                    case maybeAdjustment of
-                        Nothing ->
-                            ahead
-
-                        Just targetAdjustment ->
-                            case maybeAdjustor of
-                                Nothing ->
-                                    ahead
-
-                                Just adjustor ->
-                                    Tuple.first
-                                        (applyAdjustment lookup
-                                            adjustor
-                                            { previousEventTime = endTime target
-                                            , applied = targetAdjustment
-                                            }
-                                            ahead
-                                            Nothing
-                                        )
-
-                ( adjustedTarget, maybeAdjustment ) =
-                    case maybeAdjustor of
-                        Nothing ->
-                            ( target, Nothing )
-
-                        Just adjustor ->
-                            case cursor.previousAdjustment of
-                                Nothing ->
-                                    ( target, Nothing )
-
-                                Just previousAdjustment ->
-                                    applyAdjustment lookup adjustor previousAdjustment target lookAhead
-
-                ( status, phase, currentTime ) =
-                    getPhase cursor.beginning adjustedTarget now maybeInterruption
-
-                newState =
-                    interpolate
-                        lookup
-                        cursor.previous
-                        adjustedTarget
-                        adjustedLookAhead
-                        phase
-                        currentTime
-                        cursor.state
-            in
-            { state =
-                newState
-            , captured =
-                case capturing of
-                    CaptureNow ->
-                        Nothing
-
-                    CaptureFuture fps ->
-                        if status == Finished then
-                            -- gather all frames
-                            Nothing
-
-                        else
-                            Nothing
-            , events = remaining
-            , previous =
-                -- This is preemptively setting the "previous" target
-                -- however, if there has been an interruption, our previous doesn't change
-                case status of
-                    Interrupted ->
-                        PreviouslyInterrupted currentTime
-
-                    _ ->
-                        Previous adjustedTarget
-            , status = status
-            , beginning = Continuing
-            , previousAdjustment =
-                case maybeAdjustment of
-                    Nothing ->
-                        Nothing
-
-                    Just adjustment ->
-                        Just
-                            { previousEventTime = endTime target
-                            , applied = adjustment
-                            }
-            }
-
-
 zeroDuration : Duration.Duration
 zeroDuration =
     Duration.milliseconds 0
@@ -2062,66 +1403,13 @@ applyAdjustment lookup adjustor { previousEventTime, applied } ((Occurring event
     )
 
 
-{-|
-
-    Params:
-        1. Previous Event
-        2. Current Event
-        3. Now
-        4. Maybe interruption time
-        5. state
-
-When we get an interruption, we want to skip all events.
-
--}
-getPhase : Beginning -> Occurring event -> Time.Absolute -> Maybe Time.Absolute -> ( Status, Phase, Time.Absolute )
-getPhase beginning target now maybeInterruption =
-    case beginning of
-        Beginning ->
-            ( if dwellingAt now target then
-                Finished
-
-              else
-                NotDone
-            , Start
-            , now
-            )
-
-        Continuing ->
-            let
-                interrupted =
-                    case maybeInterruption of
-                        Nothing ->
-                            False
-
-                        Just interruptTime ->
-                            Time.thisBeforeOrEqualThat interruptTime (startTime target)
-                                && Time.thisAfterThat now interruptTime
-            in
-            if interrupted then
-                let
-                    interruptionTime =
-                        Maybe.withDefault now maybeInterruption
-                in
-                ( Interrupted
-                , Transitioning
-                , interruptionTime
-                )
-
-            else if Time.thisAfterThat now (endTime target) then
-                ( NotDone, Transitioning, now )
-
-            else
-                ( Finished, Transitioning, now )
-
-
 
 {- BOOKKEEPING -}
 
 
 current : Timeline event -> event
 current ((Timeline details) as timeline) =
-    foldpSlim
+    foldp
         identity
         { start =
             \_ ->
@@ -2147,61 +1435,53 @@ pass _ _ target _ _ _ =
     getEvent target
 
 
-currentAndPrevious :
-    Timeline event
-    ->
-        { previous : Previous event
-        , previousTarget : Occurring event
-        , target : Occurring event
-        }
-currentAndPrevious timeline =
-    mostRecentlyCaptured <|
-        foldp
-            CaptureNow
-            identity
-            startCurrentAndPrevious
-            Nothing
-            passCurrentAndPrevious
-            timeline
+type Status
+    = Dwelling Time.Duration
+    | Transitioning Float
 
 
-startCurrentAndPrevious :
-    (event -> event)
-    -> Occurring event
-    ->
-        { previous : Previous event
-        , previousTarget : Occurring event
-        , target : Occurring event
-        }
-startCurrentAndPrevious lookup start =
-    { previous = Previous start
-    , previousTarget = start
-    , target = start
-    }
+status : Timeline event -> Status
+status ((Timeline details) as timeline) =
+    foldp
+        identity
+        { start =
+            \_ ->
+                Transitioning 0
+        , dwellFor =
+            \cur duration ->
+                Dwelling duration
+        , dwellPeriod = \_ -> Nothing
+        , adjustor =
+            \_ ->
+                { arrivingEarly = 0
+                , leavingLate = 0
+                }
+        , after =
+            \lookup target future ->
+                Transitioning 1
+        , lerp =
+            \_ previous target upcoming now _ ->
+                -- target
+                -- Transitioning 0
+                let
+                    start =
+                        case previous of
+                            Previous prev ->
+                                endTime prev
 
+                            PreviouslyInterrupted interruptionTime ->
+                                interruptionTime
 
-passCurrentAndPrevious :
-    (event -> event)
-    -> Previous event
-    -> Occurring event
-    -> Maybe (Occurring event)
-    -> Phase
-    -> Time.Absolute
-    ->
-        { previous : Previous event
-        , previousTarget : Occurring event
-        , target : Occurring event
+                    end =
+                        startTime target
+                in
+                if Time.thisAfterOrEqualThat now end then
+                    Transitioning 1
+
+                else
+                    Transitioning (Time.progress start end now)
         }
-    ->
-        { previous : Previous event
-        , previousTarget : Occurring event
-        , target : Occurring event
-        }
-passCurrentAndPrevious _ prev target _ _ _ existing =
-    { previous = prev
-    , previousTarget = existing.target
-    , target = target
-    }
+        timeline
 
 
 {--}
@@ -2211,27 +1491,13 @@ Once we arrive at a new state, this value will be 1 until we start another trans
 
 -}
 progress : Timeline state -> Float
-progress ((Timeline deets) as tl) =
-    let
-        cursor =
-            currentAndPrevious tl
+progress timeline =
+    case status timeline of
+        Dwelling _ ->
+            1
 
-        start =
-            case cursor.previous of
-                Previous prev ->
-                    endTime prev
-
-                PreviouslyInterrupted interruptionTime ->
-                    interruptionTime
-
-        end =
-            startTime cursor.target
-    in
-    if Time.thisAfterOrEqualThat deets.now end then
-        1
-
-    else
-        Time.progress start end deets.now
+        Transitioning t ->
+            t
 
 
 {-| The number of milliseconds that has occurred since we came to rest at the most recent state.
@@ -2240,20 +1506,13 @@ If we're in transition, this is 0.
 
 -}
 dwellingTime : Timeline state -> Float
-dwellingTime ((Timeline deets) as tl) =
-    let
-        cursor =
-            currentAndPrevious tl
-    in
-    if Time.thisAfterOrEqualThat deets.now (endTime cursor.target) then
-        Duration.inMilliseconds
-            (Time.duration (startTime cursor.target) deets.now)
+dwellingTime timeline =
+    case status timeline of
+        Dwelling x ->
+            Duration.inMilliseconds x
 
-    else if Time.thisAfterOrEqualThat deets.now (startTime cursor.target) then
-        Duration.inMilliseconds (getDwell cursor.target)
-
-    else
-        0
+        Transitioning _ ->
+            0
 
 
 
@@ -2267,9 +1526,6 @@ dwellingTime ((Timeline deets) as tl) =
       - Normal -> always on
       - Inline -> on when moving (require anotation of dwelling events)
       - CSS    -> single update when timeline is updated
-
-
-
 
 
 -}

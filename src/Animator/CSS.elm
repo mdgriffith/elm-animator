@@ -56,33 +56,6 @@ type Animated event msg
 
 
 
--- div : List (Html.Attribute msg) -> List ( String, Animated event msg ) -> Html msg
--- div attrs children =
---     let
---         ( htmlChildren, styles ) =
---             List.foldl gatherChildren ( [], "" ) children
---     in
---     Html.Keyed.node "div"
---         attrs
---         (( "animator-stylesheet", stylesheet styles ) :: List.reverse htmlChildren)
--- gatherChildren : ( String, Animated msg ) -> ( List ( String, Html msg ), String ) -> ( List ( String, Html msg ), String )
--- gatherChildren ( key, animatedNode ) ( existingChildren, existingStyles ) =
---     let
---         ( newStyles, newNode ) =
---             render animatedNode
---     in
---     ( ( key, newNode ) :: existingChildren
---     , newStyles ++ existingStyles
---     )
--- render : Animated msg -> ( String, Html msg )
--- render (Animated name animAttrs htmlAttrs children) =
---     let
---         ( class, keyframes ) =
---             List.foldl renderAttrs ( "", "" ) animAttrs
---     in
---     ( keyframes
---     , Html.node name (Attr.class class :: htmlAttrs) children
---     )
 {- Example keyframes ->
 
 
@@ -274,7 +247,7 @@ renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
         Attribute attrName lookup toString ->
             renderAnimation details.now
                 attrName
-                (Timeline.capture 60 lookup Interpolate.linearly2 timeline)
+                (Timeline.capture 60 lookup Interpolate.linearly timeline)
                 toString
                 anim
 

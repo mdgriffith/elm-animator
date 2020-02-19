@@ -100,10 +100,10 @@ queueing =
                             { events =
                                 Timeline.Timetable
                                     [ Timeline.Line (qty 0)
-                                        (occur Starting (qty 0) (Just (qty 1)))
-                                        [ occur One (qty 2000) (Just (qty 1))
-                                        , occur Two (qty 4000) (Just (qty 1))
-                                        , occur Three (qty 6000) (Just (qty 1))
+                                        (occur Starting (qty 0) (qty 1000))
+                                        [ occur One (qty 2000) (qty 3000)
+                                        , occur Two (qty 4000) (qty 5000)
+                                        , occur Three (qty 6000) (qty 7000)
                                         ]
                                     ]
                             , initial = Starting
@@ -141,8 +141,8 @@ queueing =
                         { events =
                             Timeline.Timetable
                                 [ Timeline.Line (qty 0)
-                                    (occur Starting (qty 0) (Just (qty 4)))
-                                    [ occur One (qty 5000) Nothing
+                                    (occur Starting (qty 0) (qty 4000))
+                                    [ occur One (qty 5000) (qty 5000)
                                     ]
                                 ]
                         , initial = Starting
@@ -174,9 +174,9 @@ queueing =
                         { events =
                             Timeline.Timetable
                                 [ Timeline.Line (qty 0)
-                                    (occur Starting (qty 0) (Just (qty 4)))
-                                    [ occur One (qty 5000) (Just (qty 2))
-                                    , occur Two (qty 8000) Nothing
+                                    (occur Starting (qty 0) (qty 4000))
+                                    [ occur One (qty 5000) (qty 7000)
+                                    , occur Two (qty 8000) (qty 8000)
                                     ]
                                 ]
                         , initial = Starting
@@ -238,10 +238,10 @@ interruptions =
                         { events =
                             Timeline.Timetable
                                 [ Timeline.Line (qty 0)
-                                    (occur Starting (qty 0) (Just (qty 1)))
-                                    [ occur One (qty 2000) (Just (qty 1))
-                                    , occur Two (qty 4000) (Just (qty 1))
-                                    , occur Unreachable (qty 6000) (Just (qty 1))
+                                    (occur Starting (qty 0) (qty 1000))
+                                    [ occur One (qty 2000) (qty 3000)
+                                    , occur Two (qty 4000) (qty 5000)
+                                    , occur Unreachable (qty 6000) (qty 7000)
                                     ]
 
                                 -- we scheduled at 3000
@@ -249,10 +249,10 @@ interruptions =
                                 -- so the new line actually starts at 4000.
                                 , Timeline.Line (qty 4000)
                                     -- then take 1 second to transition to Three
-                                    (occur Three (qty 5000) (Just (qty 1)))
+                                    (occur Three (qty 5000) (qty 6000))
                                     -- we then wait a second
                                     -- then take a second to transition to Four
-                                    [ occur Four (qty 7000) Nothing
+                                    [ occur Four (qty 7000) (qty 7000)
                                     ]
                                 ]
                         , initial = Starting
@@ -315,10 +315,10 @@ interruptions =
                         { events =
                             Timeline.Timetable
                                 [ Timeline.Line (qty 0)
-                                    (occur Starting (qty 0) (Just (qty 1)))
-                                    [ occur One (qty 2000) (Just (qty 1))
-                                    , occur Two (qty 4000) (Just (qty 1))
-                                    , occur Unreachable (qty 6000) (Just (qty 1))
+                                    (occur Starting (qty 0) (qty 1000))
+                                    [ occur One (qty 2000) (qty 3000)
+                                    , occur Two (qty 4000) (qty 5000)
+                                    , occur Unreachable (qty 6000) (qty 7000)
                                     ]
 
                                 -- we scheduled at 3000
@@ -326,14 +326,14 @@ interruptions =
                                 -- so the new line actually starts at 4000.
                                 , Timeline.Line (qty 4000)
                                     -- then take 1 second to transition to Three
-                                    (occur Three (qty 5000) (Just (qty 1)))
+                                    (occur Three (qty 5000) (qty 6000))
                                     -- we then wait a second
                                     -- then take a second to transition to Four
-                                    [ occur Four (qty 7000) Nothing
+                                    [ occur Four (qty 7000) (qty 7000)
                                     ]
                                 , Timeline.Line (qty 4500)
-                                    (occur Two (qty 5500) (Just (qty 1)))
-                                    [ occur One (qty 7500) Nothing
+                                    (occur Two (qty 5500) (qty 6500))
+                                    [ occur One (qty 7500) (qty 7500)
                                     ]
                                 ]
                         , initial = Starting
@@ -373,12 +373,12 @@ interruptions =
                         { events =
                             Timeline.Timetable
                                 [ Timeline.Line (qty 0)
-                                    (occur Starting (qty 0) (Just (qty 1)))
-                                    [ occur One (qty 2000) (Just (qty 1))
-                                    , occur Two (qty 4000) (Just (qty 1))
-                                    , occur Three (qty 6000) Nothing
-                                    , occur Four (qty 7000) (Just (qty 1))
-                                    , occur Five (qty 9000) Nothing
+                                    (occur Starting (qty 0) (qty 1000))
+                                    [ occur One (qty 2000) (qty 3000)
+                                    , occur Two (qty 4000) (qty 5000)
+                                    , occur Three (qty 6000) (qty 6000)
+                                    , occur Four (qty 7000) (qty 8000)
+                                    , occur Five (qty 9000) (qty 9000)
                                     ]
                                 ]
                         , initial = Starting
@@ -510,14 +510,14 @@ cleaning =
                     lines =
                         [ Timeline.Line
                             (qty 1578168889621)
-                            (occur False (qty 1578168889621) Nothing)
-                            [ occur True (qty 1578168895231) Nothing
+                            (occur False (qty 1578168889621) (qty 1578168889621))
+                            [ occur True (qty 1578168895231) (qty 1578168895231)
                             ]
                         , Timeline.Line
                             -- same as now
                             (qty 1578168893838)
                             -- 1000ms later
-                            (occur False (qty 1578168895838) Nothing)
+                            (occur False (qty 1578168895838) (qty 1578168895838))
                             []
                         ]
 
@@ -532,14 +532,14 @@ cleaning =
                     lines =
                         [ Timeline.Line
                             (qty 1578168889621)
-                            (occur False (qty 1578168889621) Nothing)
-                            [ occur True (qty 1578168895231) Nothing
+                            (occur False (qty 1578168889621) (qty 1578168889621))
+                            [ occur True (qty 1578168895231) (qty 1578168895231)
                             ]
                         , Timeline.Line
                             -- same as now
                             (qty 1578168893838)
                             -- 1000ms later
-                            (occur False (qty 1578168895838) Nothing)
+                            (occur False (qty 1578168895838) (qty 1578168895838))
                             []
                         ]
 
@@ -570,7 +570,7 @@ cleaning =
                         { events =
                             Timeline.Timetable
                                 [ Timeline.Line (qty 5000)
-                                    (occur Two (qty 5000) Nothing)
+                                    (occur Two (qty 5000) (qty 5000))
                                     []
                                 ]
                         , initial = Starting
@@ -608,7 +608,7 @@ cleaning =
                         { events =
                             Timeline.Timetable
                                 [ Timeline.Line (qty 5000)
-                                    (occur Five (qty 5000) Nothing)
+                                    (occur Five (qty 5000) (qty 5000))
                                     []
                                 ]
                         , initial = Starting
@@ -646,7 +646,7 @@ cleaning =
                         { events =
                             Timeline.Timetable
                                 [ Timeline.Line (qty 5000)
-                                    (occur Five (qty 5000) Nothing)
+                                    (occur Five (qty 5000) (qty 5000))
                                     []
                                 ]
                         , initial = Starting

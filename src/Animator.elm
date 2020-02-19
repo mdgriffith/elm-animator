@@ -295,7 +295,7 @@ type alias Description state =
 {-| -}
 color : Timeline state -> (state -> Color) -> Color
 color timeline lookup =
-    Timeline.foldpSlim
+    Timeline.foldp
         lookup
         Interpolate.coloring
         timeline
@@ -305,9 +305,9 @@ color timeline lookup =
 -}
 linear : Timeline state -> (state -> Float) -> Float
 linear timeline lookup =
-    Timeline.foldpSlim
+    Timeline.foldp
         lookup
-        Interpolate.linearly2
+        Interpolate.linearly
         timeline
 
 
@@ -329,14 +329,14 @@ move timeline lookup =
 xy : Timeline state -> (state -> { x : Movement, y : Movement }) -> { x : Float, y : Float }
 xy timeline lookup =
     { x =
-        Timeline.foldpSlim
+        Timeline.foldp
             (lookup >> .x)
             Interpolate.moving
             timeline
             |> unwrapUnits
             |> .position
     , y =
-        Timeline.foldpSlim
+        Timeline.foldp
             (lookup >> .y)
             Interpolate.moving
             timeline
@@ -349,21 +349,21 @@ xy timeline lookup =
 xyz : Timeline state -> (state -> { x : Movement, y : Movement, z : Movement }) -> { x : Float, y : Float, z : Float }
 xyz timeline lookup =
     { x =
-        Timeline.foldpSlim
+        Timeline.foldp
             (lookup >> .x)
             Interpolate.moving
             timeline
             |> unwrapUnits
             |> .position
     , y =
-        Timeline.foldpSlim
+        Timeline.foldp
             (lookup >> .y)
             Interpolate.moving
             timeline
             |> unwrapUnits
             |> .position
     , z =
-        Timeline.foldpSlim
+        Timeline.foldp
             (lookup >> .z)
             Interpolate.moving
             timeline
@@ -376,7 +376,7 @@ xyz timeline lookup =
 details : Timeline state -> (state -> Movement) -> { position : Float, velocity : Float }
 details timeline lookup =
     unwrapUnits
-        (Timeline.foldpSlim
+        (Timeline.foldp
             lookup
             Interpolate.moving
             timeline
