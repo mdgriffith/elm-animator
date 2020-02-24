@@ -8,7 +8,7 @@ module Internal.Timeline exposing
     , current
     , Adjustment, Line(..), Timetable(..)
     , foldp, capture
-    , Animator(..), Description(..), Frames, Interp, Period(..), Previous(..), atTime, gc, hasChanged, justInitialized, linesAreActive, previousEndTime, previousStartTime, updateNoGC
+    , Animator(..), Description(..), Frame(..), Frames, Interp, Period(..), Previous(..), atTime, gc, hasChanged, justInitialized, linesAreActive, previousEndTime, previousStartTime, updateNoGC
     )
 
 {-|
@@ -1168,14 +1168,18 @@ overLines fn lookup details (Line lineStart lineStartEv lineRemain) futureLines 
 
 
 type alias Frames motion =
-    { frames : List motion
+    { frames : List (Frame motion)
     , duration : Time.Duration
     , dwell :
         Maybe
             { period : Period
-            , frames : List motion
+            , frames : List (Frame motion)
             }
     }
+
+
+type Frame motion
+    = Frame Float motion
 
 
 type alias FramesPerSecond =
@@ -1197,7 +1201,7 @@ capture fps lookup fn (Timeline timelineDetails) =
             in
             case timetable of
                 [] ->
-                    { frames = [ start ]
+                    { frames = [ Frame 1 start ]
                     , duration = zeroDuration
                     , dwell = Nothing
                     }
@@ -1221,10 +1225,12 @@ capture fps lookup fn (Timeline timelineDetails) =
                             1000 / fps
 
                         frames =
-                            getFrames numberOfFrames
-                                { msPerFrame = millisecondsPerFrame
+                            getFrames (startTime lastEvent)
+                                { perFrame =
+                                    Duration.milliseconds millisecondsPerFrame
                                 , offset = 0
                                 , startTime = timelineDetails.now
+                                , endTime = startTime lastEvent
                                 }
                                 (\currentTime ->
                                     overLines
@@ -1275,10 +1281,11 @@ capture fps lookup fn (Timeline timelineDetails) =
                                             endAt
 
                                     dwellFrames =
-                                        getFrames numberOfDwellFrames
-                                            { msPerFrame = millisecondsPerFrame
+                                        getFrames endAt
+                                            { perFrame = Duration.milliseconds millisecondsPerFrame
                                             , offset = dwellOffset
                                             , startTime = dwellStartTime
+                                            , endTime = endAt
                                             }
                                             (\currentTime ->
                                                 fn.dwellFor lastEventEv
@@ -1315,21 +1322,35 @@ getLastEvent head rest =
             getLastEvent top tail
 
 
-getFrames i config fn newFrames =
-    if i <= 0 then
-        newFrames
+getFrames :
+    Time.Absolute
+    ->
+        { perFrame : Time.Duration
+        , offset : Float
+        , startTime : Time.Absolute
+        , endTime : Time.Absolute
+        }
+    -> (Time.Absolute -> motion)
+    -> List (Frame motion)
+    -> List (Frame motion)
+getFrames currentTime config fn newFrames =
+    if Time.thisBeforeOrEqualThat currentTime config.startTime then
+        case newFrames of
+            [] ->
+                [ Frame 0 (fn config.startTime)
+                , Frame 1 (fn config.endTime)
+                ]
+
+            _ ->
+                Frame 0 (fn config.startTime)
+                    :: newFrames
 
     else
         let
-            currentTime =
-                Time.advanceBy
-                    (Duration.milliseconds (config.offset + (toFloat i * config.msPerFrame)))
-                    config.startTime
-
             new =
-                fn currentTime
+                Frame (Time.progress config.startTime config.endTime currentTime) (fn currentTime)
         in
-        getFrames (i - 1) config fn (new :: newFrames)
+        getFrames (Time.rollbackBy config.perFrame currentTime) config fn (new :: newFrames)
 
 
 zeroDuration : Duration.Duration
