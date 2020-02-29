@@ -113,18 +113,26 @@ wrap x =
 wrapUnitAfter : Duration.Duration -> Duration.Duration -> Float
 wrapUnitAfter dur total =
     let
-        duration =
+        periodDuration =
             round (Duration.inMilliseconds dur)
 
         totalDuration =
             round (Duration.inMilliseconds total)
     in
-    if duration == 0 || totalDuration == 0 then
+    if periodDuration == 0 || totalDuration == 0 then
         0
 
     else
-        toFloat (totalDuration |> modBy duration)
-            / toFloat duration
+        let
+            remaining =
+                totalDuration |> modBy periodDuration
+        in
+        if remaining == 0 then
+            1
+
+        else
+            toFloat remaining
+                / toFloat periodDuration
 
 
 type alias Progress =
