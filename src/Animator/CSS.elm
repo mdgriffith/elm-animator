@@ -5,8 +5,9 @@ module Animator.Css exposing
     , fontSize, fontColor, wordSpacing, letterSpacing
     , backgroundColor
     , borderColor, borderRadius
-    , transform, transformWith, rotate, scale, xy, xyz
-    , rotating
+    , transform
+    , rotateTo, rotating
+    , scale, xy, xyz
     )
 
 {-|
@@ -38,9 +39,11 @@ module Animator.Css exposing
 
 # Transform
 
-@docs transform, transformWith, rotate, scale, xy, xyz
+@docs transform
 
-@docs withRotation, withRotationAround, withScale, withScaleXY
+@docs rotateTo, rotating
+
+@docs scale, xy, xyz
 
 -}
 
@@ -61,24 +64,7 @@ type Attribute event
     = ColorAttribute String (event -> Color)
     | Attribute String (event -> Float) (Float -> String)
     | Movement String (event -> Movement) (Float -> String)
-    | TransformAttr TransformOptions (event -> Transform)
-
-
-type alias TransformOptions =
-    { origin : Origin
-    , perspective : Int
-    }
-
-
-type Origin
-    = Center
-
-
-originToString : Origin -> String
-originToString origin =
-    case origin of
-        Center ->
-            "center"
+    | TransformAttr (event -> Transform)
 
 
 
@@ -316,7 +302,7 @@ renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
                 (.position >> Pixels.inPixels >> toString)
                 anim
 
-        TransformAttr options lookupTransform ->
+        TransformAttr lookupTransform ->
             let
                 lookup state =
                     case lookupTransform state of
@@ -397,6 +383,7 @@ expand (Timeline.Frame _ lastFrame) (Timeline.Frame percent rotation) =
 
 
 toTransform rendered x y z rotation scaleX scaleY =
+    -- get ready for a tornado...
     case x of
         (Timeline.Frame percent topX) :: rX ->
             case y of
@@ -603,8 +590,8 @@ animated timeline animatedAttrs attrs children =
             List.foldl (renderAttrs timeline) [] animatedAttrs
                 |> List.reverse
 
-        transformOptions =
-            getTransformOptions animatedAttrs
+        -- transformOptions =
+        --     getTransformOptions animatedAttrs
     in
     Html.Keyed.node "div"
         attrs
@@ -615,20 +602,19 @@ animated timeline animatedAttrs attrs children =
         ]
 
 
-getTransformOptions attrs =
-    case attrs of
-        [] ->
-            [ Attr.style "perspective" "20px"
-            , Attr.style "transform-origin" "center"
-            ]
 
-        (TransformAttr opts _) :: _ ->
-            [ Attr.style "perspective" (String.fromInt opts.perspective ++ "px")
-            , Attr.style "transform-origin" (originToString opts.origin)
-            ]
-
-        _ :: rest ->
-            getTransformOptions rest
+-- getTransformOptions attrs =
+--     case attrs of
+--         [] ->
+--             [ Attr.style "perspective" "20px"
+--             , Attr.style "transform-origin" "center"
+--             ]
+--         (TransformAttr opts _) :: _ ->
+--             [ Attr.style "perspective" (String.fromInt opts.perspective ++ "px")
+--             , Attr.style "transform-origin" (originToString opts.origin)
+--             ]
+--         _ :: rest ->
+--             getTransformOptions rest
 
 
 px : Float -> String
@@ -742,25 +728,6 @@ borderRadius lookup =
 {- TRANSFORMS -}
 
 
-{-| Rotate. An animation where the values are increasing will move clockwise.
-
-The actual number provided is in Elm standard angles (radians).
-
-Alternatively you could use [turns or degrees](https://package.elm-lang.org/packages/elm/core/latest/Basics#degrees) instead.
-
--}
-rotate : Float -> Transform
-rotate angle =
-    Transform
-        { x = at 0
-        , y = at 0
-        , z = at 0
-        , rotate = at angle
-        , scaleX = at 1
-        , scaleY = at 1
-        }
-
-
 {-| -}
 scale : Float -> Transform
 scale movement =
@@ -828,6 +795,25 @@ xyz coords =
 --         }
 
 
+{-| Rotate. An animation where the values are increasing will move clockwise.
+
+The actual number provided is in Elm standard angles (radians).
+
+Alternatively you could use [turns or degrees](https://package.elm-lang.org/packages/elm/core/latest/Basics#degrees) instead.
+
+-}
+rotateTo : Float -> Transform
+rotateTo angle =
+    Transform
+        { x = at 0
+        , y = at 0
+        , z = at 0
+        , rotate = at angle
+        , scaleX = at 1
+        , scaleY = at 1
+        }
+
+
 {-| Provide the duration it should take for one full rotation.
 -}
 rotating : Duration -> Transform -> Transform
@@ -866,21 +852,55 @@ type Transform
         }
 
 
-{-| -}
+{-| **Note** - If you're doing 3d transformations, you should set a CSS `perspective` property either on this element or on a parent. If it's on a parent, then all elements will share a common `perspective` origin.
+
+So, add something like this to the parent element:
+
+    perspective: 500px;
+    perspective-origin: center;
+
+-}
 transform : (state -> Transform) -> Attribute state
 transform =
-    TransformAttr defaultTransformOpts
-
-
-{-| -}
-transformWith : TransformOptions -> (state -> Transform) -> Attribute state
-transformWith =
     TransformAttr
+
+
+{-|
+
+  - **origin** - The point used as the origin of all transformations. Defaults to the center of the object.
+  - **perspective** - A weird CSS property that is roughly "how far away from the user is z=0". At z=0, the object is normal sized.
+    If it's z is closer than the 0 point, the object is larger. If it's farther than z=0, then it's smaller.
+
+-}
+type alias TransformOptions =
+    { origin : Origin
+    , perspective : Int
+    }
 
 
 {-| -}
 defaultTransformOpts : TransformOptions
 defaultTransformOpts =
-    { origin = Center
-    , perspective = 10
+    { origin = Origin 0.5 0.5
+    , perspective = 500
     }
+
+
+{-| -}
+type Origin
+    = Origin Proportion Proportion
+
+
+{-| The origin for the transforms for this element.
+-}
+origin : Proportion -> Proportion -> Origin
+origin =
+    Origin
+
+
+originToString : Origin -> String
+originToString ori =
+    case ori of
+        Origin x y ->
+            (String.fromFloat (x * 100) ++ "% ")
+                ++ (String.fromFloat (x * 100) ++ "%")
