@@ -4,7 +4,7 @@ module Animator exposing
     , Animator, animator, with, toSubscription, update
     , to
     , Duration, millis, seconds, minutes
-    , Step, wait, event, interrupt, queue
+    , interrupt, queue, Step, wait, event
     , color
     , linear, float
     , Movement, move, xy, xyz
@@ -14,8 +14,8 @@ module Animator exposing
     , leaveSmoothly, leaveLate
     , arriveSmoothly, arriveEarly
     , withWobble
-    , wave, wrap, zigzag, interpolate
-    , loop, repeat, once
+    , Oscillator, wave, wrap, zigzag, interpolate
+    , loop, once, repeat
     , pause, shift
     , step
     , Frames, frame, hold, walk, framesWith
@@ -40,7 +40,11 @@ module Animator exposing
 
 @docs Duration, millis, seconds, minutes
 
-@docs Step, wait, event, interrupt, queue
+In some cases you might want to define a series of states to animate through.
+
+In that case, you'll want to define a list of steps and either interrupt what's currently happening with them or queue them up.
+
+@docs interrupt, queue, Step, wait, event
 
 
 # Animating
@@ -69,9 +73,13 @@ module Animator exposing
 
 # Resting at a state
 
-@docs wave, wrap, zigzag, interpolate
+@docs Oscillator, wave, wrap, zigzag, interpolate
 
-@docs loop, repeat, once
+Once we've created an oscillator, we need to specify how long it should take and how many times it should repeat.
+
+@docs loop, once, repeat
+
+Adjust an oscillator by adding pauses or shifting it.
 
 @docs pause, shift
 
@@ -486,13 +494,13 @@ arriveSmoothly s movement =
 
 
 {-| -}
-type Oscillator
-    = Oscillator (List Pause) (Float -> Float)
+type alias Oscillator =
+    Timeline.Oscillator
 
 
 {-| -}
-type Pause
-    = Pause Duration Float
+type alias Pause =
+    Timeline.Pause
 
 
 within : Float -> Float -> Float -> Bool
@@ -507,142 +515,58 @@ within tolerance anchor val =
     val >= low && val <= high
 
 
-pauseToBounds : Pause -> Duration -> Duration -> ( Float, Float )
-pauseToBounds (Pause dur val) activeDuration totalDur =
-    let
-        start =
-            Quantity.multiplyBy val activeDuration
-    in
-    ( Quantity.ratio start totalDur
-    , Quantity.ratio (Quantity.plus start dur) totalDur
-    )
-
-
-pauseValue : Pause -> Float
-pauseValue (Pause _ v) =
-    v
-
-
 {-| -}
 once : Duration -> Oscillator -> Movement
 once activeDuration osc =
-    let
-        ( fn, totalDuration ) =
-            prepareOscillator activeDuration osc
-    in
-    Interpolate.Oscillate Interpolate.defaultDeparture
-        Interpolate.defaultArrival
-        (Timeline.Repeat 1 totalDuration)
-        fn
+    case osc of
+        Timeline.Resting i ->
+            at i
+
+        Timeline.Oscillator pauses fn ->
+            let
+                ( preparedFn, totalDuration ) =
+                    Timeline.prepareOscillator activeDuration pauses fn
+            in
+            Interpolate.Oscillate Interpolate.defaultDeparture
+                Interpolate.defaultArrival
+                (Timeline.Repeat 1 totalDuration)
+                preparedFn
 
 
 {-| -}
 loop : Duration -> Oscillator -> Movement
 loop activeDuration osc =
-    let
-        ( fn, totalDuration ) =
-            prepareOscillator activeDuration osc
-    in
-    Interpolate.Oscillate Interpolate.defaultDeparture
-        Interpolate.defaultArrival
-        (Timeline.Loop totalDuration)
-        fn
+    case osc of
+        Timeline.Resting i ->
+            at i
+
+        Timeline.Oscillator pauses fn ->
+            let
+                ( preparedFn, totalDuration ) =
+                    Timeline.prepareOscillator activeDuration pauses fn
+            in
+            Interpolate.Oscillate Interpolate.defaultDeparture
+                Interpolate.defaultArrival
+                (Timeline.Loop totalDuration)
+                preparedFn
 
 
 {-| -}
 repeat : Int -> Duration -> Oscillator -> Movement
 repeat n activeDuration osc =
-    let
-        ( fn, totalDuration ) =
-            prepareOscillator activeDuration osc
-    in
-    Interpolate.Oscillate Interpolate.defaultDeparture
-        Interpolate.defaultArrival
-        (Timeline.Repeat n totalDuration)
-        fn
+    case osc of
+        Timeline.Resting i ->
+            at i
 
-
-prepareOscillator : Duration -> Oscillator -> ( Float -> Float, Duration )
-prepareOscillator activeDuration (Oscillator pauses osc) =
-    let
-        -- total duration of the oscillation (active + pauses)
-        totalDuration =
-            List.foldl
-                (\(Pause p _) d ->
-                    Quantity.plus p d
-                )
-                activeDuration
-                pauses
-
-        {- u -> 0-1 of the whole oscillation, including pauses
-           a -> 0-1 of the `active` oscillation, which does not include pausese
-           ^ this is what we use for feeding the osc function.
-
-           ps -> a list of pauses
-
-        -}
-        withPause u a ps =
-            case ps of
-                [] ->
-                    osc a
-
-                p :: [] ->
-                    case pauseToBounds p activeDuration totalDuration of
-                        ( start, end ) ->
-                            if u >= start && u <= end then
-                                -- this pause is currently happening
-                                pauseValue p
-
-                            else if u > end then
-                                -- this pause already happend
-                                -- "shrink" the active duration by the pause's duration
-                                let
-                                    pauseDuration =
-                                        end - start
-                                in
-                                osc (a - pauseDuration)
-
-                            else
-                                -- this pause hasn't happened yet
-                                osc a
-
-                p :: lookahead :: remain ->
-                    case pauseToBounds p activeDuration totalDuration of
-                        ( start, end ) ->
-                            if u >= start && u <= end then
-                                -- this pause is currently happening
-                                pauseValue p
-
-                            else if u > end then
-                                -- this pause already happend
-                                -- "shrink" the active duration by the pause's duration
-                                -- and possibly account for the gap between pauses.
-                                let
-                                    pauseDuration =
-                                        end - start
-
-                                    gap =
-                                        -- this is the gap between pauses
-                                        -- or "active" time
-                                        --
-                                        case pauseToBounds lookahead activeDuration totalDuration of
-                                            ( nextPauseStart, nextPauseEnd ) ->
-                                                if u >= nextPauseStart then
-                                                    nextPauseStart - end
-
-                                                else
-                                                    0
-                                in
-                                withPause u ((a + gap) - pauseDuration) (lookahead :: remain)
-
-                            else
-                                -- this pause hasn't happened yet
-                                osc a
-
-        fn u =
-            withPause u u pauses
-    in
-    ( fn, totalDuration )
+        Timeline.Oscillator pauses fn ->
+            let
+                ( preparedFn, totalDuration ) =
+                    Timeline.prepareOscillator activeDuration pauses fn
+            in
+            Interpolate.Oscillate Interpolate.defaultDeparture
+                Interpolate.defaultArrival
+                (Timeline.Repeat n totalDuration)
+                preparedFn
 
 
 {-| Shift an oscillator over by a certain amount.
@@ -651,10 +575,15 @@ It's expecting a number between 0 and 1.
 
 -}
 shift : Proportion -> Oscillator -> Oscillator
-shift x (Oscillator pauses osc) =
-    Oscillator
-        pauses
-        (\u -> osc (wrapToUnit (u + x)))
+shift x osc =
+    case osc of
+        Timeline.Oscillator pauses fn ->
+            Timeline.Oscillator
+                pauses
+                (\u -> fn (wrapToUnit (u + x)))
+
+        Timeline.Resting _ ->
+            osc
 
 
 wrapToUnit : Float -> Float
@@ -662,16 +591,21 @@ wrapToUnit x =
     x - toFloat (floor x)
 
 
-{-| When the oscillator is at a certain point, pause.
+{-| Pause the the oscillator is at a certain point.
 
 This pause time will be added to the time you specify using `loop`, so that you can adjust the pause without disturbing the original duration of the oscillator.
 
 -}
 pause : Duration -> Proportion -> Oscillator -> Oscillator
-pause forDuration val (Oscillator pauses osc) =
-    Oscillator
-        (Pause forDuration val :: pauses)
-        osc
+pause forDuration val osc =
+    case osc of
+        Timeline.Oscillator pauses fn ->
+            Timeline.Oscillator
+                (Timeline.Pause forDuration val :: pauses)
+                fn
+
+        Timeline.Resting _ ->
+            osc
 
 
 {-| Start at one number and move linearly to another, then wrap back to the first.
@@ -682,7 +616,7 @@ wrap start end =
         total =
             end - start
     in
-    Oscillator []
+    Timeline.Oscillator []
         (\u ->
             start + (total * u)
         )
@@ -702,7 +636,7 @@ wave start end =
         total =
             top - bottom
     in
-    Oscillator []
+    Timeline.Oscillator []
         (\u ->
             let
                 normalized =
@@ -720,7 +654,7 @@ zigzag start end =
         total =
             end - start
     in
-    Oscillator []
+    Timeline.Oscillator []
         (\u ->
             start + total * (1 - abs (2 * u - 1))
         )
@@ -729,7 +663,7 @@ zigzag start end =
 {-| -}
 interpolate : (Proportion -> Float) -> Oscillator
 interpolate interp =
-    Oscillator [] interp
+    Timeline.Oscillator [] interp
 
 
 
