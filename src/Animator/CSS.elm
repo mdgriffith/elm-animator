@@ -1,20 +1,24 @@
 module Animator.Css exposing
-    ( animated
-    , with
+    ( with
+    , animated
     , Attribute, opacity, height, width
     , fontSize, fontColor, wordSpacing, letterSpacing
     , backgroundColor
     , borderColor, borderRadius
     , transform
+    , transformWith, TransformOptions
     , rotateTo, rotating
     , scale, xy, xyz
+    , resting
+    , in2d, in3d
+    , once, repeat, loop
     )
 
 {-|
 
-@docs animated
-
 @docs with
+
+@docs animated
 
 
 # Properties
@@ -41,9 +45,31 @@ module Animator.Css exposing
 
 @docs transform
 
+@docs transformWith, TransformOptions
+
 @docs rotateTo, rotating
 
 @docs scale, xy, xyz
+
+
+# Advanced
+
+**Note** - One of the difficulties in making an animation library for `CSS` is that operations such as `translate` and `rotate` need to be rendered as one proeprty called `transform`.
+
+While normally this isn't that big of a deal, one consequence for generating`CSS`keyframes is that all resting states for all transformations need to share the same `period`.
+
+Because of that, `in2d` and `in3d` are constructed a little differently instead of just using `Movement` like everything else.
+
+@docs resting
+
+@docs in2d, in3d
+
+**Note** Again, because of the CSS awkawrdness mentioned above, we have to have `once` and `repeat` defined separetely from `Animator.once` for the special case of transforms.
+
+@docs once, repeat, loop
+
+
+# Sprites
 
 -}
 
@@ -64,7 +90,17 @@ type Attribute event
     = ColorAttribute String (event -> Color)
     | Attribute String (event -> Float) (Float -> String)
     | Movement String (event -> Movement) (Float -> String)
-    | TransformAttr (event -> Transform)
+    | TransformAttr TransformOptions (event -> Transform)
+
+
+{-| -}
+type alias TransformOptions =
+    { rotationAxis :
+        { x : Float
+        , y : Float
+        , z : Float
+        }
+    }
 
 
 
@@ -99,21 +135,6 @@ with get set (Timeline.Animator isRunning updateModel) =
         )
 
 
-
-{- Example keyframes ->
-
-
-   @keyframes identifier {
-     0% { top: 0; }
-     50% { top: 30px; left: 20px; }
-     50% { top: 10px; }
-     100% { top: 0; }
-   }
-
-
--}
-
-
 type alias Anim =
     { name : String
     , duration : Float
@@ -125,8 +146,8 @@ type alias Anim =
 
 
 type Repeat
-    = Loop
-    | Repeat Int
+    = LoopAnim
+    | RepeatAnim Int
 
 
 type TimingFn
@@ -268,12 +289,12 @@ renderIterations str anim =
 
 
 repeatToString : Repeat -> String
-repeatToString repeat =
-    case repeat of
-        Loop ->
+repeatToString rep =
+    case rep of
+        LoopAnim ->
             "infinite"
 
-        Repeat n ->
+        RepeatAnim n ->
             String.fromInt n
 
 
@@ -302,7 +323,7 @@ renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
                 (.position >> Pixels.inPixels >> toString)
                 anim
 
-        TransformAttr lookupTransform ->
+        TransformAttr options lookupTransform ->
             let
                 lookup state =
                     case lookupTransform state of
@@ -325,16 +346,21 @@ renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
                     Timeline.capture 60 (lookup >> .scaleX) Interpolate.moving timeline
 
                 scaleY =
-                    Timeline.capture 60 (lookup >> .scaleX) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .scaleY) Interpolate.moving timeline
+
+                scaleZ =
+                    Timeline.capture 60 (lookup >> .scaleZ) Interpolate.moving timeline
 
                 combined =
-                    toTransform []
+                    toTransform options
+                        []
                         x.frames
                         y.frames
                         z.frames
                         rotation.frames
                         scaleX.frames
                         scaleY.frames
+                        scaleZ.frames
             in
             renderAnimation details.now
                 "transform"
@@ -361,6 +387,10 @@ mapDwellFrames combinedFrames dwell =
                         , rotation = { position = Pixels.pixels 0, velocity = Pixels.pixelsPerSecond 0 }
                         , scaleX = { position = Pixels.pixels 1, velocity = Pixels.pixelsPerSecond 0 }
                         , scaleY = { position = Pixels.pixels 1, velocity = Pixels.pixelsPerSecond 0 }
+                        , scaleZ = { position = Pixels.pixels 1, velocity = Pixels.pixelsPerSecond 0 }
+                        , aroundX = { position = Pixels.pixels 0, velocity = Pixels.pixelsPerSecond 0 }
+                        , aroundY = { position = Pixels.pixels 0, velocity = Pixels.pixelsPerSecond 0 }
+                        , aroundZ = { position = Pixels.pixels 1, velocity = Pixels.pixelsPerSecond 0 }
                         }
 
                 last :: _ ->
@@ -379,58 +409,79 @@ expand (Timeline.Frame _ lastFrame) (Timeline.Frame percent rotation) =
         , rotation = rotation
         , scaleX = lastFrame.scaleX
         , scaleY = lastFrame.scaleY
+        , scaleZ = lastFrame.scaleZ
+        , aroundX = lastFrame.aroundX
+        , aroundY = lastFrame.aroundY
+        , aroundZ = lastFrame.aroundZ
         }
 
 
-toTransform rendered x y z rotation scaleX scaleY =
+toTransform options rendered x y z rotation scaleX scaleY scaleZ =
     -- get ready for a tornado...
     case x of
+        [] ->
+            rendered
+
         (Timeline.Frame percent topX) :: rX ->
             case y of
-                (Timeline.Frame _ topY) :: rY ->
-                    case z of
-                        (Timeline.Frame _ topZ) :: rZ ->
-                            case rotation of
-                                (Timeline.Frame _ topR) :: rR ->
-                                    case scaleX of
-                                        (Timeline.Frame _ topSx) :: rsx ->
-                                            case scaleY of
-                                                (Timeline.Frame _ topSy) :: rsy ->
-                                                    toTransform
-                                                        (Timeline.Frame percent
-                                                            { x = topX
-                                                            , y = topY
-                                                            , z = topZ
-                                                            , rotation = topR
-                                                            , scaleX = topSx
-                                                            , scaleY = topSy
-                                                            }
-                                                            :: rendered
-                                                        )
-                                                        rX
-                                                        rY
-                                                        rZ
-                                                        rR
-                                                        rsx
-                                                        rsy
-
-                                                [] ->
-                                                    rendered
-
-                                        [] ->
-                                            rendered
-
-                                [] ->
-                                    rendered
-
-                        [] ->
-                            rendered
-
                 [] ->
                     rendered
 
-        [] ->
-            rendered
+                (Timeline.Frame _ topY) :: rY ->
+                    case z of
+                        [] ->
+                            rendered
+
+                        (Timeline.Frame _ topZ) :: rZ ->
+                            case rotation of
+                                [] ->
+                                    rendered
+
+                                (Timeline.Frame _ topR) :: rR ->
+                                    case scaleX of
+                                        [] ->
+                                            rendered
+
+                                        (Timeline.Frame _ topSx) :: rsx ->
+                                            case scaleY of
+                                                [] ->
+                                                    rendered
+
+                                                (Timeline.Frame _ topSy) :: rsy ->
+                                                    case scaleZ of
+                                                        [] ->
+                                                            rendered
+
+                                                        (Timeline.Frame _ topSz) :: rsz ->
+                                                            toTransform options
+                                                                (Timeline.Frame percent
+                                                                    { x = topX
+                                                                    , y = topY
+                                                                    , z = topZ
+                                                                    , rotation = topR
+                                                                    , scaleX = topSx
+                                                                    , scaleY = topSy
+                                                                    , scaleZ = topSz
+                                                                    , aroundX =
+                                                                        toState options.rotationAxis.x
+                                                                    , aroundY = toState options.rotationAxis.y
+                                                                    , aroundZ = toState options.rotationAxis.z
+                                                                    }
+                                                                    :: rendered
+                                                                )
+                                                                rX
+                                                                rY
+                                                                rZ
+                                                                rR
+                                                                rsx
+                                                                rsy
+                                                                rsz
+
+
+toState p =
+    { position = Pixels.pixels p
+    , velocity = Pixels.pixelsPerSecond 0
+    }
 
 
 transformToString details =
@@ -442,8 +493,24 @@ transformToString details =
         ++ String.fromFloat (Pixels.inPixels details.z.position)
         ++ "px)"
     )
-        ++ (" rotate(" ++ String.fromFloat (Pixels.inPixels details.rotation.position) ++ "rad)")
-        ++ (" scale3d(" ++ String.fromFloat (Pixels.inPixels details.scaleX.position) ++ ", " ++ String.fromFloat (Pixels.inPixels details.scaleX.position) ++ ", 1)")
+        ++ (" rotate3d("
+                ++ String.fromFloat (Pixels.inPixels details.aroundX.position)
+                ++ ", "
+                ++ String.fromFloat (Pixels.inPixels details.aroundY.position)
+                ++ ", "
+                ++ String.fromFloat (Pixels.inPixels details.aroundZ.position)
+                ++ ", "
+                ++ String.fromFloat (Pixels.inPixels details.rotation.position)
+                ++ "rad)"
+           )
+        ++ (" scale3d("
+                ++ String.fromFloat (Pixels.inPixels details.scaleX.position)
+                ++ ", "
+                ++ String.fromFloat (Pixels.inPixels details.scaleY.position)
+                ++ ", "
+                ++ String.fromFloat (Pixels.inPixels details.scaleZ.position)
+                ++ ")"
+           )
 
 
 renderAnimation : Time.Absolute -> String -> Timeline.Frames value -> (value -> String) -> List Anim -> List Anim
@@ -470,7 +537,7 @@ renderAnimation now attrName frames renderer anims =
             { name = name
             , duration = duration
             , delay = 0
-            , repeat = Repeat 1
+            , repeat = RepeatAnim 1
             , timingFn = Linear
             , keyframes = newKeyFrames
             }
@@ -502,10 +569,10 @@ renderAnimation now attrName frames renderer anims =
                     , repeat =
                         case details.period of
                             Timeline.Repeat n _ ->
-                                Repeat n
+                                RepeatAnim n
 
                             Timeline.Loop _ ->
-                                Loop
+                                LoopAnim
                     , timingFn = Linear
                     , keyframes = "@keyframes " ++ name ++ "-dwell" ++ " {\n" ++ dwellFrames ++ "\n}"
                     }
@@ -593,26 +660,32 @@ animated timeline animatedAttrs attrs children =
         -- transformOptions =
         --     getTransformOptions animatedAttrs
     in
-    Html.Keyed.node "div"
-        attrs
-        [ ( "animator-stylesheet", stylesheet (renderAnimations animations) )
-        , ( "animated-node"
-          , Html.div (Attr.class (renderClassName "" animations) :: attrs) children
-          )
-        ]
+    -- Html.Keyed.node "div"
+    --     []
+    --     [ ( "animator-stylesheet", stylesheet (renderAnimations animations) )
+    --     , ( "animated-node"
+    --       , Html.div (Attr.class (renderClassName "" animations) :: attrs) children
+    --       )
+    --     ]
+    Html.div
+        (Attr.class (renderClassName "" animations) :: attrs)
+        (stylesheet (renderAnimations animations)
+            :: children
+        )
 
 
 
 -- getTransformOptions attrs =
 --     case attrs of
 --         [] ->
---             [ Attr.style "perspective" "20px"
---             , Attr.style "transform-origin" "center"
+--             [-- Attr.style "perspective" "20px"
+--            -- , Attr.style "transform-origin" "center"
 --             ]
 --         (TransformAttr opts _) :: _ ->
---             [ Attr.style "perspective" (String.fromInt opts.perspective ++ "px")
---             , Attr.style "transform-origin" (originToString opts.origin)
---             ]
+--             -- [ Attr.style "perspective" (String.fromInt opts.perspective ++ "px")
+--             -- , Attr.style "transform-origin" (originToString opts.origin)
+--             -- ]
+--             [
 --         _ :: rest ->
 --             getTransformOptions rest
 
@@ -729,15 +802,83 @@ borderRadius lookup =
 
 
 {-| -}
+type Transform
+    = Transform
+        { x : Movement
+        , y : Movement
+        , z : Movement
+        , rotate : Movement
+        , facing :
+            { x : Movement
+            , y : Movement
+            , z : Movement
+            }
+        , scaleX : Movement
+        , scaleY : Movement
+        , scaleZ : Movement
+        }
+
+
+{-| **Note** - If you're doing 3d transformations, you should set a CSS `perspective` property either on this element or on a parent. If it's on a parent, then all elements will share a common `perspective` origin.
+
+So, add something like this to the parent element:
+
+    perspective: 500px;
+    perspective-origin: center;
+
+-}
+transform : (state -> Transform) -> Attribute state
+transform =
+    TransformAttr
+        { rotationAxis =
+            { x = 0
+            , y = 0
+            , z = 1
+            }
+        }
+
+
+{-| -}
+transformWith : TransformOptions -> (state -> Transform) -> Attribute state
+transformWith =
+    TransformAttr
+
+
+{-| -}
 scale : Float -> Transform
 scale movement =
     Transform
         { x = at 0
         , y = at 0
         , z = at 0
+        , facing =
+            { x = at 0
+            , y = at 0
+            , z = at 0
+            }
         , rotate = at 0
         , scaleX = at movement
         , scaleY = at movement
+        , scaleZ = at 1
+        }
+
+
+{-| -}
+scaleXY : Float -> Float -> Transform
+scaleXY x y =
+    Transform
+        { x = at 0
+        , y = at 0
+        , z = at 0
+        , facing =
+            { x = at 0
+            , y = at 0
+            , z = at 0
+            }
+        , rotate = at 0
+        , scaleX = at x
+        , scaleY = at y
+        , scaleZ = at 1
         }
 
 
@@ -752,9 +893,15 @@ xy coords =
         { x = at coords.x
         , y = at coords.y
         , z = at 0
+        , facing =
+            { x = at 0
+            , y = at 0
+            , z = at 1
+            }
         , rotate = at 0
         , scaleX = at 1
         , scaleY = at 1
+        , scaleZ = at 1
         }
 
 
@@ -771,33 +918,20 @@ xyz coords =
         , y = at coords.y
         , z = at coords.z
         , rotate = at 0
+        , facing =
+            { x = at 0
+            , y = at 0
+            , z = at 1
+            }
         , scaleX = at 1
         , scaleY = at 1
+        , scaleZ = at 1
         }
 
 
+{-| Rotate to a specific angle, where increasing numbers move clockwise.
 
--- {-| -}
--- withScale : Float -> Transform -> Transform
--- withScale movement (Transform trans) =
---     Transform
---         { trans
---             | scaleX = at movement
---             , scaleY = at movement
---         }
--- {-| -}
--- withScaleXY : Float -> Float -> Transform -> Transform
--- withScaleXY x y (Transform trans) =
---     Transform
---         { trans
---             | scaleX = at x
---             , scaleY = at y
---         }
-
-
-{-| Rotate. An animation where the values are increasing will move clockwise.
-
-The actual number provided is in Elm standard angles (radians).
+The actual number provided should be in Elm standard angles (radians).
 
 Alternatively you could use [turns or degrees](https://package.elm-lang.org/packages/elm/core/latest/Basics#degrees) instead.
 
@@ -809,98 +943,206 @@ rotateTo angle =
         , y = at 0
         , z = at 0
         , rotate = at angle
+        , facing =
+            { x = at 0
+            , y = at 0
+            , z = at 1
+            }
         , scaleX = at 1
         , scaleY = at 1
+        , scaleZ = at 1
         }
 
 
 {-| Provide the duration it should take for one full rotation.
 -}
-rotating : Duration -> Transform -> Transform
-rotating dur (Transform trans) =
+rotating : Duration -> Transform
+rotating dur =
+    Transform
+        { x = at 0
+        , y = at 0
+        , z = at 0
+        , rotate = Animator.loop dur (wrap 0 (2 * pi))
+        , facing =
+            { x = at 0
+            , y = at 0
+            , z = at 1
+            }
+        , scaleX = at 1
+        , scaleY = at 1
+        , scaleZ = at 1
+        }
+
+
+{-| -}
+facing :
+    { x : Float
+    , y : Float
+    , z : Float
+    }
+    -> Transform
+    -> Transform
+facing coords (Transform trans) =
     Transform
         { trans
-            | rotate =
-                loop dur (wrap 0 (2 * pi))
+            | facing =
+                { x = at coords.x
+                , y = at coords.y
+                , z = at coords.z
+                }
         }
+
+
+{-| -}
+type Period
+    = Loop Duration
+    | Repeat Int Duration
+
+
+{-| -}
+once : Duration -> Period
+once =
+    Repeat 1
+
+
+{-| -}
+loop : Duration -> Period
+loop =
+    Loop
+
+
+{-| -}
+repeat : Int -> Duration -> Period
+repeat =
+    Repeat
+
+
+{-| -}
+resting : Float -> Oscillator
+resting fl =
+    Timeline.Resting fl
+
+
+{-| -}
+in2d :
+    Period
+    ->
+        { x : Oscillator
+        , y : Oscillator
+        , rotate : Oscillator
+        , scaleX : Oscillator
+        , scaleY : Oscillator
+        }
+    -> Transform
+in2d period config =
+    Transform
+        { x = renderOsc period config.x
+        , y = renderOsc period config.y
+        , z = at 0
+        , rotate = renderOsc period config.rotate
+        , facing =
+            { x = at 0
+            , y = at 0
+            , z = at 1
+            }
+        , scaleX = renderOsc period config.scaleX
+        , scaleY = renderOsc period config.scaleY
+        , scaleZ = at 1
+        }
+
+
+{-| -}
+in3d :
+    Period
+    ->
+        { x : Oscillator
+        , y : Oscillator
+        , z : Oscillator
+        , rotate : Oscillator
+        , scaleX : Oscillator
+        , scaleY : Oscillator
+        , scaleZ : Oscillator
+        }
+    -> Transform
+in3d period config =
+    Transform
+        { x = renderOsc period config.x
+        , y = renderOsc period config.y
+        , z = renderOsc period config.z
+        , rotate = renderOsc period config.rotate
+        , facing =
+            { x = at 0
+            , y = at 0
+            , z = at 1
+            }
+        , scaleX = renderOsc period config.scaleX
+        , scaleY = renderOsc period config.scaleY
+        , scaleZ = renderOsc period config.scaleZ
+        }
+
+
+renderOsc per oscillator =
+    case oscillator of
+        Timeline.Resting f ->
+            at f
+
+        Timeline.Oscillator pauses fn ->
+            let
+                activeDuration =
+                    case per of
+                        Repeat _ dur ->
+                            dur
+
+                        Loop dur ->
+                            dur
+
+                ( preparedFn, totalDuration ) =
+                    Timeline.prepareOscillator activeDuration pauses fn
+            in
+            Interpolate.Oscillate Interpolate.defaultDeparture
+                Interpolate.defaultArrival
+                (case per of
+                    Repeat i _ ->
+                        Timeline.Repeat 1 totalDuration
+
+                    Loop _ ->
+                        Timeline.Loop totalDuration
+                )
+                preparedFn
+
+
+type Box
+    = Box BoxDetails
+
+
+type alias BoxDetails =
+    { source : String
+    , x : Int
+    , y : Int
+    , width : Int
+    , height : Int
+    , adjustX : Int
+    , adjustY : Int
+    , flipX : Bool
+    , flipY : Bool
+    }
 
 
 
 -- {-| -}
--- withRotationAround :
---     { x : Float
---     , y : Float
---     , z : Float
---     , angle : Float
---     }
---     -> Transform
---     -> Transform
--- withRotationAround coords (Transform trans) =
---     Transform
---         trans
-
-
-{-| -}
-type Transform
-    = Transform
-        { x : Movement
-        , y : Movement
-        , z : Movement
-        , rotate : Movement
-        , scaleX : Movement
-        , scaleY : Movement
-        }
-
-
-{-| **Note** - If you're doing 3d transformations, you should set a CSS `perspective` property either on this element or on a parent. If it's on a parent, then all elements will share a common `perspective` origin.
-
-So, add something like this to the parent element:
-
-    perspective: 500px;
-    perspective-origin: center;
-
--}
-transform : (state -> Transform) -> Attribute state
-transform =
-    TransformAttr
-
-
-{-|
-
-  - **origin** - The point used as the origin of all transformations. Defaults to the center of the object.
-  - **perspective** - A weird CSS property that is roughly "how far away from the user is z=0". At z=0, the object is normal sized.
-    If it's z is closer than the 0 point, the object is larger. If it's farther than z=0, then it's smaller.
-
--}
-type alias TransformOptions =
-    { origin : Origin
-    , perspective : Int
-    }
-
-
-{-| -}
-defaultTransformOpts : TransformOptions
-defaultTransformOpts =
-    { origin = Origin 0.5 0.5
-    , perspective = 500
-    }
-
-
-{-| -}
-type Origin
-    = Origin Proportion Proportion
-
-
-{-| The origin for the transforms for this element.
--}
-origin : Proportion -> Proportion -> Origin
-origin =
-    Origin
-
-
-originToString : Origin -> String
-originToString ori =
-    case ori of
-        Origin x y ->
-            (String.fromFloat (x * 100) ++ "% ")
-                ++ (String.fromFloat (x * 100) ++ "%")
+-- image :
+--     Timeline event
+--     -> (event -> Box)
+--     -> List (Html.Attribute msg)
+--     -> Html msg
+-- image timeline toBox attrs =
+--     -- let
+--     -- Timeline.capture 60 lookup Interpolate.coloring timeline
+--     -- animations =
+--     --     List.foldl (renderAttrs timeline) [] animatedAttrs
+--     --         |> List.reverse
+--     -- in
+--     Html.Keyed.node "div"
+--         attrs
+--         [ ( "animator-stylesheet", stylesheet (renderAnimations animations) )
+--         ]
