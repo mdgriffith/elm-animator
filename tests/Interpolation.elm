@@ -114,7 +114,33 @@ mapTime fn time =
 timeline : Test
 timeline =
     describe "Timeline"
-        [ fuzz pointsOnTimeline "All points report the correct velocity" <|
+        [ test "Iterating through a timeline" <|
+            \_ ->
+                let
+                    newTimeline =
+                        -- 100
+                        Animator.init Hufflepuff
+                            |> Animator.queue
+                                -- 300
+                                [ Animator.event (Animator.seconds 1) Griffyndor
+                                ]
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.interrupt
+                                -- 1000
+                                [ Animator.event (Animator.seconds 1) Ravenclaw
+                                ]
+                            |> Timeline.update (Time.millisToPosix 1005)
+
+                    position =
+                        Animator.linear
+                            newTimeline
+                            toPos
+                in
+                Expect.within
+                    (Absolute 0.001)
+                    position
+                    300
+        , fuzz pointsOnTimeline "All points report the correct velocity" <|
             \time ->
                 let
                     found =

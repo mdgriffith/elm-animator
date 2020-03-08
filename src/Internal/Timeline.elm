@@ -8,7 +8,7 @@ module Internal.Timeline exposing
     , current
     , Adjustment, Line(..), Timetable(..)
     , foldp, capture
-    , Animator(..), Description(..), Frame(..), Frames, Interp, Oscillator(..), Pause(..), Period(..), Previous(..), atTime, gc, hasChanged, justInitialized, linesAreActive, prepareOscillator, previousEndTime, previousStartTime, updateNoGC
+    , Animator(..), Description(..), Frame(..), Frames, Interp, LookAhead, Oscillator(..), Pause(..), Period(..), Previous(..), atTime, gc, hasChanged, justInitialized, linesAreActive, prepareOscillator, previousEndTime, previousStartTime, updateNoGC
     )
 
 {-|
@@ -90,7 +90,10 @@ type Timetable event
 
 
 {-| -}
-type Line event
+type
+    Line event
+    --   maybe previous event, starting time, starting event, subsequent events
+    -- The maybe previous event is only used to calculate time adjustments for arriveEarly and leaveLate
     = Line Time.Absolute (Occurring event) (List (Occurring event))
 
 
@@ -110,7 +113,7 @@ type alias Interp state anchor motion =
     , dwellFor : DwellFor anchor motion
     , dwellPeriod : DwellPeriod anchor
     , after : After state anchor motion
-    , lerp : Lerp state anchor motion
+    , lerp : Lerp anchor motion
     }
 
 
@@ -122,8 +125,27 @@ type alias After event anchor state =
     (event -> anchor) -> Occurring event -> List (Occurring event) -> state
 
 
-type alias Lerp event anchor state =
-    (event -> anchor) -> Previous event -> Occurring event -> List (Occurring event) -> Time.Absolute -> state -> state
+type alias Milliseconds =
+    Float
+
+
+type alias LookAhead movement =
+    { anchor : movement
+    , time : Milliseconds
+    , resting : Bool
+    }
+
+
+type alias Lerp anchor motion =
+    -- (event -> anchor) -> Previous event -> Occurring event -> List (Occurring event) -> Time.Absolute -> state -> state
+    Milliseconds
+    -> Maybe anchor
+    -> anchor
+    -> Milliseconds
+    -> Milliseconds
+    -> Maybe (LookAhead anchor)
+    -> motion
+    -> motion
 
 
 type alias DwellPeriod anchor =
@@ -201,6 +223,72 @@ extendEventDwell extendBy ((Event at ev maybeDwell) as thisEvent) =
 hasDwell : Occurring event -> Bool
 hasDwell (Occurring _ (Quantity.Quantity start) (Quantity.Quantity end)) =
     (start - end) /= 0
+
+
+{-| Start time is potentially earlier based on the previous event and `arriveEarly`.
+
+If there is no previous event, this doesnt need to be called.
+
+No need to create and pass in a Maybe.
+
+-}
+startTimeAdj : (event -> anchor) -> TimeAdjustor anchor -> Occurring event -> Occurring event -> Time.Absolute
+startTimeAdj lookup getAdjustment (Occurring prev _ prevEnd) (Occurring cur curStartTime _) =
+    let
+        adjustment =
+            getAdjustment (lookup cur)
+
+        prevAdjustment =
+            getAdjustment (lookup prev)
+
+        totalDuration =
+            Time.duration prevEnd curStartTime
+
+        -- if portions sum to more than 1, then that sum represents the full duration
+        totalPortions =
+            max
+                (prevAdjustment.leavingLate + adjustment.arrivingEarly)
+                1
+
+        earlyBy =
+            Quantity.multiplyBy
+                (adjustment.arrivingEarly / totalPortions)
+                totalDuration
+    in
+    Time.rollbackBy earlyBy curStartTime
+
+
+{-| End time is potentially later based on the next event and `leaveLate`.
+
+If there is no next event, this doesnt need to be called.
+
+No need to create and pass in a Maybe.
+
+-}
+endTimeAdj : (event -> anchor) -> TimeAdjustor anchor -> Occurring event -> Occurring event -> Time.Absolute
+endTimeAdj lookup getAdjustment (Occurring cur _ curEnd) (Occurring next nextStartTime _) =
+    let
+        adjustment =
+            getAdjustment (lookup cur)
+
+        nextAdjustment =
+            getAdjustment (lookup next)
+
+        totalDuration =
+            Time.duration curEnd nextStartTime
+
+        -- if portions sum to more than 1, then that sum represents the full duration
+        totalPortions =
+            max
+                (adjustment.leavingLate + nextAdjustment.arrivingEarly)
+                1
+
+        lateBy =
+            Quantity.multiplyBy
+                (adjustment.leavingLate / totalPortions)
+                totalDuration
+    in
+    Time.advanceBy lateBy curEnd
 
 
 startTime : Occurring event -> Time.Absolute
@@ -1007,6 +1095,7 @@ foldp lookup fn (Timeline timelineDetails) =
                         fn
                         lookup
                         timelineDetails
+                        Nothing
                         firstLine
                         remainingLines
                         start
@@ -1017,23 +1106,28 @@ overLines :
     -> (state -> anchor)
     -> TimelineDetails state
     -- current line
+    -> Maybe (Occurring state)
     -> Line state
     -> List (Line state)
     -> motion
     -> motion
-overLines fn lookup details (Line lineStart lineStartEv lineRemain) futureLines state =
+overLines fn lookup details maybePreviousEvent (Line lineStart lineStartEv lineRemain) futureLines state =
     -- futureStart starts a new line.
     -- if an interruption occurs, we want to interpolate to the point of the interruption
     -- then transition over to the new line.
     let
         transition newState =
+            -- After we interpolate, we check here if we are actually done
+            -- or if we were just interrupted and need to keep going
             case futureLines of
                 [] ->
                     newState
 
                 ((Line futureStart futureStartEv futureRemain) as future) :: restOfFuture ->
                     if Time.thisBeforeOrEqualThat futureStart details.now then
-                        overLines fn lookup details future restOfFuture newState
+                        -- NOTE, we could pass an event to maybePreviousEvent
+                        -- which might make time adjustments accurate across transitions
+                        overLines fn lookup details Nothing future restOfFuture newState
 
                     else
                         newState
@@ -1051,7 +1145,12 @@ overLines fn lookup details (Line lineStart lineStartEv lineRemain) futureLines 
                         details.now
 
         eventStartTime =
-            startTime lineStartEv
+            case maybePreviousEvent of
+                Nothing ->
+                    startTime lineStartEv
+
+                Just prev ->
+                    startTimeAdj lookup fn.adjustor prev lineStartEv
     in
     if Time.thisBeforeThat now eventStartTime then
         -- lerp from state to lineStartEv
@@ -1059,18 +1158,42 @@ overLines fn lookup details (Line lineStart lineStartEv lineRemain) futureLines 
         -- either this is an interruption, in which case we lerp.
         -- Or this is the
         -- if we're
-        fn.lerp lookup
-            (Previous (Occurring details.initial lineStart lineStart))
-            lineStartEv
-            lineRemain
-            now
+        -- fn.lerp lookup
+        --     (Previous (Occurring details.initial lineStart lineStart))
+        --     lineStartEv
+        --     lineRemain
+        --     now
+        --     state
+        fn.lerp
+            (Time.inMilliseconds lineStart)
+            (Just (lookup details.initial))
+            (lookup (getEvent lineStartEv))
+            (Time.inMilliseconds eventStartTime)
+            (Time.inMilliseconds now)
+            (case lineRemain of
+                [] ->
+                    Nothing
+
+                upcoming :: _ ->
+                    Just
+                        { anchor = lookup (getEvent upcoming)
+                        , time = Time.inMilliseconds (startTimeAdj lookup fn.adjustor lineStartEv upcoming)
+                        , resting =
+                            not (hasDwell upcoming)
+                        }
+            )
             state
             |> transition
 
     else
         let
             eventEndTime =
-                endTime lineStartEv
+                case lineRemain of
+                    [] ->
+                        endTime lineStartEv
+
+                    upcoming :: _ ->
+                        endTimeAdj lookup fn.adjustor lineStartEv upcoming
         in
         if Time.thisAfterOrEqualThat now eventEndTime then
             -- after linestartEv
@@ -1083,15 +1206,50 @@ overLines fn lookup details (Line lineStart lineStartEv lineRemain) futureLines 
                         |> transition
 
                 next :: lineRemain2 ->
-                    if Time.thisBeforeThat now (startTime next) then
+                    let
+                        nextStartTime =
+                            startTimeAdj lookup fn.adjustor lineStartEv next
+
+                        nextEndTime =
+                            case lineRemain2 of
+                                [] ->
+                                    endTime next
+
+                                upcoming :: _ ->
+                                    endTimeAdj lookup fn.adjustor next upcoming
+                    in
+                    if Time.thisBeforeThat now nextStartTime then
                         -- Before next.startTime
                         --     -> lerp start to next
+                        -- fn.lerp
+                        --     lookup
+                        --     (Previous lineStartEv)
+                        --     next
+                        --     lineRemain2
+                        --     now
+                        -- (if hasDwell lineStartEv then
+                        --     fn.dwellFor (lookup (getEvent lineStartEv)) (Time.duration eventStartTime eventEndTime)
+                        --  else
+                        --     state
+                        -- )
                         fn.lerp
-                            lookup
-                            (Previous lineStartEv)
-                            next
-                            lineRemain2
-                            now
+                            (Time.inMilliseconds eventEndTime)
+                            (Just (lookup (getEvent lineStartEv)))
+                            (lookup (getEvent next))
+                            (Time.inMilliseconds nextStartTime)
+                            (Time.inMilliseconds now)
+                            (case lineRemain2 of
+                                [] ->
+                                    Nothing
+
+                                upcoming :: _ ->
+                                    Just
+                                        { anchor = lookup (getEvent upcoming)
+                                        , time = Time.inMilliseconds (startTimeAdj lookup fn.adjustor next upcoming)
+                                        , resting =
+                                            not (hasDwell upcoming)
+                                        }
+                            )
                             (if hasDwell lineStartEv then
                                 fn.dwellFor (lookup (getEvent lineStartEv)) (Time.duration eventStartTime eventEndTime)
 
@@ -1100,13 +1258,13 @@ overLines fn lookup details (Line lineStart lineStartEv lineRemain) futureLines 
                             )
                             |> transition
 
-                    else if Time.thisBeforeThat now (endTime next) then
+                    else if Time.thisBeforeThat now nextEndTime then
                         -- After next.startTime
                         --- Before next.endTime
                         --      -> we're dwelling at `next`
                         fn.dwellFor
                             (lookup (getEvent next))
-                            (Time.duration (startTime next) now)
+                            (Time.duration nextStartTime now)
                             |> transition
 
                     else
@@ -1119,36 +1277,69 @@ overLines fn lookup details (Line lineStart lineStartEv lineRemain) futureLines 
                                 --      -> we're dwelling at `next`
                                 fn.dwellFor
                                     (lookup (getEvent next))
-                                    (Time.duration (startTime next) now)
+                                    (Time.duration nextStartTime now)
                                     |> transition
 
                             next2 :: lineRemain3 ->
                                 -- continue on
-                                if Time.thisBeforeThat now (startTime next2) then
+                                let
+                                    next2StartTime =
+                                        startTimeAdj lookup fn.adjustor next next2
+
+                                    next2EndTime =
+                                        case lineRemain3 of
+                                            [] ->
+                                                endTime next2
+
+                                            upcoming :: _ ->
+                                                endTimeAdj lookup fn.adjustor next2 upcoming
+                                in
+                                if Time.thisBeforeThat now next2StartTime then
                                     let
                                         after =
                                             if hasDwell next then
                                                 fn.dwellFor
                                                     (lookup (getEvent next))
-                                                    (Time.duration (startTime next) (endTime next))
+                                                    (Time.duration nextStartTime nextEndTime)
 
                                             else
                                                 fn.after lookup next lineRemain2
                                     in
+                                    -- fn.lerp
+                                    --     lookup
+                                    --     (Previous next)
+                                    --     next2
+                                    --     lineRemain3
+                                    --     now
+                                    --     after
+                                    --     |> transition
                                     fn.lerp
-                                        lookup
-                                        (Previous next)
-                                        next2
-                                        lineRemain3
-                                        now
+                                        -- next end time?
+                                        (Time.inMilliseconds nextEndTime)
+                                        (Just (lookup (getEvent next)))
+                                        (lookup (getEvent next2))
+                                        (Time.inMilliseconds next2StartTime)
+                                        (Time.inMilliseconds now)
+                                        (case lineRemain3 of
+                                            [] ->
+                                                Nothing
+
+                                            upcoming :: _ ->
+                                                Just
+                                                    { anchor = lookup (getEvent upcoming)
+                                                    , time = Time.inMilliseconds (startTimeAdj lookup fn.adjustor next2 upcoming)
+                                                    , resting =
+                                                        not (hasDwell upcoming)
+                                                    }
+                                        )
                                         after
                                         |> transition
 
-                                else if Time.thisBeforeThat now (endTime next2) then
+                                else if Time.thisBeforeThat now next2EndTime then
                                     -- we're dwelling at `next2`
                                     fn.dwellFor
                                         (lookup (getEvent next2))
-                                        (Time.duration (startTime next2) now)
+                                        (Time.duration next2StartTime now)
                                         |> transition
 
                                 else
@@ -1156,16 +1347,19 @@ overLines fn lookup details (Line lineStart lineStartEv lineRemain) futureLines 
                                         after =
                                             if hasDwell next2 then
                                                 fn.dwellFor (lookup (getEvent next2))
-                                                    (Time.duration (startTime next2) (endTime next2))
+                                                    (Time.duration next2StartTime next2EndTime)
 
                                             else
                                                 fn.after lookup next2 lineRemain3
                                     in
+                                    -- Recompose our line by removing previous events
+                                    -- and continue forward!
                                     overLines
                                         fn
                                         lookup
                                         details
-                                        (Line (endTime next) next2 lineRemain3)
+                                        (Just next)
+                                        (Line nextEndTime next2 lineRemain3)
                                         futureLines
                                         after
 
@@ -1174,7 +1368,7 @@ overLines fn lookup details (Line lineStart lineStartEv lineRemain) futureLines 
             -- we've checked that it's not after or before,
             -- so it has to be between the start and end
             fn.dwellFor (lookup (getEvent lineStartEv))
-                (Time.duration (startTime lineStartEv) now)
+                (Time.duration eventStartTime now)
                 |> transition
 
 
@@ -1249,6 +1443,7 @@ capture fps lookup fn (Timeline timelineDetails) =
                                         lookup
                                         -- maybe we break this out to a separate param to avoid updating?
                                         { timelineDetails | now = currentTime }
+                                        Nothing
                                         firstLine
                                         remainingLines
                                         start
@@ -1369,73 +1564,62 @@ zeroDuration =
     Duration.milliseconds 0
 
 
-{-|
 
-    if target.arriveEarly then
-        adjust time earlier
-        extend dwell (add dwell if none)
-    if target.leaveLate
-        extend dwell even further
-
--}
-applyAdjustment :
-    (event -> anchor)
-    -> TimeAdjustor anchor
-    ->
-        { previousEventTime : Time.Absolute
-        , applied : Adjustment
-        }
-    -> Occurring event
-    -> Maybe (Occurring event)
-    -> ( Occurring event, Maybe Adjustment )
-applyAdjustment lookup adjustor { previousEventTime, applied } ((Occurring event start end) as target) maybeLookAhead =
-    let
-        targetAdjustments =
-            adjustor (lookup event)
-
-        totalDuration =
-            Time.duration previousEventTime start
-
-        totalPortions =
-            max
-                (applied.leavingLate + targetAdjustments.arrivingEarly)
-                1
-
-        earlyBy =
-            Quantity.multiplyBy
-                (targetAdjustments.arrivingEarly / totalPortions)
-                totalDuration
-
-        lateBy =
-            case maybeLookAhead of
-                Nothing ->
-                    zeroDuration
-
-                Just lookAhead ->
-                    let
-                        lookAheadAdjustments =
-                            adjustor (lookup (getEvent lookAhead))
-
-                        totalLookAheadDuration =
-                            Time.duration (endTime target) (startTime lookAhead)
-
-                        totalLookAheadPortions =
-                            max
-                                (targetAdjustments.leavingLate + lookAheadAdjustments.arrivingEarly)
-                                1
-                    in
-                    Quantity.multiplyBy
-                        (targetAdjustments.leavingLate / totalLookAheadPortions)
-                        totalLookAheadDuration
-    in
-    ( Occurring event
-        (Time.rollbackBy earlyBy start)
-        (Time.advanceBy (Quantity.plus earlyBy lateBy) end)
-    , Just targetAdjustments
-    )
-
-
-
+-- {-|
+--     if target.arriveEarly then
+--         adjust time earlier
+--         extend dwell (add dwell if none)
+--     if target.leaveLate
+--         extend dwell even further
+-- -}
+-- applyAdjustment :
+--     (event -> anchor)
+--     -> TimeAdjustor anchor
+--     ->
+--         { previousEventTime : Time.Absolute
+--         , applied : Adjustment
+--         }
+--     -> Occurring event
+--     -> Maybe (Occurring event)
+--     -> ( Occurring event, Maybe Adjustment )
+-- applyAdjustment lookup adjustor { previousEventTime, applied } ((Occurring event start end) as target) maybeLookAhead =
+--     let
+--         targetAdjustments =
+--             adjustor (lookup event)
+--         totalDuration =
+--             Time.duration previousEventTime start
+--         totalPortions =
+--             max
+--                 (applied.leavingLate + targetAdjustments.arrivingEarly)
+--                 1
+--         earlyBy =
+--             Quantity.multiplyBy
+--                 (targetAdjustments.arrivingEarly / totalPortions)
+--                 totalDuration
+--         lateBy =
+--             case maybeLookAhead of
+--                 Nothing ->
+--                     zeroDuration
+--                 Just lookAhead ->
+--                     let
+--                         lookAheadAdjustments =
+--                             adjustor (lookup (getEvent lookAhead))
+--                         totalLookAheadDuration =
+--                             Time.duration (endTime target) (startTime lookAhead)
+--                         totalLookAheadPortions =
+--                             max
+--                                 (targetAdjustments.leavingLate + lookAheadAdjustments.arrivingEarly)
+--                                 1
+--                     in
+--                     Quantity.multiplyBy
+--                         (targetAdjustments.leavingLate / totalLookAheadPortions)
+--                         totalLookAheadDuration
+--     in
+--     ( Occurring event
+--         (Time.rollbackBy earlyBy start)
+--         (Time.advanceBy (Quantity.plus earlyBy lateBy) end)
+--     , Just targetAdjustments
+--     )
 {- BOOKKEEPING -}
 
 
@@ -1463,8 +1647,8 @@ current ((Timeline details) as timeline) =
         timeline
 
 
-pass _ _ target _ _ _ =
-    getEvent target
+pass _ _ target _ _ _ _ =
+    target
 
 
 type Status
@@ -1492,26 +1676,22 @@ status ((Timeline details) as timeline) =
             \lookup target future ->
                 Transitioning 1
         , lerp =
-            \_ previous target upcoming now _ ->
+            -- \_ previous target upcoming now _ ->
+            \prevEndTime maybePrev target targetTime now maybeLookAhead state ->
                 -- target
                 -- Transitioning 0
                 let
                     start =
-                        case previous of
-                            Previous prev ->
-                                endTime prev
-
-                            PreviouslyInterrupted interruptionTime ->
-                                interruptionTime
+                        prevEndTime
 
                     end =
-                        startTime target
+                        targetTime
                 in
-                if Time.thisAfterOrEqualThat now end then
+                if now >= end then
                     Transitioning 1
 
                 else
-                    Transitioning (Time.progress start end now)
+                    Transitioning (Time.progress (Time.millis start) (Time.millis end) (Time.millis now))
         }
         timeline
 
