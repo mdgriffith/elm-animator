@@ -301,17 +301,30 @@ newLerp prevEndTime maybePrev target targetTime now maybeLookAhead state =
 
                 Position _ arrival _ ->
                     arrival.wobbliness
+
+        nothingHappened =
+            case target of
+                Oscillate _ _ _ _ ->
+                    False
+
+                Position _ _ x ->
+                    (x == Pixels.inPixels state.position)
+                        && (Pixels.inPixelsPerSecond state.velocity == 0)
     in
-    case maybeLookAhead of
-        Nothing ->
-            if wobble /= 0 then
-                newSpringInterpolation prevEndTime maybePrev target targetTime now maybeLookAhead state
+    if nothingHappened then
+        state
 
-            else
+    else
+        case maybeLookAhead of
+            Nothing ->
+                if wobble /= 0 then
+                    newSpringInterpolation prevEndTime maybePrev target targetTime now maybeLookAhead state
+
+                else
+                    newInterpolateBetween prevEndTime maybePrev target targetTime now maybeLookAhead state
+
+            _ ->
                 newInterpolateBetween prevEndTime maybePrev target targetTime now maybeLookAhead state
-
-        _ ->
-            newInterpolateBetween prevEndTime maybePrev target targetTime now maybeLookAhead state
 
 
 lerp lookup previous target future now state =
