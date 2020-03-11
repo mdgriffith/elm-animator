@@ -6,6 +6,7 @@ import Expect exposing (Expectation, FloatingPointTolerance(..))
 import Fuzz exposing (Fuzzer, float, int, list, string)
 import Internal.Estimation as Estimate
 import Internal.Interpolate as Interpolate
+import Internal.Time as Time
 import Internal.Timeline as Timeline
 import Pixels
 import Quantity
@@ -74,6 +75,10 @@ toMoving event =
 
 framePercent (Timeline.Frame percent val) =
     percent
+
+
+qty =
+    Quantity.Quantity
 
 
 frames =
@@ -188,4 +193,81 @@ frames =
                 Expect.equal
                     (List.length resultFrames.frames)
                     61
+        , test "Capture timeline description" <|
+            \_ ->
+                -- This is used to capture an timeline description
+                -- which is currently just used for sprite animations
+                -- NOTE - It currently does not account for time adjustments
+                -- This test is just to make sure the standard output looks alright
+                let
+                    timeline =
+                        Animator.init One
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.queue
+                                [ Animator.event (Animator.seconds 1) Two
+                                , Animator.event (Animator.seconds 1) Three
+                                ]
+                            -- NOTE* possible schduling bug
+                            -- scheduling an event
+                            |> Timeline.update (Time.millisToPosix 1)
+
+                    description =
+                        Timeline.captureTimeline toVals timeline
+                in
+                Expect.equal
+                    description
+                    { events =
+                        [ Timeline.EventSummary 1 (qty 0) (Timeline.KnownDuration (qty 0.001))
+                        , Timeline.EventSummary 2 (qty 1001) (Timeline.KnownDuration (qty 0))
+                        , Timeline.EventSummary 3 (qty 2001) Timeline.OpenDuration
+                        ]
+                    , now = qty 1
+                    , startTime = qty 0
+                    }
+        , test "Capture timeline description, with interruption" <|
+            \_ ->
+                -- This is used to capture an timeline description
+                -- which is currently just used for sprite animations
+                -- NOTE - It currently does not account for time adjustments
+                let
+                    timeline =
+                        Animator.init One
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.queue
+                                [ Animator.event (Animator.seconds 1) Two
+                                ]
+                            -- NOTE* possible schduling bug
+                            -- scheduling an event
+                            |> Timeline.update (Time.millisToPosix 1)
+                            |> Animator.interrupt
+                                [ Animator.wait (Animator.seconds 0.5)
+                                , Animator.event (Animator.seconds 1) Three
+                                ]
+                            -- NOTE* possible schduling bug
+                            -- scheduling an event
+                            |> Timeline.update (Time.millisToPosix 1)
+
+                    description =
+                        Timeline.captureTimeline toVals timeline
+                in
+                Expect.equal
+                    description
+                    -- { events = []
+                    -- , now = Time.millis 0
+                    -- , startTime = Time.millis 0
+                    -- }
+                    { events =
+                        [ Timeline.EventSummary 1 (qty 0) (Timeline.KnownDuration (qty 0.001))
+                        , Timeline.InterruptionSummary
+                            { target = 2
+                            , targetTime = qty 1001
+                            , interruptedAt = qty 501
+                            , newTarget = 3
+                            , newTargetDuration = Timeline.OpenDuration
+                            , newTargetTime = qty 1501
+                            }
+                        ]
+                    , now = qty 1
+                    , startTime = qty 0
+                    }
         ]
