@@ -7,8 +7,8 @@ module Internal.Timeline exposing
     , progress, dwellingTime
     , current
     , Adjustment, Line(..), Timetable(..)
-    , foldp, capture
-    , Animator(..), Description(..), Frame(..), Frames, Interp, LookAhead, Oscillator(..), Pause(..), Period(..), Previous(..), atTime, gc, hasChanged, justInitialized, linesAreActive, prepareOscillator, previousEndTime, previousStartTime, updateNoGC
+    , foldp, capture, captureTimeline
+    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Oscillator(..), Pause(..), Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), atTime, gc, hasChanged, justInitialized, linesAreActive, prepareOscillator, previousEndTime, previousStartTime, updateNoGC
     )
 
 {-|
@@ -29,7 +29,7 @@ module Internal.Timeline exposing
 
 @docs Adjustment, Line, Timetable
 
-@docs foldp, capture
+@docs foldp, capture, captureTimeline
 
 -}
 
@@ -55,10 +55,12 @@ type Period
     | Repeat Int Time.Duration
 
 
+getScheduledEvent : Event event -> event
 getScheduledEvent (Event _ ev _) =
     ev
 
 
+adjustScheduledDuration : (Time.Duration -> Time.Duration) -> Event event -> Event event
 adjustScheduledDuration fn (Event dur ev maybeDwell) =
     Event (fn dur) ev maybeDwell
 
@@ -1372,7 +1374,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart lineStartEv lineR
                 |> transition
 
 
-type alias Frames motion =
+type alias FramesSummary motion =
     { frames : List (Frame motion)
     , duration : Time.Duration
     , dwell :
@@ -1396,7 +1398,7 @@ capture :
     -> (state -> anchor)
     -> Interp state anchor motion
     -> Timeline state
-    -> Frames motion
+    -> FramesSummary motion
 capture fps lookup fn (Timeline timelineDetails) =
     case timelineDetails.events of
         Timetable timetable ->
@@ -1504,6 +1506,161 @@ capture fps lookup fn (Timeline timelineDetails) =
                                     , frames = dwellFrames
                                     }
                     }
+
+
+type alias Summary event =
+    { events : List (SummaryEvent event)
+    , now : Time.Absolute
+    , startTime : Time.Absolute
+    }
+
+
+type SummaryEvent event
+    = EventSummary event Time.Absolute ActualDuration
+    | InterruptionSummary
+        { target : event
+        , targetTime : Time.Absolute
+        , interruptedAt : Time.Absolute
+        , newTarget : event
+        , newTargetTime : Time.Absolute
+        , newTargetDuration : ActualDuration
+        }
+
+
+type ActualDuration
+    = OpenDuration
+    | KnownDuration Time.Duration
+
+
+{-| -}
+type Frames item
+    = Single item
+    | Hold Int item
+    | Walk item (List (Frames item))
+    | WithRest (Resting item) (Frames item)
+
+
+{-| -}
+type Resting item
+    = Cycle Period (List (Frames item))
+
+
+captureTimeline :
+    (state -> anchor)
+    -> Timeline state
+    -> Summary anchor
+captureTimeline lookup (Timeline timelineDetails) =
+    case timelineDetails.events of
+        Timetable timetable ->
+            case timetable of
+                [] ->
+                    -- I believe this case is fleeting because as soon as we have a real time,
+                    -- we add a line to the timetable.
+                    -- However, maybe it is awkwardly rendered once?
+                    { events =
+                        [ EventSummary
+                            (lookup timelineDetails.initial)
+                            timelineDetails.now
+                            OpenDuration
+                        ]
+                    , now = timelineDetails.now
+                    , startTime = timelineDetails.now
+                    }
+
+                (Line start startEv remain) :: remainingLines ->
+                    let
+                        events =
+                            captureTimelineHelper lookup
+                                (startEv :: remain)
+                                remainingLines
+                                []
+                    in
+                    { events = List.reverse events
+                    , now = timelineDetails.now
+                    , startTime = start
+                    }
+
+
+{-| Summarize all the events on the current timeline.
+
+Note, this does not take into account time adjustments!
+
+Essentially this is only used for sprite animation, which currently dont have leaveLate or arriveEarly.
+
+-}
+captureTimelineHelper :
+    (state -> anchor)
+    -> List (Occurring state)
+    -> List (Line state)
+    -> List (SummaryEvent anchor)
+    -> List (SummaryEvent anchor)
+captureTimelineHelper lookup events futureLines summary =
+    -- futureStart starts a new line.
+    -- if an interruption occurs, we want to interpolate to the point of the interruption
+    -- then transition over to the new line.
+    case events of
+        [] ->
+            case futureLines of
+                [] ->
+                    summary
+
+                (Line futureStart futureStartEv futureRemain) :: restOfFuture ->
+                    captureTimelineHelper lookup (futureStartEv :: futureRemain) restOfFuture summary
+
+        (Occurring event start eventEnd) :: remain ->
+            case futureLines of
+                [] ->
+                    case remain of
+                        [] ->
+                            let
+                                newEvent =
+                                    EventSummary (lookup event) start OpenDuration
+                            in
+                            newEvent :: summary
+
+                        _ ->
+                            let
+                                newEvent =
+                                    EventSummary (lookup event) start (KnownDuration (Time.duration start eventEnd))
+                            in
+                            captureTimelineHelper lookup remain futureLines (newEvent :: summary)
+
+                (Line futureStart futureStartEv futureRemain) :: restOfFuture ->
+                    if Time.thisBeforeOrEqualThat futureStart start then
+                        -- interruption
+                        let
+                            newEvent =
+                                InterruptionSummary
+                                    { target = lookup event
+                                    , targetTime = start
+                                    , interruptedAt = futureStart
+                                    , newTarget = lookup (getEvent futureStartEv)
+                                    , newTargetTime = startTime futureStartEv
+                                    , newTargetDuration =
+                                        case futureRemain of
+                                            [] ->
+                                                case restOfFuture of
+                                                    [] ->
+                                                        OpenDuration
+
+                                                    _ ->
+                                                        KnownDuration (Time.duration start eventEnd)
+
+                                            _ ->
+                                                KnownDuration (Time.duration start eventEnd)
+                                    }
+                        in
+                        captureTimelineHelper lookup futureRemain restOfFuture (newEvent :: summary)
+
+                    else
+                        -- queue up new events
+                        let
+                            newEvent =
+                                EventSummary (lookup event)
+                                    start
+                                    (KnownDuration (Time.duration start eventEnd))
+                        in
+                        captureTimelineHelper lookup remain futureLines (newEvent :: summary)
 
 
 {-| What is the last events /starting/ time
@@ -1676,7 +1833,6 @@ status ((Timeline details) as timeline) =
             \lookup target future ->
                 Transitioning 1
         , lerp =
-            -- \_ previous target upcoming now _ ->
             \prevEndTime maybePrev target targetTime now maybeLookAhead state ->
                 -- target
                 -- Transitioning 0
