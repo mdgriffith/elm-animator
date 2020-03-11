@@ -671,34 +671,31 @@ interpolate interp =
 
 
 {-| -}
-type Frames item
-    = Frame item
-    | Hold Int item
-    | Walk item (List (Frames item))
-    | WithRest (Resting item) (Frames item)
+type alias Frames item =
+    Timeline.Frames item
 
 
 {-| -}
-type Resting item
-    = Cycle Timeline.Period (List (Frames item))
+type alias Resting item =
+    Timeline.Resting item
 
 
 {-| -}
 frame : sprite -> Frames sprite
 frame =
-    Frame
+    Timeline.Single
 
 
 {-| -}
 hold : Int -> sprite -> Frames sprite
 hold =
-    Hold
+    Timeline.Hold
 
 
 {-| -}
 walk : sprite -> List (Frames sprite) -> Frames sprite
 walk =
-    Walk
+    Timeline.Walk
 
 
 {-| -}
@@ -708,7 +705,7 @@ framesWith :
     }
     -> Frames item
 framesWith cfg =
-    WithRest
+    Timeline.WithRest
         cfg.resting
         cfg.transition
 
@@ -731,7 +728,7 @@ cycle (FramesPerSecond framesPerSecond) frames =
         duration =
             Duration.seconds (toFloat (List.length frames) / framesPerSecond)
     in
-    Cycle (Timeline.Loop duration) frames
+    Timeline.Cycle (Timeline.Loop duration) frames
 
 
 {-| -}
@@ -741,7 +738,7 @@ cycleN n (FramesPerSecond framesPerSecond) frames =
         duration =
             Duration.seconds (toFloat (List.length frames) / framesPerSecond)
     in
-    Cycle (Timeline.Repeat n duration) frames
+    Timeline.Cycle (Timeline.Repeat n duration) frames
 
 
 {-| -}
@@ -764,20 +761,20 @@ step timeline lookup =
 restFrames : Frames item -> Float -> item
 restFrames currentFrameSet restingTimeMs =
     case currentFrameSet of
-        Frame item ->
+        Timeline.Single item ->
             item
 
-        Hold i item ->
+        Timeline.Hold i item ->
             item
 
-        Walk start sprites ->
+        Timeline.Walk start sprites ->
             let
                 index =
                     totalFrames sprites - 1
             in
-            getItemAtIndex index (Frame start) 0 sprites
+            getItemAtIndex index (Timeline.Single start) 0 sprites
 
-        WithRest (Cycle period cycleFrameList) transitionFrames ->
+        Timeline.WithRest (Timeline.Cycle period cycleFrameList) transitionFrames ->
             let
                 len =
                     totalFrames cycleFrameList
@@ -820,13 +817,13 @@ restFrames currentFrameSet restingTimeMs =
 stepFrames : Frames item -> Float -> item
 stepFrames currentFrameSet progress =
     case currentFrameSet of
-        Frame item ->
+        Timeline.Single item ->
             item
 
-        Hold i item ->
+        Timeline.Hold i item ->
             item
 
-        Walk start sprites ->
+        Timeline.Walk start sprites ->
             let
                 frameCount =
                     totalFrames sprites
@@ -834,9 +831,9 @@ stepFrames currentFrameSet progress =
                 index =
                     floor (progress * toFloat frameCount) - 1
             in
-            getItemAtIndex index (Frame start) 0 sprites
+            getItemAtIndex index (Timeline.Single start) 0 sprites
 
-        WithRest _ newFrameSet ->
+        Timeline.WithRest _ newFrameSet ->
             stepFrames newFrameSet progress
 
 
@@ -848,16 +845,16 @@ totalFrames frames =
 frameSize : Frames item -> Int
 frameSize myFrame =
     case myFrame of
-        Frame _ ->
+        Timeline.Single _ ->
             1
 
-        Hold i _ ->
+        Timeline.Hold i _ ->
             i
 
-        Walk i frames ->
+        Timeline.Walk i frames ->
             List.foldl (\frm total -> total + frameSize frm) 0 frames
 
-        WithRest _ newFrameSet ->
+        Timeline.WithRest _ newFrameSet ->
             frameSize newFrameSet
 
 
@@ -869,21 +866,21 @@ getItemAtIndex targetIndex transitionFrame currentIndex cycleList =
 
         top :: remain ->
             case top of
-                Frame item ->
+                Timeline.Single item ->
                     if targetIndex == currentIndex then
                         item
 
                     else
                         getItemAtIndex targetIndex transitionFrame (currentIndex + 1) remain
 
-                Hold i item ->
+                Timeline.Hold i item ->
                     if currentIndex <= targetIndex && currentIndex + i >= targetIndex then
                         item
 
                     else
                         getItemAtIndex targetIndex transitionFrame (currentIndex + i) remain
 
-                Walk item allFrames ->
+                Timeline.Walk item allFrames ->
                     let
                         frameCount =
                             totalFrames allFrames
@@ -894,7 +891,7 @@ getItemAtIndex targetIndex transitionFrame currentIndex cycleList =
                     else
                         getItemAtIndex targetIndex transitionFrame (currentIndex + frameCount) remain
 
-                WithRest _ frames ->
+                Timeline.WithRest _ frames ->
                     let
                         frameCount =
                             frameSize frames
@@ -908,13 +905,13 @@ getItemAtIndex targetIndex transitionFrame currentIndex cycleList =
 
 lastFrame myFrame =
     case myFrame of
-        Frame item ->
+        Timeline.Single item ->
             item
 
-        Hold _ item ->
+        Timeline.Hold _ item ->
             item
 
-        Walk item remainingFrames ->
+        Timeline.Walk item remainingFrames ->
             case List.head (List.reverse remainingFrames) of
                 Nothing ->
                     item
@@ -922,7 +919,7 @@ lastFrame myFrame =
                 Just last ->
                     lastFrame last
 
-        WithRest _ frames ->
+        Timeline.WithRest _ frames ->
             lastFrame frames
 
 
