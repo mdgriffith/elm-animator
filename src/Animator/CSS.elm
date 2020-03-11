@@ -6,8 +6,8 @@ module Animator.Css exposing
     , backgroundColor
     , borderColor, borderRadius
     , transform
-    , transformWith, TransformOptions
-    , rotateTo, rotating
+    , transformWith, TransformOptions, Origin, center, offset
+    , rotateTo, lookAt, rotating
     , scale, xy, xyz
     , resting
     , in2d, in3d
@@ -45,9 +45,9 @@ module Animator.Css exposing
 
 @docs transform
 
-@docs transformWith, TransformOptions
+@docs transformWith, TransformOptions, Origin, center, offset
 
-@docs rotateTo, rotating
+@docs rotateTo, lookAt, rotating
 
 @docs scale, xy, xyz
 
@@ -67,9 +67,6 @@ Because of that, `in2d` and `in3d` are constructed a little differently instead 
 **Note** Again, because of the CSS awkawrdness mentioned above, we have to have `once` and `repeat` defined separetely from `Animator.once` for the special case of transforms.
 
 @docs once, repeat, loop
-
-
-# Sprites
 
 -}
 
@@ -100,7 +97,26 @@ type alias TransformOptions =
         , y : Float
         , z : Float
         }
+    , origin : Origin
     }
+
+
+{-| -}
+type Origin
+    = Center
+    | Offset Float Float
+
+
+{-| -}
+center : Origin
+center =
+    Center
+
+
+{-| -}
+offset : Float -> Float -> Origin
+offset =
+    Offset
 
 
 
@@ -351,6 +367,15 @@ renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
                 scaleZ =
                     Timeline.capture 60 (lookup >> .scaleZ) Interpolate.moving timeline
 
+                facingX =
+                    Timeline.capture 60 (lookup >> .facing >> .x) Interpolate.moving timeline
+
+                facingY =
+                    Timeline.capture 60 (lookup >> .facing >> .y) Interpolate.moving timeline
+
+                facingZ =
+                    Timeline.capture 60 (lookup >> .facing >> .z) Interpolate.moving timeline
+
                 combined =
                     toTransform options
                         []
@@ -361,6 +386,9 @@ renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
                         scaleX.frames
                         scaleY.frames
                         scaleZ.frames
+                        facingX.frames
+                        facingY.frames
+                        facingZ.frames
             in
             renderAnimation details.now
                 "transform"
@@ -388,9 +416,12 @@ mapDwellFrames combinedFrames dwell =
                         , scaleX = { position = Pixels.pixels 1, velocity = Pixels.pixelsPerSecond 0 }
                         , scaleY = { position = Pixels.pixels 1, velocity = Pixels.pixelsPerSecond 0 }
                         , scaleZ = { position = Pixels.pixels 1, velocity = Pixels.pixelsPerSecond 0 }
-                        , aroundX = { position = Pixels.pixels 0, velocity = Pixels.pixelsPerSecond 0 }
-                        , aroundY = { position = Pixels.pixels 0, velocity = Pixels.pixelsPerSecond 0 }
-                        , aroundZ = { position = Pixels.pixels 1, velocity = Pixels.pixelsPerSecond 0 }
+                        , aroundX = 0
+                        , aroundY = 0
+                        , aroundZ = 1
+                        , facingX = { position = Pixels.pixels 0, velocity = Pixels.pixelsPerSecond 0 }
+                        , facingY = { position = Pixels.pixels 0, velocity = Pixels.pixelsPerSecond 0 }
+                        , facingZ = { position = Pixels.pixels 1, velocity = Pixels.pixelsPerSecond 0 }
                         }
 
                 last :: _ ->
@@ -413,10 +444,13 @@ expand (Timeline.Frame _ lastFrame) (Timeline.Frame percent rotation) =
         , aroundX = lastFrame.aroundX
         , aroundY = lastFrame.aroundY
         , aroundZ = lastFrame.aroundZ
+        , facingX = lastFrame.facingX
+        , facingY = lastFrame.facingY
+        , facingZ = lastFrame.facingZ
         }
 
 
-toTransform options rendered x y z rotation scaleX scaleY scaleZ =
+toTransform options rendered x y z rotation scaleX scaleY scaleZ facingX facingY facingZ =
     -- get ready for a tornado...
     case x of
         [] ->
@@ -453,29 +487,49 @@ toTransform options rendered x y z rotation scaleX scaleY scaleZ =
                                                             rendered
 
                                                         (Timeline.Frame _ topSz) :: rsz ->
-                                                            toTransform options
-                                                                (Timeline.Frame percent
-                                                                    { x = topX
-                                                                    , y = topY
-                                                                    , z = topZ
-                                                                    , rotation = topR
-                                                                    , scaleX = topSx
-                                                                    , scaleY = topSy
-                                                                    , scaleZ = topSz
-                                                                    , aroundX =
-                                                                        toState options.rotationAxis.x
-                                                                    , aroundY = toState options.rotationAxis.y
-                                                                    , aroundZ = toState options.rotationAxis.z
-                                                                    }
-                                                                    :: rendered
-                                                                )
-                                                                rX
-                                                                rY
-                                                                rZ
-                                                                rR
-                                                                rsx
-                                                                rsy
-                                                                rsz
+                                                            case facingX of
+                                                                [] ->
+                                                                    rendered
+
+                                                                (Timeline.Frame _ topFx) :: rfx ->
+                                                                    case facingY of
+                                                                        [] ->
+                                                                            rendered
+
+                                                                        (Timeline.Frame _ topFy) :: rfy ->
+                                                                            case facingZ of
+                                                                                [] ->
+                                                                                    rendered
+
+                                                                                (Timeline.Frame _ topFz) :: rfz ->
+                                                                                    toTransform options
+                                                                                        (Timeline.Frame percent
+                                                                                            { x = topX
+                                                                                            , y = topY
+                                                                                            , z = topZ
+                                                                                            , rotation = topR
+                                                                                            , scaleX = topSx
+                                                                                            , scaleY = topSy
+                                                                                            , scaleZ = topSz
+                                                                                            , aroundX = options.rotationAxis.x
+                                                                                            , aroundY = options.rotationAxis.y
+                                                                                            , aroundZ = options.rotationAxis.z
+                                                                                            , facingX = topFx
+                                                                                            , facingY = topFy
+                                                                                            , facingZ = topFz
+                                                                                            }
+                                                                                            :: rendered
+                                                                                        )
+                                                                                        rX
+                                                                                        rY
+                                                                                        rZ
+                                                                                        rR
+                                                                                        rsx
+                                                                                        rsy
+                                                                                        rsz
+                                                                                        rfx
+                                                                                        rfy
+                                                                                        rfz
 
 
 toState p =
@@ -485,6 +539,19 @@ toState p =
 
 
 transformToString details =
+    let
+        ( _, rotationAroundY ) =
+            toPolar
+                ( Pixels.inPixels details.facingZ.position
+                , Pixels.inPixels details.facingX.position
+                )
+
+        ( _, rotationAroundX ) =
+            toPolar
+                ( Pixels.inPixels details.facingZ.position
+                , Pixels.inPixels details.facingY.position
+                )
+    in
     ("translate3d("
         ++ String.fromFloat (Pixels.inPixels details.x.position)
         ++ "px, "
@@ -493,12 +560,20 @@ transformToString details =
         ++ String.fromFloat (Pixels.inPixels details.z.position)
         ++ "px)"
     )
+        ++ (" rotate3d(0, 1, 0, "
+                ++ String.fromFloat rotationAroundY
+                ++ "rad)"
+           )
+        ++ (" rotate3d(1, 0, 0, "
+                ++ String.fromFloat rotationAroundX
+                ++ "rad)"
+           )
         ++ (" rotate3d("
-                ++ String.fromFloat (Pixels.inPixels details.aroundX.position)
+                ++ String.fromFloat details.aroundX
                 ++ ", "
-                ++ String.fromFloat (Pixels.inPixels details.aroundY.position)
+                ++ String.fromFloat details.aroundY
                 ++ ", "
-                ++ String.fromFloat (Pixels.inPixels details.aroundZ.position)
+                ++ String.fromFloat details.aroundZ
                 ++ ", "
                 ++ String.fromFloat (Pixels.inPixels details.rotation.position)
                 ++ "rad)"
@@ -513,7 +588,7 @@ transformToString details =
            )
 
 
-renderAnimation : Time.Absolute -> String -> Timeline.Frames value -> (value -> String) -> List Anim -> List Anim
+renderAnimation : Time.Absolute -> String -> Timeline.FramesSummary value -> (value -> String) -> List Anim -> List Anim
 renderAnimation now attrName frames renderer anims =
     let
         renderedFrames =
@@ -525,6 +600,7 @@ renderAnimation now attrName frames renderer anims =
                 ""
 
         name =
+            -- NOTE, this needs better distinction or else there will be cross contamination
             attrName ++ "-" ++ String.fromInt (floor (Time.inMilliseconds now))
 
         newKeyFrames =
@@ -835,6 +911,7 @@ transform =
             , y = 0
             , z = 1
             }
+        , origin = Center
         }
 
 
@@ -975,14 +1052,14 @@ rotating dur =
 
 
 {-| -}
-facing :
+lookAt :
     { x : Float
     , y : Float
     , z : Float
     }
     -> Transform
     -> Transform
-facing coords (Transform trans) =
+lookAt coords (Transform trans) =
     Transform
         { trans
             | facing =
@@ -996,7 +1073,7 @@ facing coords (Transform trans) =
 {-| -}
 type Period
     = Loop Duration
-    | Repeat Int Duration
+    | Repeat Float Duration
 
 
 {-| -}
@@ -1012,7 +1089,7 @@ loop =
 
 
 {-| -}
-repeat : Int -> Duration -> Period
+repeat : Float -> Duration -> Period
 repeat =
     Repeat
 
@@ -1109,40 +1186,3 @@ renderOsc per oscillator =
                         Timeline.Loop totalDuration
                 )
                 preparedFn
-
-
-type Box
-    = Box BoxDetails
-
-
-type alias BoxDetails =
-    { source : String
-    , x : Int
-    , y : Int
-    , width : Int
-    , height : Int
-    , adjustX : Int
-    , adjustY : Int
-    , flipX : Bool
-    , flipY : Bool
-    }
-
-
-
--- {-| -}
--- image :
---     Timeline event
---     -> (event -> Box)
---     -> List (Html.Attribute msg)
---     -> Html msg
--- image timeline toBox attrs =
---     -- let
---     -- Timeline.capture 60 lookup Interpolate.coloring timeline
---     -- animations =
---     --     List.foldl (renderAttrs timeline) [] animatedAttrs
---     --         |> List.reverse
---     -- in
---     Html.Keyed.node "div"
---         attrs
---         [ ( "animator-stylesheet", stylesheet (renderAnimations animations) )
---         ]
