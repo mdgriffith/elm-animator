@@ -5,10 +5,11 @@ module Animator.Css exposing
     , fontSize, fontColor, wordSpacing, letterSpacing
     , backgroundColor
     , borderColor, borderRadius
+    , style, color
     , transform
-    , transformWith, TransformOptions, Origin, center, offset
     , rotateTo, lookAt, rotating
     , scale, xy, xyz
+    , transformWith, TransformOptions, Origin, center, offset
     , resting
     , in2d, in3d
     , once, repeat, loop
@@ -41,15 +42,23 @@ module Animator.Css exposing
 @docs borderColor, borderRadius
 
 
+# Custom
+
+@docs style, color
+
+
 # Transform
 
 @docs transform
 
-@docs transformWith, TransformOptions, Origin, center, offset
-
 @docs rotateTo, lookAt, rotating
 
 @docs scale, xy, xyz
+
+
+# Transform Options
+
+@docs transformWith, TransformOptions, Origin, center, offset
 
 
 # Advanced
@@ -64,7 +73,7 @@ Because of that, `in2d` and `in3d` are constructed a little differently instead 
 
 @docs in2d, in3d
 
-**Note** Again, because of the CSS awkawrdness mentioned above, we have to have `once` and `repeat` defined separetely from `Animator.once` for the special case of transforms.
+**Note** - Again, because of the CSS characteristic mentioned above, we have to have `once` and `repeat` defined separetely from `Animator.once` for the special case of transforms.
 
 @docs once, repeat, loop
 
@@ -772,12 +781,21 @@ px f =
 
 
 {-| -}
-opacity : (event -> Float) -> Attribute event
+style : String -> (Float -> String) -> (event -> Movement) -> Attribute event
+style name toString lookup =
+    Movement name lookup toString
+
+
+{-| -}
+color : String -> (event -> Color.Color) -> Attribute event
+color =
+    ColorAttribute
+
+
+{-| -}
+opacity : (event -> Movement) -> Attribute event
 opacity lookup =
-    Attribute
-        "opacity"
-        lookup
-        String.fromFloat
+    Movement "opacity" lookup String.fromFloat
 
 
 {-| -}
@@ -822,33 +840,6 @@ letterSpacing lookup =
 
 
 {- BACKGROUND -}
--- {-| -}
--- backgroundXy :
---     Timeline state
---     ->
---         (state
---          ->
---             { x : Movement
---             , y : Movement
---             }
---         )
---    -> Attribute event
--- backgroundXy timeline lookup =
---     { x =
---         Timeline.foldp
---             (lookup >> .x)
---             Interpolate.moving
---             timeline
---             |> unwrapUnits
---             |> .position
---     , y =
---         Timeline.foldp
---             (lookup >> .y)
---             Interpolate.moving
---             timeline
---             |> unwrapUnits
---             |> .position
---     }
 
 
 {-| -}
