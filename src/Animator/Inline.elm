@@ -61,14 +61,14 @@ borderColor timeline lookup =
 rotate : Timeline event -> (event -> Float) -> Html.Attribute msg
 rotate timeline lookup =
     Attr.style "transform"
-        ("rotate(" ++ String.fromFloat (Animator.float timeline lookup) ++ "rad)")
+        ("rotate(" ++ String.fromFloat (Animator.move timeline (Animator.at << lookup)) ++ "rad)")
 
 
 {-| -}
 scale : Timeline event -> (event -> Float) -> Html.Attribute msg
 scale timeline lookup =
     Attr.style "transform"
-        ("scale(" ++ String.fromFloat (Animator.float timeline lookup) ++ ")")
+        ("scale(" ++ String.fromFloat (Animator.move timeline (Animator.at << lookup)) ++ ")")
 
 
 {-| -}
