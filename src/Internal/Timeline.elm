@@ -8,7 +8,7 @@ module Internal.Timeline exposing
     , current
     , Adjustment, Line(..), Timetable(..)
     , foldp, capture, captureTimeline
-    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Oscillator(..), Pause(..), Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), atTime, gc, hasChanged, justInitialized, linesAreActive, prepareOscillator, previousEndTime, previousStartTime, updateNoGC
+    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Oscillator(..), Pause(..), Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), atTime, gc, hasChanged, justInitialized, linesAreActive, prepareOscillator, previous, previousEndTime, previousStartTime, updateNoGC
     )
 
 {-|
@@ -838,12 +838,12 @@ getTransitionAt interruptionTime startEvent trailing =
 
         next :: remain ->
             let
-                previous =
+                prev =
                     List.head remain
                         |> Maybe.withDefault startEvent
             in
-            if Time.thisAfterOrEqualThat interruptionTime (endTime previous) && Time.thisBeforeThat interruptionTime (startTime next) then
-                Just (LastTwoEvents (endTime previous) (getEvent previous) (startTime next) (getEvent next))
+            if Time.thisAfterOrEqualThat interruptionTime (endTime prev) && Time.thisBeforeThat interruptionTime (startTime next) then
+                Just (LastTwoEvents (endTime prev) (getEvent prev) (startTime next) (getEvent next))
 
             else
                 getTransitionAt interruptionTime startEvent remain
@@ -1808,9 +1808,42 @@ pass _ _ target _ _ _ _ =
     target
 
 
+getPrev _ maybePrevious target _ _ _ _ =
+    case maybePrevious of
+        Just p ->
+            p
+
+        Nothing ->
+            target
+
+
 type Status
     = Dwelling Time.Duration
     | Transitioning Float
+
+
+previous : Timeline event -> event
+previous ((Timeline details) as timeline) =
+    foldp
+        identity
+        { start =
+            \_ ->
+                details.initial
+        , dwellFor =
+            \cur duration ->
+                cur
+        , dwellPeriod = \_ -> Nothing
+        , adjustor =
+            \_ ->
+                { arrivingEarly = 0
+                , leavingLate = 0
+                }
+        , after =
+            \lookup target future ->
+                getEvent target
+        , lerp = getPrev
+        }
+        timeline
 
 
 status : Timeline event -> Status

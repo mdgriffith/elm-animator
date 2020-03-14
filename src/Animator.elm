@@ -1,12 +1,11 @@
 module Animator exposing
-    ( Timeline, init, initWith
-    , current
+    ( Timeline, init
+    , current, previous
     , Animator, animator, with, toSubscription, update
     , to, immediately, veryQuickly, quickly, slowly, verySlowly, toOver
     , Duration, millis, seconds
     , interrupt, queue, Step, wait, event
-    , color
-    , linear, float
+    , linear, color
     , Movement, move, xy, xyz
     , details
     , at
@@ -24,9 +23,9 @@ module Animator exposing
 
 {-|
 
-@docs Timeline, init, initWith
+@docs Timeline, init
 
-@docs current
+@docs current, previous
 
 
 # Animating
@@ -49,9 +48,7 @@ In that case, you'll want to define a list of steps and either interrupt what's 
 
 # Animating
 
-@docs color
-
-@docs linear, float
+@docs linear, color
 
 @docs Movement, move, xy, xyz
 
@@ -142,6 +139,12 @@ initWith now first =
 current : Timeline state -> state
 current =
     Timeline.current
+
+
+{-| -}
+previous : Timeline state -> state
+previous =
+    Timeline.previous
 
 
 {-| -}
@@ -360,13 +363,6 @@ linear timeline lookup =
         lookup
         Interpolate.linearly
         timeline
-
-
-{-| -}
-float : Timeline state -> (state -> Float) -> Float
-float timeline lookup =
-    .position <|
-        details timeline (\ev -> at (lookup ev))
 
 
 {-| -}
