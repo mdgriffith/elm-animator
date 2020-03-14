@@ -2,8 +2,8 @@ module Animator exposing
     ( Timeline, init, initWith
     , current
     , Animator, animator, with, toSubscription, update
-    , to
-    , Duration, millis, seconds, minutes
+    , to, immediately, veryQuickly, quickly, slowly, verySlowly, toOver
+    , Duration, millis, seconds
     , interrupt, queue, Step, wait, event
     , color
     , linear, float
@@ -36,9 +36,9 @@ module Animator exposing
 
 # Adding events to a timeline
 
-@docs to
+@docs to, immediately, veryQuickly, quickly, slowly, verySlowly, toOver
 
-@docs Duration, millis, seconds, minutes
+@docs Duration, millis, seconds
 
 In some cases you might want to define a series of states to animate through.
 
@@ -206,10 +206,53 @@ queue steps (Timeline.Timeline tl) =
         }
 
 
-{-| -}
-to : Duration -> state -> Timeline state -> Timeline state
-to dur ev timeline =
+{-| Specify the exact duration that this transtion should take.
+-}
+toOver : Duration -> state -> Timeline state -> Timeline state
+toOver dur ev timeline =
     interrupt [ event dur ev ] timeline
+
+
+{-| Immediately switch to a new state.
+-}
+immediately : state -> Timeline state -> Timeline state
+immediately ev timeline =
+    interrupt [ event (millis 0) ev ] timeline
+
+
+{-| Go to this new state in _100ms_.
+-}
+veryQuickly : state -> Timeline state -> Timeline state
+veryQuickly ev timeline =
+    interrupt [ event (millis 100) ev ] timeline
+
+
+{-| Go to this new state in _200ms_.
+-}
+quickly : state -> Timeline state -> Timeline state
+quickly ev timeline =
+    interrupt [ event (millis 200) ev ] timeline
+
+
+{-| Go to a new state in _250ms_. This is a nice default to start with, and then adjust up or down as necessary.
+-}
+to : state -> Timeline state -> Timeline state
+to ev timeline =
+    interrupt [ event (millis 250) ev ] timeline
+
+
+{-| Go to this new state in _400ms_.
+-}
+slowly : state -> Timeline state -> Timeline state
+slowly ev timeline =
+    interrupt [ event (millis 400) ev ] timeline
+
+
+{-| Go to this new state in _500ms_.
+-}
+verySlowly : state -> Timeline state -> Timeline state
+verySlowly ev timeline =
+    interrupt [ event (millis 500) ev ] timeline
 
 
 {-| -}
