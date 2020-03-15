@@ -1,17 +1,17 @@
 module Animator exposing
     ( Timeline, init
+    , Animator
+    , animator, with
+    , toSubscription, update
     , current, previous
-    , Animator, animator, with, toSubscription, update
     , to, immediately, veryQuickly, quickly, slowly, verySlowly, toOver
     , Duration, millis, seconds
-    , interrupt, queue, Step, wait, event
+    , Step, wait, event
+    , interrupt, queue
     , linear, color
-    , Movement, move, xy, xyz
-    , details
-    , at
-    , Proportion
-    , leaveSmoothly, leaveLate
-    , arriveSmoothly, arriveEarly
+    , Movement, at, move, xy, xyz
+    , leaveLate, arriveEarly
+    , leaveSmoothly, arriveSmoothly
     , withWobble
     , Oscillator, wave, wrap, zigzag, interpolate
     , loop, once, repeat
@@ -23,52 +23,106 @@ module Animator exposing
 
 {-|
 
+
+# Initial setup
+
 @docs Timeline, init
+
+@docs Animator
+
+@docs animator, with
+
+@docs toSubscription, update
+
+
+# Reading the timeline
+
+You might be wondering, 'How do we get our value "out" of a `Timeline`?'
+
+Good question! We can either ask for the `current` value or the `previous` one.
 
 @docs current, previous
 
 
-# Animating
+# Transitioning to a new state
 
-@docs Animator, animator, with, toSubscription, update
+Now that we have a `Timeline` set up, we likely want to set a new **value**.
 
+In order to do that we need to specify both:
 
-# Adding events to a timeline
+  - the new state we want to be in
+  - a `Duration` for how long this transition should take.
 
 @docs to, immediately, veryQuickly, quickly, slowly, verySlowly, toOver
 
 @docs Duration, millis, seconds
 
-In some cases you might want to define a series of states to animate through.
 
-In that case, you'll want to define a list of steps and either interrupt what's currently happening with them or queue them up.
+# Interruptions and Queueing
 
-@docs interrupt, queue, Step, wait, event
+In some more advanced cases you might want to define a _series_ of states to animate through instead of just going to one directly.
+
+    Animator.interrupt
+        [ Animator.wait (Animator.millis 300)
+
+        -- after waiting 300 milliseconds,
+        -- start transitioning to a new state, Griffyndor
+        -- Take 1 whole second to make the transition
+        , Animator.event (Animator.seconds 1) Griffyndor
+
+        -- Once we've arrived at Griffyndor,
+        -- immediately start transitioning to Slytherin
+        -- and take half a second to make the transition
+        , Animator.event (Animator.seconds 0.5) Slytherin
+        ]
+
+@docs Step, wait, event
+
+@docs interrupt, queue
 
 
 # Animating
 
+Finally, animating!
+
 @docs linear, color
 
-@docs Movement, move, xy, xyz
-
-@docs details
+@docs Movement, at, move, xy, xyz
 
 
-# Adjusting transition
+# Transition personality
 
-@docs at
+While there are some nice defaults baked in, sometimes you might want to adjust how an animation happens.
 
-@docs Proportion
+These adjustments all take a `Float` between `0` and `1`. Behind the scenes they will be clamped at those values.
 
-@docs leaveSmoothly, leaveLate
+@docs leaveLate, arriveEarly
 
-@docs arriveSmoothly, arriveEarly
+@docs leaveSmoothly, arriveSmoothly
 
 @docs withWobble
 
 
 # Resting at a state
+
+We've mostly talked about **transitioning** from one state to another, like moving from `True` to `False`.
+
+But what if we want an animation when we're just **resting** at a state?
+
+An obvious example would be an icon that spins when we're `Loading`.
+
+Well, in that case you can use an `Oscillator`.
+
+    case state of
+        Loaded ->
+            Animator.at 0
+
+        Loading ->
+            -- animate from 0 to 360 and
+            -- then wrap back around to 0
+            Animator.wrap 0 360
+                -- loop every 700ms
+                |> Animator.loop (Animator.millis 700)
 
 @docs Oscillator, wave, wrap, zigzag, interpolate
 
@@ -76,12 +130,51 @@ Once we've created an oscillator, we need to specify how long it should take and
 
 @docs loop, once, repeat
 
-Adjust an oscillator by adding pauses or shifting it.
-
 @docs pause, shift
 
 
 # Sprites
+
+Ok! What else could there be?
+
+What about the wonderful world of Sprite animation?
+
+Sprite animation is where we literally have a list of images and flip through them like a flip-book.
+
+Like Mario! In fact we have a [Mario example](Link to mario example)
+
+Here's an abreviated example of what the code looks like:
+
+    Animator.step model.mario <|
+        \(Mario action) ->
+            case action of
+                Walking ->
+                    -- if we're in a `Walking` state,
+                    -- then we're cycling through
+                    -- the following frames at
+                    -- 15 frames per second:
+                    --  step1, step2, stand
+                    Animator.framesWith
+                        { transition =
+                            sprite.tail.stand
+                        , resting =
+                            Animator.cycle
+                                (Animator.fps 15)
+                                [ sprite.tail.step1
+                                , sprite.tail.step2
+                                , sprite.tail.stand
+                                ]
+                        }
+
+                Jumping ->
+                    -- show a single frame
+                    sprite.tail.jump
+
+                Ducking ->
+                    sprite.tail.duck
+
+                Standing ->
+                    sprite.tail.stand
 
 @docs step
 
@@ -135,13 +228,20 @@ initWith now first =
         |> Timeline.update now
 
 
-{-| -}
+{-| Get the current `state` of the timeline.
+-}
 current : Timeline state -> state
 current =
     Timeline.current
 
 
-{-| -}
+{-| Get the previous `state` on this timeline.
+
+As you'll see in the [Notification example](), it means we can use `previous` to refer to data that we've already "deleted" or set to `Nothing`.
+
+How cool!
+
+-}
 previous : Timeline state -> state
 previous =
     Timeline.previous
@@ -188,7 +288,8 @@ wait =
     Wait
 
 
-{-| -}
+{-| Wait until the current timeline is **finished** and then continue with these new steps.
+-}
 queue : List (Step state) -> Timeline state -> Timeline state
 queue steps (Timeline.Timeline tl) =
     Timeline.Timeline
@@ -237,7 +338,18 @@ quickly ev timeline =
     interrupt [ event (millis 200) ev ] timeline
 
 
-{-| Go to a new state in _250ms_. This is a nice default to start with, and then adjust up or down as necessary.
+{-| Go to a new state in _250ms_.
+
+This is a nice default to start with, and then adjust up or down as necessary.
+
+**Note:** Here's [a very good overview on animation durations and speeds](https://uxdesign.cc/the-ultimate-guide-to-proper-use-of-animation-in-ux-10bd98614fa9).
+
+Choosing a nice duration can depend on:
+
+  - The size of the thing moving
+  - The type of movement
+  - The size of the screen
+
 -}
 to : state -> Timeline state -> Timeline state
 to ev timeline =
@@ -258,7 +370,8 @@ verySlowly ev timeline =
     interrupt [ event (millis 500) ev ] timeline
 
 
-{-| -}
+{-| Interrupt what's currently happening with a new list.
+-}
 interrupt : List (Step state) -> Timeline state -> Timeline state
 interrupt steps (Timeline.Timeline tl) =
     Timeline.Timeline
@@ -457,17 +570,15 @@ at =
 {- PERSONALITY -}
 
 
-{-| This is an alias for a `Float` between `0` and `1`.
+{-| This will make the transition use a spring instead of bezier curves!
 
-Behind the scenes it will be clamped at those values.
+  - `withWobble 0` - absolutely no wobble
+  - `withWobble 1` - all the wobble
+
+Use your wobble responsibly.
 
 -}
-type alias Proportion =
-    Float
-
-
-{-| -}
-withWobble : Proportion -> Movement -> Movement
+withWobble : Float -> Movement -> Movement
 withWobble p movement =
     case movement of
         Interpolate.Position dep arrival pos ->
@@ -479,17 +590,23 @@ withWobble p movement =
 
 
 -- {-| -}
--- smooth : Proportion
+-- smooth : Float
 -- smooth =
 --     0.4
 -- {-| -}
--- verySmooth : Proportion
+-- verySmooth : Float
 -- verySmooth =
 --     0.8
 
 
-{-| -}
-leaveLate : Proportion -> Movement -> Movement
+{-| Even though the transition officially starts at a certain time on the timeline, we can leave a little late.
+
+  - `0` means we leave at the normal time.
+  - `0.2` means we'll leave when the transition is at 20%
+  - `1` means we leave at the end of the transition and instantly flip to the new state at that time.
+
+-}
+leaveLate : Float -> Movement -> Movement
 leaveLate p movement =
     case movement of
         Interpolate.Position dep arrival pos ->
@@ -499,8 +616,20 @@ leaveLate p movement =
             Interpolate.Oscillate { dep | late = clamp 0 1 p } arrival dur fn
 
 
-{-| -}
-arriveEarly : Proportion -> Movement -> Movement
+{-| We can also arrive early to this state.
+
+  - `0` means we arrive at the normal time.
+  - `0.2` means we'll arrive early by 20% of the total duration.
+  - `1` means we arrive at the start of the transition. So basically we instantly transition over.
+
+**Weird math note:** `arriveEarly` and `leaveLate` will collaborate to figure out how the transition happens. If `arriveEarly` and `leaveLate` sum up to more `1` for a transition, then their sum will the new maximum. Likely you don't need to worry about this :D.
+
+The intended use for `arriveEarly` and `leaveLate` is for staggering items in a list like in our [Todo list example](`TODO: add link to example`).
+
+In those cases, these values are pretty small `~0.1`.
+
+-}
+arriveEarly : Float -> Movement -> Movement
 arriveEarly p movement =
     case movement of
         Interpolate.Position dep arrival pos ->
@@ -510,8 +639,19 @@ arriveEarly p movement =
             Interpolate.Oscillate dep { arrival | early = clamp 0 1 p } dur fn
 
 
-{-| -}
-leaveSmoothly : Proportion -> Movement -> Movement
+{-| Underneath the hood this library uses [Bézier curves](https://en.wikipedia.org/wiki/B%C3%A9zier_curve) to model motion.
+
+Because of this you can adjust the "smoothness" of the curve that's ultimately used.
+
+  - `leaveSmoothly 0` is essentially linear animation.
+  - `leaveSmoothly 1` means the animation will start slowly and smoothly begin to accelerate.
+
+`TODO:` Add some images to better communicate what's going on here. Consider different naming if anything intuitive pops up.
+
+**Note:** Animation frameworks usually have a concept of `easeIn`, which roughly translates to "leave slowly"
+
+-}
+leaveSmoothly : Float -> Movement -> Movement
 leaveSmoothly s movement =
     case movement of
         Interpolate.Position dep arrival pos ->
@@ -521,8 +661,13 @@ leaveSmoothly s movement =
             Interpolate.Oscillate { dep | slowly = clamp 0 1 s } arrival dur fn
 
 
-{-| -}
-arriveSmoothly : Proportion -> Movement -> Movement
+{-| We can also smooth out our arrival.
+
+  - `arriveSmoothly 0` means no smoothing, which means more of a linear animation.
+  - `arriveSmoothly 1` means the animation will "ease out" or "arrive slowly"
+
+-}
+arriveSmoothly : Float -> Movement -> Movement
 arriveSmoothly s movement =
     case movement of
         Interpolate.Position dep arrival pos ->
@@ -613,7 +758,7 @@ repeat n activeDuration osc =
 It's expecting a number between 0 and 1.
 
 -}
-shift : Proportion -> Oscillator -> Oscillator
+shift : Float -> Oscillator -> Oscillator
 shift x osc =
     case osc of
         Timeline.Oscillator pauses fn ->
@@ -635,7 +780,7 @@ wrapToUnit x =
 This pause time will be added to the time you specify using `loop`, so that you can adjust the pause without disturbing the original duration of the oscillator.
 
 -}
-pause : Duration -> Proportion -> Oscillator -> Oscillator
+pause : Duration -> Float -> Oscillator -> Oscillator
 pause forDuration val osc =
     case osc of
         Timeline.Oscillator pauses fn ->
@@ -661,7 +806,7 @@ wrap start end =
         )
 
 
-{-| This is basically a sine wave!
+{-| This is basically a sine wave! It will "wave" between the two numbers you give it.
 -}
 wave : Float -> Float -> Oscillator
 wave start end =
@@ -699,8 +844,12 @@ zigzag start end =
         )
 
 
-{-| -}
-interpolate : (Proportion -> Float) -> Oscillator
+{-| Or make whatever kind of oscillator you need!
+
+This takes a function which is given the progress of this oscillation as a `Float` between 0 and 1.
+
+-}
+interpolate : (Float -> Float) -> Oscillator
 interpolate interp =
     Timeline.Oscillator [] interp
 
@@ -719,25 +868,32 @@ type alias Resting item =
     Timeline.Resting item
 
 
-{-| -}
+{-| Show a single `sprite`
+-}
 frame : sprite -> Frames sprite
 frame =
     Timeline.Single
 
 
-{-| -}
+{-| Show this `sprite` for a number of frames. Only really useful if you're using [`walk`](#walk) or [`cycle`](#cycle).
+-}
 hold : Int -> sprite -> Frames sprite
 hold =
     Timeline.Hold
 
 
-{-| -}
+{-| Walk through a list of frames as we're transitioning to this state.
+-}
 walk : sprite -> List (Frames sprite) -> Frames sprite
 walk =
     Timeline.Walk
 
 
-{-| -}
+{-| Here we have the same distinction of **transition** and **resting** that the rest of the library has.
+
+With `framesWith` we can define
+
+-}
 framesWith :
     { transition : Frames item
     , resting : Resting item
@@ -760,7 +916,8 @@ fps =
     FramesPerSecond
 
 
-{-| -}
+{-| While we're at this specific state, `cycle` through a list of frames at this `fps`.
+-}
 cycle : FramesPerSecond -> List (Frames sprite) -> Resting sprite
 cycle (FramesPerSecond framesPerSecond) frames =
     let
@@ -770,7 +927,8 @@ cycle (FramesPerSecond framesPerSecond) frames =
     Timeline.Cycle (Timeline.Loop duration) frames
 
 
-{-| -}
+{-| Same as `cycle`, but only for `n` number of times.
+-}
 cycleN : Int -> FramesPerSecond -> List (Frames sprite) -> Resting sprite
 cycleN n (FramesPerSecond framesPerSecond) frames =
     let
@@ -962,7 +1120,33 @@ lastFrame myFrame =
             lastFrame frames
 
 
-{-| -}
+{-| An `Animator` knows how to read and write all the `Timelines` within your `Model`.
+
+Here's an animator from the [Checkbox.elm example](`TODO:` add link to example),
+
+    animator : Animator.Animator Model
+    animator =
+        Animator.animator
+            |> Animator.with
+                -- we tell the animator how
+                -- to get the checked timeline using .checked
+                .checked
+                -- and we tell the animator how
+                -- to update that timeline as well
+                (\newChecked model ->
+                    { model | checked = newChecked }
+                )
+
+Notice you could add any number of timelines to this animator.
+
+**Note:** You likely only need one animator for a given project.
+
+**Note 2:** Once we have an `Animator Model`, we have two more steps in order to set things up:
+
+  - [create a _subscription_](#toSubscription)
+  - [_update_ our model](#update)
+
+-}
 type alias Animator model =
     Timeline.Animator model
 
@@ -993,7 +1177,14 @@ with get set (Timeline.Animator isRunning updateModel) =
         )
 
 
-{-| -}
+{-| Convert an `Animator` to a subscription.
+
+This is where the animator will decide if a running animation needs another frame or not.
+
+    subscriptions model =
+        Animator.toSubscription Tick model animator
+
+-}
 toSubscription : (Time.Posix -> msg) -> model -> Animator model -> Sub msg
 toSubscription toMsg model (Timeline.Animator isRunning _) =
     if isRunning model then
@@ -1004,7 +1195,23 @@ toSubscription toMsg model (Timeline.Animator isRunning _) =
         Sub.none
 
 
-{-| -}
+{-| When new messages come in, we then need to update our model. This looks something like this:
+
+    type Msg
+        = Tick Time.Posix
+
+    update msg model =
+        case msg of
+            Tick newTime ->
+                ( Animator.update newTime animator model
+                , Cmd.none
+                )
+
+And voilà, we can begin animating!
+
+**Note:** For adding future timelines, all you need to do is add a new `with` to your `Animator`.
+
+-}
 update : Time.Posix -> Animator model -> model -> model
 update newTime (Timeline.Animator _ updateModel) model =
     updateModel newTime model
