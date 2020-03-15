@@ -1,7 +1,7 @@
 module Benchmarks exposing (main)
 
 import Animator
-import Animator.CSS
+import Animator.Css
 import Array
 import Benchmark exposing (..)
 import Benchmark.Runner exposing (BenchmarkProgram, program)
@@ -36,7 +36,7 @@ springs =
     in
     describe "Spring Calculations"
         [ benchmark "stepwise - 100 steps" <|
-            -- This turns out to be ~410% faster than the presolved differential equation
+            -- This turns out to be ~410% faster than the presolved differential equation on FF
             \_ ->
                 List.foldl
                     (\_ ->
@@ -143,18 +143,9 @@ basicInterpolation =
                 |> Timeline.update (Time.millisToPosix 1400)
     in
     describe "Interpolate to a point on a 4 event timeline"
-        [ benchmark "new interpolate to position" <|
+        [ benchmark "interpolate to position" <|
             \_ ->
                 Animator.details timeline toPos
-        , benchmark "interpolate to position" <|
-            \_ ->
-                Timeline.foldp
-                    Timeline.CaptureNow
-                    toPos
-                    Interpolate.startMoving
-                    Nothing
-                    Interpolate.move
-                    timeline
         , benchmark "iterating generation(60fps)" <|
             \_ ->
                 Timeline.capture 60
