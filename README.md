@@ -19,11 +19,11 @@ So, if you were previously storing a `Bool`, now you'd store `Animator.Timeline 
         ]
         [ text "👍" ]
 
-This library handles the animating for you!  (There is slightly more work to do to get started so start with the [**Checkbox example**]()
+This library handles the animation for you!  (There is slightly more work to do to get started so start with the [**Checkbox example**]())
 
-This approach is pretty cool!  It allows you to
+This approach is pretty cool!  It allows you to:
 
-- Model your animations in terms of the **model you're already storing**
+- Model your animations in terms of the **`Model` you're already storing**
 - Animate **any number of elements** while only tracking one timeline.  This is fantastic for rich animations that need to coordinate several components.
 
 This library also has the ability to dynamically generate **CSS `@keyframes`**, which means your animations can be very performant.
@@ -37,7 +37,7 @@ Let's check out some examples!
   - *How to **get started** with `elm-animator`*
   - *An idea of how to **incrementally upgrade** existing code to use animations*
   
-2. [**Loading**]() - Animate the loading state of a piece of content.  You can initially "load" something, and then update it as well.
+2. [**Loading**]() - Animate the loading state of a piece of content.
   - *How to animate **resting** states such as a loading spinner*
   - *Animate with content that's already been **deleted*** (whaaaa?!)
 
