@@ -1,6 +1,23 @@
 module Checkbox exposing (main)
 
-{-| -}
+{-| As you've probably figured out, this is a checkbox example!
+
+The main purpose of this example is to cover the basics of Elm Animator.
+
+You should checkout these places in the code, which are marked so you can search for them.
+
+It looks like a lot, but you likely only need to do 1-5 once per project!
+
+  - (1) - Instead of a `Bool`, we store an `Animator Bool` in our model.
+  - (2) - The `Animator Model`, which is the piece of code that knows how to update your model when a timeline changes.
+  - (3) - Start a timeline by using `Animator.init`
+  - (4) - Turning out `Timeline` into a subscription using `Animator.toSubscription`.
+  - (5) - Updating our model using our animator and the current time.
+
+  - (6) - Starting an animation
+  - (7) - Turning our timeline into inline styles.
+
+-}
 
 import Animator
 import Animator.Inline
@@ -12,10 +29,47 @@ import Html.Events as Events
 import Time
 
 
+
+{- (1) - In our model we'd normally store just a `Bool`.
+
+   However now we have an `Animator.Timeline Bool`
+
+-}
+
+
+type alias Model =
+    { checked : Animator.Timeline Bool
+    }
+
+
+{-| (2) - The first thing we do is create an `Animator Model`.
+
+It's job is to reach into our model and update our timelines when they need to be updated
+
+Notice you could add any number of timelines to this animator.
+
+**Note:** You likely only need one animator for a given project.
+
+-}
+animator : Animator.Animator Model
+animator =
+    Animator.animator
+        |> Animator.with
+            -- we tell the animator how
+            -- to get the checked timeline using .checked
+            .checked
+            -- and we tell the animator how
+            -- to update that timeline as well
+            (\newChecked model ->
+                { model | checked = newChecked }
+            )
+
+
 main =
     Browser.document
         { init =
             \() ->
+                -- (3) - How we create our timeline
                 ( { checked = Animator.init False
                   }
                 , Cmd.none
@@ -24,32 +78,11 @@ main =
         , update = update
         , subscriptions =
             \model ->
+                -- (4) - turning out Animator into a subscription
+                -- this is where the animator will decide to have a subscription to AnimationFrame or not.
                 animator
                     |> Animator.toSubscription Tick model
         }
-
-
-{-| This is the "animator", which is able to get and set each timeline you want animated.
-
-It will turn
-
--}
-animator : Animator.Animator Model
-animator =
-    Animator.animator
-        -- we tell the animator how to get the checked timeline using .checked
-        -- and we tell the animator how to update that timeline with updateChecked
-        |> Animator.with .checked updateChecked
-
-
-updateChecked newChecked model =
-    { model | checked = newChecked }
-
-
-{--}
-type alias Model =
-    { checked : Animator.Timeline Bool
-    }
 
 
 type Msg
@@ -63,14 +96,18 @@ update msg model =
         Tick newTime ->
             ( model
                 |> Animator.update newTime animator
+              -- (5) - Updating our model using our animator and the current time.
             , Cmd.none
             )
 
-        Check bool ->
+        Check newChecked ->
             ( { model
                 | checked =
+                    -- (6) - Here we're adding a new state to our timeline
+                    -- `quickly` is a function that says "go to our new state, newChecked, in 200ms"
+                    -- If you want to customize the duration of the transition, check out the docs!
                     model.checked
-                        |> Animator.to (Animator.millis 2000) bool
+                        |> Animator.quickly newChecked
               }
             , Cmd.none
             )
@@ -106,16 +143,7 @@ view model =
     }
 
 
-{-| Our actual checkbox!
 
-We want to animate the checked state.
-
-  - Animate the background color of the actual checkbox
-  - Animate the opacity of the checkmark
-  - Animate the rotation of the checkmark
-  - Animate the scale of the checkmark
-
--}
 viewHugeCheckbox : Animator.Timeline Bool -> Html Msg
 viewHugeCheckbox checked =
     div
@@ -130,6 +158,10 @@ viewHugeCheckbox checked =
             , Events.onClick (Check (not (Animator.current checked)))
             ]
             [ div
+                -- (7) - Rendering our timeline as inline styles.
+                -- What we're doing here is mapping our timeline states 
+                -- to what values they should be in the view.
+                -- Elm animator then uses these to interpolate where we should be.
                 [ Animator.Inline.backgroundColor checked <|
                     \state ->
                         if state then
