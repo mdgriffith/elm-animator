@@ -1,10 +1,16 @@
 module Animator.Inline exposing
     ( opacity
     , backgroundColor, textColor, borderColor
-    , translate, rotate, scale, transform
+    , style, color
+    , xy, rotate, scale, transform
     )
 
-{-|
+{-| This module contains some functions to render inline styles.
+
+The best way to get familiar with how to use this is to play with the [**Checkbox**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Checkbox.elm) example.
+
+**Note** - You'll need to make a decision between this module and `Animator.Css`.
+My general thinking is that `Inline` is more immediately intuitve, but `Css` has better performance, at least on Chrome.
 
 
 # Inline CSS
@@ -14,12 +20,16 @@ module Animator.Inline exposing
 @docs backgroundColor, textColor, borderColor
 
 
+## Custom
+
+If you can't find an attribute here, you might need to use `Animator.Inline.style` or `Animator.Inline.color` to create it!
+
+@docs style, color
+
+
 ## Transformations
 
-@docs translate, rotate, scale, transform
-
-
-# CSS Animations
+@docs xy, rotate, scale, transform
 
 -}
 
@@ -29,51 +39,66 @@ import Html
 import Html.Attributes as Attr
 
 
-{-| -}
-opacity : Timeline event -> (event -> Float) -> Html.Attribute msg
+{-| Change the opacity for an element.
+
+Here's what this looks like in practice.
+
+    div
+        [ Animator.Inline.opacity model.checked <|
+            \state ->
+                if state then
+                    Animator.at 1
+
+                else
+                    Animator.at 0
+        ]
+        [ Html.text "Hello!" ]
+
+-}
+opacity : Timeline event -> (event -> Movement) -> Html.Attribute msg
 opacity timeline lookup =
-    Attr.style "opacity"
-        (String.fromFloat (Animator.linear timeline lookup))
+    style timeline "opacity" String.fromFloat lookup
 
 
 {-| -}
 textColor : Timeline event -> (event -> Color) -> Html.Attribute msg
 textColor timeline lookup =
-    Attr.style "color"
-        (Color.toCssString (Animator.color timeline lookup))
+    color timeline "color" lookup
 
 
 {-| -}
 backgroundColor : Timeline event -> (event -> Color) -> Html.Attribute msg
 backgroundColor timeline lookup =
-    Attr.style "background-color"
-        (Color.toCssString (Animator.color timeline lookup))
+    color timeline "background-color" lookup
 
 
 {-| -}
 borderColor : Timeline event -> (event -> Color) -> Html.Attribute msg
 borderColor timeline lookup =
-    Attr.style "border-color"
-        (Color.toCssString (Animator.color timeline lookup))
+    color timeline "border-color" lookup
 
 
 {-| -}
-rotate : Timeline event -> (event -> Float) -> Html.Attribute msg
+rotate : Timeline event -> (event -> Movement) -> Html.Attribute msg
 rotate timeline lookup =
-    Attr.style "transform"
-        ("rotate(" ++ String.fromFloat (Animator.move timeline (Animator.at << lookup)) ++ "rad)")
+    style timeline
+        "transform"
+        (\r -> "rotate(" ++ String.fromFloat r ++ "rad)")
+        lookup
 
 
 {-| -}
-scale : Timeline event -> (event -> Float) -> Html.Attribute msg
+scale : Timeline event -> (event -> Movement) -> Html.Attribute msg
 scale timeline lookup =
-    Attr.style "transform"
-        ("scale(" ++ String.fromFloat (Animator.move timeline (Animator.at << lookup)) ++ ")")
+    style timeline
+        "transform"
+        (\s -> "scale(" ++ String.fromFloat s ++ ")")
+        lookup
 
 
 {-| -}
-translate : Timeline event -> (event -> { x : Movement, y : Movement }) -> Html.Attribute msg
-translate timeline lookup =
+xy : Timeline event -> (event -> { x : Movement, y : Movement }) -> Html.Attribute msg
+xy timeline lookup =
     let
         pos =
             Animator.xy timeline lookup
@@ -97,5 +122,15 @@ transform transmogrify =
         )
 
 
+{-| -}
+color : Timeline event -> String -> (event -> Color) -> Html.Attribute msg
+color timeline name lookup =
+    Attr.style name
+        (Color.toCssString (Animator.color timeline lookup))
 
-{- Generating CSS Animations -}
+
+{-| -}
+style : Timeline event -> String -> (Float -> String) -> (event -> Movement) -> Html.Attribute msg
+style timeline name toString lookup =
+    Attr.style name
+        (toString (Animator.move timeline lookup))
