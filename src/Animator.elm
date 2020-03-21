@@ -237,7 +237,7 @@ current =
 
 {-| Get the previous `state` on this timeline.
 
-As you'll see in the [Notification example](), it means we can use `previous` to refer to data that we've already "deleted" or set to `Nothing`.
+As you'll see in the [Loading example](https://github.com/mdgriffith/elm-animator/blob/master/examples/Loading.elm), it means we can use `previous` to refer to data that we've already "deleted" or set to `Nothing`.
 
 How cool!
 
