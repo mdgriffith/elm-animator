@@ -4,7 +4,7 @@ Bring animations to your Elm app!
 
 Check out the talk that goes with the library, [The Immutable Animator's Toolkit](https://www.youtube.com/watch?v=Nf4rElfA8SE)!
 
-The high level idea of library is to tracking timelines of values in your model and animating between them.
+The high level idea is to track timelines of values in your model and animate between them.
 
 So, if you were previously storing a `Bool`, now you'd store `Animator.Timeline Bool`, and you'd be able to animate the state transitions in your `view` 
 
