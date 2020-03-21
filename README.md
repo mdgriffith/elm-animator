@@ -19,7 +19,7 @@ So, if you were previously storing a `Bool`, now you'd store `Animator.Timeline 
         ]
         [ text "👍" ]
 
-This library handles the animation for you!  (There is slightly more work to do to get started so start with the [**Checkbox example**]())
+This library handles the animation for you!  (There is slightly more work to do to get started so start with the [**Checkbox example**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Checkbox.elm))
 
 This approach is pretty cool!  It allows you to:
 

@@ -624,7 +624,7 @@ leaveLate p movement =
 
 **Weird math note:** `arriveEarly` and `leaveLate` will collaborate to figure out how the transition happens. If `arriveEarly` and `leaveLate` sum up to more `1` for a transition, then their sum will the new maximum. Likely you don't need to worry about this :D.
 
-The intended use for `arriveEarly` and `leaveLate` is for staggering items in a list like in our [Todo list example](`TODO: add link to example`).
+The intended use for `arriveEarly` and `leaveLate` is for staggering items in a list like in our [Todo list example](https://github.com/mdgriffith/elm-animator/blob/master/examples/Todo.elm).
 
 In those cases, these values are pretty small `~0.1`.
 
@@ -1122,7 +1122,7 @@ lastFrame myFrame =
 
 {-| An `Animator` knows how to read and write all the `Timelines` within your `Model`.
 
-Here's an animator from the [Checkbox.elm example](`TODO:` add link to example),
+Here's an animator from the [Checkbox.elm example](https://github.com/mdgriffith/elm-animator/blob/master/examples/Checkbox.elm),
 
     animator : Animator.Animator Model
     animator =
