@@ -6,14 +6,13 @@ The main purpose of this example is to cover the basics of Elm Animator.
 
 You should checkout these places in the code, which are marked so you can search for them.
 
-It looks like a lot, but you likely only need to do 1-5 once per project!
+It looks like a lot, but much of it is only needed once per project!
 
   - (1) - Instead of a `Bool`, we store an `Animator Bool` in our model.
   - (2) - The `Animator Model`, which is the piece of code that knows how to update your model when a timeline changes.
   - (3) - Start a timeline by using `Animator.init`
   - (4) - Turning out `Timeline` into a subscription using `Animator.toSubscription`.
   - (5) - Updating our model using our animator and the current time.
-
   - (6) - Starting an animation
   - (7) - Turning our timeline into inline styles.
 
@@ -30,13 +29,11 @@ import Time
 
 
 
-{- (1) - In our model we'd normally store just a `Bool`.
+{-| (1) - In our model we'd normally store just a `Bool`.
 
    However now we have an `Animator.Timeline Bool`
 
 -}
-
-
 type alias Model =
     { checked : Animator.Timeline Bool
     }
