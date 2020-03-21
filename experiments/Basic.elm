@@ -21,7 +21,7 @@ import Time
 
 singleEvent =
     Animator.init Hufflepuff
-        |> Internal.Timeline.update (Time.millisToPosix 0)
+        |> Internal.Timeline.updateNoGC (Time.millisToPosix 0)
 
 
 doubleEvent =
@@ -30,7 +30,8 @@ doubleEvent =
             [ Animator.wait (Animator.seconds 1)
             , Animator.event (Animator.seconds 1) Griffyndor
             ]
-        |> Internal.Timeline.updateNoGC (Time.millisToPosix 1000)
+        |> Internal.Timeline.updateNoGC (Time.millisToPosix 0)
+        |> Debug.log "double event"
 
 
 fourContinuous =
@@ -54,7 +55,7 @@ fourWithPause =
             , Animator.event (Animator.seconds 1) Ravenclaw
             , Animator.wait (Animator.seconds 1)
             ]
-        |> Internal.Timeline.update (Time.millisToPosix 3409)
+        |> Internal.Timeline.updateNoGC (Time.millisToPosix 0)
 
 
 
@@ -64,15 +65,13 @@ fourWithPause =
 doubleInterrupted =
     doubleEvent
         |> Animator.to (Animator.seconds 1) Ravenclaw
-        |> Internal.Timeline.updateNoGC (Time.millisToPosix 2500)
-        |> Internal.Timeline.updateNoGC (Time.millisToPosix 3000)
+        |> Internal.Timeline.updateNoGC (Time.millisToPosix 1500)
 
 
 doubleInterruptedInterrupted =
     doubleInterrupted
         |> Animator.to (Animator.seconds 1) Slytherin
         |> Internal.Timeline.updateNoGC (Time.millisToPosix 3001)
-        |> Internal.Timeline.updateNoGC (Time.millisToPosix 3500)
 
 
 fourContinuousInterrupted =
@@ -97,7 +96,7 @@ fourWithPauseInterrupted =
             , Animator.event (Animator.seconds 1) Ravenclaw
             , Animator.wait (Animator.seconds 1)
             ]
-        |> Internal.Timeline.update (Time.millisToPosix 3450)
+        |> Internal.Timeline.updateNoGC (Time.millisToPosix 3000)
 
 
 main =
