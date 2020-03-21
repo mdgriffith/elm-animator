@@ -1,10 +1,10 @@
 # Elm Animator
 
-Add animations to your Elm app!
+Bring animations to your Elm app!
 
 Check out the talk that goes with the library, [The Immutable Animator's Toolkit](https://www.youtube.com/watch?v=Nf4rElfA8SE)!
 
-This library is about tracking timelines of values in your model and animating between them.
+The high level idea of library is to tracking timelines of values in your model and animating between them.
 
 So, if you were previously storing a `Bool`, now you'd store `Animator.Timeline Bool`, and you'd be able to animate the state transitions in your `view` 
 
@@ -30,26 +30,28 @@ This library also has the ability to dynamically generate **CSS `@keyframes`**, 
 
 Let's check out some examples!
 
-
 # Overview of examples
 
-1. [**Checkbox**]() - Animate a checkbox as it's checked.  It covers:
-  - *How to **get started** with `elm-animator`*
-  - *An idea of how to **incrementally upgrade** existing code to use animations*
+1. [**Checkbox**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Checkbox.elm) - Animate a checkbox as it's checked.  It covers:
+     - *How to **get started** with `elm-animator`*
+     - *An idea of how to **incrementally upgrade** existing code to use animations*
   
-2. [**Loading**]() - Animate the loading state of a piece of content.
-  - *How to animate **resting** states such as a loading spinner*
-  - *Animate with content that's already been **deleted*** (whaaaa?!)
+2. [**Loading**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Loading.elm) - Animate the loading state of a piece of content.
+     - *How to animate **resting** states such as a loading spinner*
+     - *Animate with content that's already been **deleted*** (whaaaa?!)
+     - How to do ***CSS Keyframe** generation*
 
-3. [**Page transitions**]() - Transition between pages 3d page transition with routing.
-  - *Set up routing so there are no page **reloads***
-  - *Animate the transition between pages*
-  - *How to capture `focus` and `hover` state in your model so you can animate it*
+3. [**Page transitions**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Pages.elm) - Transition between pages 3d page transition with routing.
+     - *Set up routing so there are no page **reloads***
+     - *Animate the transition between pages*
+     - ***CSS Keyframe** generation* (again)
+     - *How to capture `focus` and `hover` state in your model so you can animate it*
   
-4. [**Todo list**]() - An animated todo list, where items are sorted by if they're done.
-  - *Ask for bounding boxes for elements*
-  - *Animate something based on it's bounding box*
+4. [**Todo list**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Todo.elm) - An animated todo list, where items are sorted by if they're done.
+     - *Ask for bounding boxes for elements*
+     - *Animate something based on it's bounding box*
   
-5. [**Mario**]() - The classic Mario example!  Run around and jump.
-  - *How to get started with **sprite animation***
-  - *How to interact with a separate animation system such as physics code!*
+5. [**Mario**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Mario.elm) - The classic Mario example!  Run around and jump.
+     - *How to get started with **sprite animation***
+     - *How to interact with a separate animation system such as physics code!*
+
