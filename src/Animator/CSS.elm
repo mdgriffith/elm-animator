@@ -6,6 +6,7 @@ module Animator.Css exposing
     , backgroundColor
     , borderColor, borderRadius
     , style, color
+    , explain
     , transform
     , rotateTo, lookAt, rotating
     , scale, xy, xyz
@@ -49,6 +50,8 @@ module Animator.Css exposing
 
 # Transform
 
+@docs explain
+
 @docs transform
 
 @docs rotateTo, lookAt, rotating
@@ -65,7 +68,7 @@ module Animator.Css exposing
 
 **Note** - One of the difficulties in making an animation library for `CSS` is that operations such as `translate` and `rotate` need to be rendered as one proeprty called `transform`.
 
-While normally this isn't that big of a deal, one consequence for generating`CSS`keyframes is that all resting states for all transformations need to share the same `period`.
+While normally this isn't that big of a deal, one consequence for generating `CSS` keyframes is that all resting states for all transformations need to share the same `period`.
 
 Because of that, `in2d` and `in3d` are constructed a little differently instead of just using `Movement` like everything else.
 
@@ -97,6 +100,27 @@ type Attribute event
     | Attribute String (event -> Float) (Float -> String)
     | Movement String (event -> Movement) (Float -> String)
     | TransformAttr TransformOptions (event -> Transform)
+    | Explain Bool
+
+
+{-| This is a _debug_ tool for transformations.
+
+If you turn this on, it will show you:
+
+  - A grey bounding box so you get a sense of the element you're animating.
+
+  - A **red dot** at the center of the element. Any rotation will be around this point.
+
+    _You can adjust the dot's position using [`transformWith`](#transformWith) and setting a new origin._
+
+  - The coordinate axes. Yes, in _CSS_, y points down.
+
+![](https://mdgriffith.github.io/elm-animator/images/explain-example.png)
+
+-}
+explain : Bool -> Attribute event
+explain =
+    Explain
 
 
 {-| -}
@@ -110,7 +134,8 @@ type alias TransformOptions =
     }
 
 
-{-| -}
+{-| The origin for rotation. Defaults to the center of the element.
+-}
 type Origin
     = Center
     | Offset Float Float
@@ -122,7 +147,11 @@ center =
     Center
 
 
-{-| -}
+{-| This is the x and y offset, in pixels from the center of the object.
+
+Generally I found the most common case for adjusting the origin was when you want it mostly centered, but aligned to the visual center of an icon or image, which is offset by a number of pixels.
+
+-}
 offset : Float -> Float -> Origin
 offset =
     Offset
@@ -132,7 +161,13 @@ offset =
 {- ANIMATOR -}
 
 
-{-| -}
+{-| Because this module is able to generate CSS **Keyframes**, it means we don't have to subscribe to absolutely every Animation Frame!
+
+`Animator.Css.with` is different from `Animator.with` in that it will only ask for one frame when an animation is updated.of
+
+In that one frame, we render the entire css animation, which can run without Elm needing to do a full rerender.
+
+-}
 with :
     (model -> Timeline state)
     -> (Timeline state -> model -> model)
@@ -327,6 +362,9 @@ repeatToString rep =
 renderAttrs : Timeline event -> Attribute event -> List Anim -> List Anim
 renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
     case attr of
+        Explain _ ->
+            anim
+
         ColorAttribute attrName lookup ->
             renderAnimation details.now
                 attrName
@@ -729,7 +767,27 @@ stylesheet str =
         ]
 
 
-{-| -}
+{-| This is a single animated element.
+
+It's just like a normal `Html` node, except it also takes a `Timeline` and a list of attribtues you want to animate.
+
+Here's a checkbox that changes backgrounds as a brief example:
+
+     Animator.Css.animated model.checked
+        [ Animator.Css.backgroundColor<|
+            \checked ->
+                if checked then
+                    Color.rgb255 255 96 96
+
+                else
+                    Color.white
+        ]
+        [ Attr.style "height" "30px"
+        , Attr.style "width" "30px"
+        ]
+        [ Html.text "" ]
+
+-}
 animated :
     Timeline event
     -> List (Attribute event)
@@ -742,8 +800,19 @@ animated timeline animatedAttrs attrs children =
             List.foldl (renderAttrs timeline) [] animatedAttrs
                 |> List.reverse
 
-        -- transformOptions =
-        --     getTransformOptions animatedAttrs
+        transformOptions =
+            getTransformOptions animatedAttrs
+                |> Maybe.withDefault defaultTransformOptions
+
+        explainIsOn =
+            explainActive animatedAttrs
+
+        possiblyExplainAttr =
+            if explainIsOn then
+                Attr.style "position" "relative"
+
+            else
+                Attr.style "" ""
     in
     -- Html.Keyed.node "div"
     --     []
@@ -753,26 +822,198 @@ animated timeline animatedAttrs attrs children =
     --       )
     --     ]
     Html.div
-        (Attr.class (renderClassName "" animations) :: attrs)
+        (Attr.class (renderClassName "" animations)
+            :: possiblyExplainAttr
+            :: renderTransformOptions transformOptions
+            :: attrs
+        )
         (stylesheet (renderAnimations animations)
+            :: (if explainIsOn then
+                    explainElement transformOptions
+
+                else
+                    Html.text ""
+               )
             :: children
         )
 
 
+maybeAttr fn a =
+    case Maybe.map fn a of
+        Nothing ->
+            Attr.style "" ""
 
--- getTransformOptions attrs =
---     case attrs of
---         [] ->
---             [-- Attr.style "perspective" "20px"
---            -- , Attr.style "transform-origin" "center"
---             ]
---         (TransformAttr opts _) :: _ ->
---             -- [ Attr.style "perspective" (String.fromInt opts.perspective ++ "px")
---             -- , Attr.style "transform-origin" (originToString opts.origin)
---             -- ]
---             [
---         _ :: rest ->
---             getTransformOptions rest
+        Just attr ->
+            attr
+
+
+{-| Explain shows:
+
+-- bounding box for element, with current lookAt and
+
+-}
+explainElement : TransformOptions -> Html msg
+explainElement transformOptions =
+    Html.div
+        [ Attr.style "position" "absolute"
+        , Attr.style "width" "100%"
+        , Attr.style "height" "100%"
+        , Attr.style "background-color" "rgba(238, 238, 238, 0.4)"
+        , Attr.style "border" "2px solid #DDD"
+        ]
+        [ viewAxes transformOptions
+        ]
+
+
+originDot : Float -> Float -> Html msg
+originDot x y =
+    Html.div
+        [ Attr.style "position" "absolute"
+        , Attr.style "width" "6px"
+        , Attr.style "height" "6px"
+        , Attr.style "left" ("calc(50% + " ++ String.fromFloat x ++ "px - 3px)")
+        , Attr.style "top" ("calc(50% + " ++ String.fromFloat y ++ "px - 3px)")
+        , Attr.style "background-color" "red"
+        , Attr.style "border-radius" "3px"
+        ]
+        []
+
+
+viewAxes : TransformOptions -> Html msg
+viewAxes options =
+    let
+        ( x, y ) =
+            case options.origin of
+                Center ->
+                    Tuple.pair 0 0
+
+                Offset ox oy ->
+                    Tuple.pair ox oy
+    in
+    Html.div
+        [ Attr.style "position" "absolute"
+        , Attr.style "width" "0px"
+        , Attr.style "height" "0px"
+        , Attr.style "left" ("calc(50% + " ++ String.fromFloat x ++ "px - 3px)")
+        , Attr.style "top" ("calc(50% + " ++ String.fromFloat y ++ "px - 3px)")
+        ]
+        [ Html.div
+            [ Attr.style "position" "absolute"
+            , Attr.style "top" "10px"
+            , Attr.style "left" "-1px"
+            , Attr.style "width" "2px"
+            , Attr.style "height" "50px"
+            , Attr.style "background-color" "black"
+            ]
+            [ Html.div
+                [ Attr.style "position" "absolute"
+                , Attr.style "bottom" "-5px"
+                , Attr.style "left" "-3px"
+                , Attr.style "width" "0"
+                , Attr.style "height" "0"
+                , Attr.style "border-left" "4px solid transparent"
+                , Attr.style "border-right" "4px solid transparent"
+                , Attr.style "border-top" "8px solid black"
+                ]
+                []
+            , Html.div
+                [ Attr.style "position" "absolute"
+                , Attr.style "right" "-3px"
+                , Attr.style "bottom" "-22px"
+                , Attr.style "font-size" "12px"
+                ]
+                [ Html.text "Y"
+                ]
+            ]
+        , Html.div
+            [ Attr.style "position" "absolute"
+            , Attr.style "top" "-1px"
+            , Attr.style "left" "10px"
+            , Attr.style "width" "50px"
+            , Attr.style "height" "2px"
+            , Attr.style "background-color" "black"
+            ]
+            [ Html.div
+                [ Attr.style "position" "absolute"
+                , Attr.style "right" "-5px"
+                , Attr.style "top" "-3px"
+                , Attr.style "width" "0"
+                , Attr.style "height" "0"
+                , Attr.style "border-top" "4px solid transparent"
+                , Attr.style "border-bottom" "4px solid transparent"
+                , Attr.style "border-left" "8px solid black"
+                ]
+                []
+            , Html.div
+                [ Attr.style "position" "absolute"
+                , Attr.style "right" "-14px"
+                , Attr.style "top" "-6px"
+                , Attr.style "font-size" "12px"
+                ]
+                [ Html.text "X"
+                ]
+            ]
+        , Html.div
+            [ Attr.style "position" "absolute"
+            , Attr.style "width" "6px"
+            , Attr.style "height" "6px"
+            , Attr.style "left" "-3px"
+            , Attr.style "top" "-3px"
+            , Attr.style "background-color" "red"
+            , Attr.style "border-radius" "3px"
+            ]
+            []
+        , Html.div
+            [ Attr.style "position" "absolute"
+            , Attr.style "width" "12px"
+            , Attr.style "height" "12px"
+            , Attr.style "left" "-7px"
+            , Attr.style "top" "-7px"
+            , Attr.style "background-color" "transparent"
+            , Attr.style "border-radius" "7px"
+            , Attr.style "border" "1px solid red"
+            ]
+            []
+        ]
+
+
+explainActive : List (Attribute event) -> Bool
+explainActive attrs =
+    case attrs of
+        [] ->
+            False
+
+        (Explain on) :: others ->
+            on
+
+        skip :: others ->
+            explainActive others
+
+
+renderTransformOptions : TransformOptions -> Html.Attribute msg
+renderTransformOptions opts =
+    Attr.style "transform-origin"
+        (case opts.origin of
+            Center ->
+                "center"
+
+            Offset x y ->
+                ("calc(50% + " ++ String.fromFloat x ++ "px) calc(50% + ")
+                    ++ (String.fromFloat y ++ "px)")
+        )
+
+
+getTransformOptions : List (Attribute event) -> Maybe TransformOptions
+getTransformOptions attrs =
+    case attrs of
+        [] ->
+            Nothing
+
+        (TransformAttr opts _) :: _ ->
+            Just opts
+
+        _ :: rest ->
+            getTransformOptions rest
 
 
 px : Float -> String
@@ -793,9 +1034,9 @@ color =
 
 
 {-| -}
-opacity : (event -> Movement) -> Attribute event
+opacity : (event -> Float) -> Attribute event
 opacity lookup =
-    Movement "opacity" lookup String.fromFloat
+    Attribute "opacity" lookup String.fromFloat
 
 
 {-| -}
@@ -886,7 +1127,29 @@ type Transform
         }
 
 
-{-| **Note** - If you're doing 3d transformations, you should set a CSS `perspective` property either on this element or on a parent. If it's on a parent, then all elements will share a common `perspective` origin.
+{-| Move something around in 3d!
+
+This includes:
+
+    - scaling
+    - changing it's position
+    - rotation
+
+    Animator.Css.transform <|
+        \state ->
+            case state of
+                Stationary ->
+                    Animator.Css.xy
+                        { x = 0
+                        , y = 0
+                        }
+
+                Rotating ->
+                    -- do a full rotation every 5 seconds
+                    Animator.Css.rotating
+                        (Animator.seconds 5)
+
+**Note** - If you're doing 3d transformations, you should set a CSS `perspective` property either on this element or on a parent. If it's on a parent, then all elements will share a common `perspective` origin.
 
 So, add something like this to the parent element:
 
@@ -896,18 +1159,25 @@ So, add something like this to the parent element:
 -}
 transform : (state -> Transform) -> Attribute state
 transform =
-    TransformAttr
-        { rotationAxis =
-            { x = 0
-            , y = 0
-            , z = 1
-            }
-        , origin = Center
+    TransformAttr defaultTransformOptions
+
+
+defaultTransformOptions : TransformOptions
+defaultTransformOptions =
+    { rotationAxis =
+        { x = 0
+        , y = 0
+        , z = 1
         }
+    , origin = Center
+    }
 
 
 {-| -}
-transformWith : TransformOptions -> (state -> Transform) -> Attribute state
+transformWith :
+    TransformOptions
+    -> (state -> Transform)
+    -> Attribute state
 transformWith =
     TransformAttr
 
@@ -1042,7 +1312,19 @@ rotating dur =
         }
 
 
-{-| -}
+{-| Have this element "look at" a specifc point.
+
+The coordinates provided are relative to this element.
+
+The default, which is where the element is looking directly outwards from the screen is
+
+    Animator.Css.lookAt
+        { x = 0
+        , y = 0
+        , z = 1
+        }
+
+-}
 lookAt :
     { x : Float
     , y : Float
