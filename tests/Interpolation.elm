@@ -144,7 +144,7 @@ timeline =
             \time ->
                 let
                     found =
-                        Animator.details (Timeline.atTime time harryPotterHouseTimeline) toPosition
+                        Interpolate.details (Timeline.atTime time harryPotterHouseTimeline) toPosition
 
                     expected =
                         Estimate.velocity 32 time harryPotterHouseTimeline toPosition
@@ -200,7 +200,7 @@ timeline =
                     posAt time timetable =
                         let
                             position =
-                                Animator.details
+                                Interpolate.details
                                     (Timeline.atTime
                                         (Time.millisToPosix time)
                                         timetable
@@ -235,7 +235,7 @@ timeline =
                             |> Timeline.update (Time.millisToPosix 3000)
 
                     position =
-                        Animator.details
+                        Interpolate.details
                             (Timeline.atTime
                                 (Time.millisToPosix 1900)
                                 doubleEvent

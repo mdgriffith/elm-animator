@@ -42,25 +42,25 @@ occur =
 toVals event =
     case event of
         Starting ->
-            0
+            Animator.at 0
 
         One ->
-            1
+            Animator.at 1
 
         Two ->
-            2
+            Animator.at 2
 
         Three ->
-            3
+            Animator.at 3
 
         Four ->
-            4
+            Animator.at 4
 
         Five ->
-            5
+            Animator.at 5
 
         Unreachable ->
-            -1
+            Animator.at -1
 
 
 valueAtEquals time val tl =
@@ -71,7 +71,7 @@ valueAtEquals time val tl =
     in
     Expect.within
         (Absolute 0.001)
-        (Animator.float new toVals)
+        (Animator.move new toVals)
         val
 
 
@@ -279,7 +279,7 @@ interruptions =
                         Timeline.update (Time.millisToPosix t) newTimeline
                 in
                 Expect.atLeast 0
-                    (Animator.float new toVals)
+                    (Animator.move new toVals)
         , test "Correctly schedules when an interruption already occurred" <|
             \_ ->
                 let
@@ -694,7 +694,7 @@ tailRecursion =
                             |> Timeline.update (Time.millisToPosix 5000)
 
                     now =
-                        Animator.details
+                        Interpolate.details
                             (Timeline.atTime
                                 (Time.millisToPosix 1000000)
                                 newTimeline
@@ -833,13 +833,13 @@ ordering =
                     [ \tl ->
                         Expect.within
                             (Absolute 0.001)
-                            (.position (Animator.details tl toPosition))
-                            (.position (Animator.details (Timeline.gc tl) toPosition))
+                            (.position (Interpolate.details tl toPosition))
+                            (.position (Interpolate.details (Timeline.gc tl) toPosition))
                     , \tl ->
                         Expect.within
                             (Absolute 0.001)
-                            (.velocity (Animator.details tl toPosition))
-                            (.velocity (Animator.details (Timeline.gc tl) toPosition))
+                            (.velocity (Interpolate.details tl toPosition))
+                            (.velocity (Interpolate.details (Timeline.gc tl) toPosition))
                     ]
                     timelineAt
         , test "Harmless GC, test case 1" <|
@@ -874,13 +874,13 @@ ordering =
                     [ \tl ->
                         Expect.within
                             (Absolute 0.001)
-                            (.position (Animator.details tl toPosition))
-                            (.position (Animator.details (Timeline.gc tl) toPosition))
+                            (.position (Interpolate.details tl toPosition))
+                            (.position (Interpolate.details (Timeline.gc tl) toPosition))
                     , \tl ->
                         Expect.within
                             (Absolute 0.001)
-                            (.velocity (Animator.details tl toPosition))
-                            (.velocity (Animator.details (Timeline.gc tl) toPosition))
+                            (.velocity (Interpolate.details tl toPosition))
+                            (.velocity (Interpolate.details (Timeline.gc tl) toPosition))
                     ]
                     timelineAt
         , fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
@@ -898,7 +898,7 @@ ordering =
                         Timeline.atTime time actualTimeline
 
                     movement =
-                        Animator.details timelineAt toPosition
+                        Interpolate.details timelineAt toPosition
                 in
                 Expect.true "Is NaN"
                     (not (isNaN movement.position))

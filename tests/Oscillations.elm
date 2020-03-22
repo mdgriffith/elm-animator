@@ -107,7 +107,7 @@ oscillations =
             \_ ->
                 let
                     { position, velocity } =
-                        Animator.details single toPosition
+                        Interpolate.details single toPosition
                 in
                 Expect.within
                     (Absolute 0.001)
@@ -117,7 +117,7 @@ oscillations =
             \_ ->
                 let
                     { position, velocity } =
-                        Animator.details (Timeline.update (Time.millisToPosix 150) single) toPosition
+                        Interpolate.details (Timeline.update (Time.millisToPosix 150) single) toPosition
                 in
                 Expect.within
                     (Absolute 0.001)
@@ -129,7 +129,7 @@ oscillations =
                     myTimeline =
                         Animator.init Hufflepuff
                             |> Timeline.update (Time.millisToPosix 0)
-                            |> Animator.to (Animator.seconds 1) Griffyndor
+                            |> Animator.toOver (Animator.seconds 1) Griffyndor
                             |> Timeline.update (Time.millisToPosix 0)
 
                     position =
