@@ -1,7 +1,7 @@
 module Animator exposing
     ( Timeline, init
     , Animator
-    , animator, with
+    , animator, with, withPause
     , toSubscription, update
     , current, previous
     , to, immediately, veryQuickly, quickly, slowly, verySlowly, toOver
@@ -30,7 +30,7 @@ module Animator exposing
 
 @docs Animator
 
-@docs animator, with
+@docs animator, with, withPause
 
 @docs toSubscription, update
 
@@ -482,7 +482,7 @@ linear timeline lookup =
 move : Timeline state -> (state -> Movement) -> Float
 move timeline lookup =
     .position <|
-        details timeline lookup
+        Interpolate.details timeline lookup
 
 
 {-| -}
@@ -530,17 +530,6 @@ xyz timeline lookup =
             |> unwrapUnits
             |> .position
     }
-
-
-{-| -}
-details : Timeline state -> (state -> Movement) -> { position : Float, velocity : Float }
-details timeline lookup =
-    unwrapUnits
-        (Timeline.foldp
-            lookup
-            Interpolate.moving
-            timeline
-        )
 
 
 unwrapUnits { position, velocity } =
@@ -1158,8 +1147,37 @@ animator =
 
 
 {-| -}
-with : (model -> Timeline state) -> (Timeline state -> model -> model) -> Animator model -> Animator model
+with :
+    (model -> Timeline state)
+    -> (Timeline state -> model -> model)
+    -> Animator model
+    -> Animator model
 with get set (Timeline.Animator isRunning updateModel) =
+    Timeline.Animator
+        (\model ->
+            if isRunning model then
+                True
+
+            else
+                Timeline.needsUpdate (get model)
+        )
+        (\now model ->
+            let
+                newModel =
+                    updateModel now model
+            in
+            set (Timeline.update now (get newModel)) newModel
+        )
+
+
+{-| -}
+withPause :
+    (model -> Timeline state)
+    -> (Timeline state -> model -> model)
+    -> (state -> bool)
+    -> Animator model
+    -> Animator model
+withPause get set eventIsRestable (Timeline.Animator isRunning updateModel) =
     Timeline.Animator
         (\model ->
             if isRunning model then

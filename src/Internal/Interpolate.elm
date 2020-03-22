@@ -4,7 +4,7 @@ module Internal.Interpolate exposing
     , adjustTiming
     , dwellPeriod, afterMove, lerp
     , coloring, linearly, moving
-    , createSpline, findAtXOnSpline
+    , createSpline, details, findAtXOnSpline
     )
 
 {-|
@@ -219,6 +219,29 @@ log str val =
 -- Debug.log
 --     str
 --     val
+
+
+{-| -}
+details : Timeline.Timeline state -> (state -> Movement) -> { position : Float, velocity : Float }
+details timeline lookup =
+    unwrapUnits
+        (Timeline.foldp
+            lookup
+            moving
+            timeline
+        )
+
+
+unwrapUnits { position, velocity } =
+    { position =
+        case position of
+            Quantity.Quantity val ->
+                val
+    , velocity =
+        case velocity of
+            Quantity.Quantity val ->
+                val
+    }
 
 
 moving : Timeline.Interp event Movement State
