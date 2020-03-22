@@ -163,7 +163,7 @@ offset =
 
 {-| Because this module is able to generate CSS **Keyframes**, it means we don't have to subscribe to absolutely every Animation Frame!
 
-`Animator.Css.with` is different from `Animator.with` in that it will only ask for one frame when an animation is updated.of
+`Animator.Css.with` is different from `Animator.with` in that it will only ask for one frame when an animation is updated.
 
 In that one frame, we render the entire css animation, which can run without Elm needing to do a full rerender.
 
@@ -358,6 +358,21 @@ repeatToString rep =
             String.fromInt n
 
 
+stubColor : Color.Color -> String
+stubColor clr =
+    case Color.toRgba clr of
+        { red, green, blue, alpha } ->
+            (stubFloat red ++ "-")
+                ++ (stubFloat green ++ "-")
+                ++ (stubFloat blue ++ "-")
+                ++ stubFloat alpha
+
+
+stubFloat : Float -> String
+stubFloat f =
+    String.fromInt (round (f * 1000))
+
+
 {-| -}
 renderAttrs : Timeline event -> Attribute event -> List Anim -> List Anim
 renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
@@ -370,6 +385,7 @@ renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
                 attrName
                 (Timeline.capture 60 lookup Interpolate.coloring timeline)
                 Color.toCssString
+                stubColor
                 anim
 
         Attribute attrName lookup toString ->
@@ -377,6 +393,7 @@ renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
                 attrName
                 (Timeline.capture 60 lookup Interpolate.linearly timeline)
                 toString
+                stubFloat
                 anim
 
         Movement attrName lookup toString ->
@@ -384,6 +401,7 @@ renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
                 attrName
                 (Timeline.capture 60 lookup Interpolate.moving timeline)
                 (.position >> Pixels.inPixels >> toString)
+                (.position >> Pixels.inPixels >> stubFloat)
                 anim
 
         TransformAttr options lookupTransform ->
@@ -447,6 +465,7 @@ renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
                     Maybe.map (mapDwellFrames combined) rotation.dwell
                 }
                 transformToString
+                transformToStub
                 anim
 
 
@@ -635,23 +654,68 @@ transformToString details =
            )
 
 
-renderAnimation : Time.Absolute -> String -> Timeline.FramesSummary value -> (value -> String) -> List Anim -> List Anim
-renderAnimation now attrName frames renderer anims =
+transformToStub details =
     let
-        renderedFrames =
+        ( _, rotationAroundY ) =
+            toPolar
+                ( Pixels.inPixels details.facingZ.position
+                , Pixels.inPixels details.facingX.position
+                )
+
+        ( _, rotationAroundX ) =
+            toPolar
+                ( Pixels.inPixels details.facingZ.position
+                , Pixels.inPixels details.facingY.position
+                )
+    in
+    stubFloat (Pixels.inPixels details.x.position)
+        ++ "-"
+        ++ stubFloat (Pixels.inPixels details.y.position)
+        ++ "-"
+        ++ stubFloat (Pixels.inPixels details.z.position)
+        ++ "-"
+        ++ stubFloat rotationAroundY
+        ++ "-"
+        ++ stubFloat rotationAroundX
+        ++ "-"
+        ++ stubFloat details.aroundX
+        ++ "-"
+        ++ stubFloat details.aroundY
+        ++ "-"
+        ++ stubFloat details.aroundZ
+        ++ "-"
+        ++ stubFloat (Pixels.inPixels details.rotation.position)
+        ++ "-"
+        ++ stubFloat (Pixels.inPixels details.scaleX.position)
+        ++ "-"
+        ++ stubFloat (Pixels.inPixels details.scaleY.position)
+        ++ "-"
+        ++ stubFloat (Pixels.inPixels details.scaleZ.position)
+
+
+renderAnimation : Time.Absolute -> String -> Timeline.FramesSummary value -> (value -> String) -> (value -> String) -> List Anim -> List Anim
+renderAnimation now attrName frames renderer stubber anims =
+    let
+        rendered =
             renderFrame 0
                 (List.length frames.frames)
                 attrName
                 frames.frames
                 renderer
+                stubber
+                ""
                 ""
 
         name =
             -- NOTE, this needs better distinction or else there will be cross contamination
-            attrName ++ "-" ++ String.fromInt (floor (Time.inMilliseconds now))
+            attrName
+                ++ "-"
+                ++ String.fromInt (floor (Time.inMilliseconds now))
+                ++ "-"
+                ++ rendered.uniqueName
 
         newKeyFrames =
-            "@keyframes " ++ name ++ " {\n" ++ renderedFrames ++ "\n}"
+            "@keyframes " ++ name ++ " {\n" ++ rendered.frames ++ "\n}"
 
         duration =
             Duration.inMilliseconds frames.duration
@@ -677,6 +741,8 @@ renderAnimation now attrName frames renderer anims =
                         attrName
                         details.frames
                         renderer
+                        stubber
+                        ""
                         ""
 
                 dwell =
@@ -697,7 +763,7 @@ renderAnimation now attrName frames renderer anims =
                             Timeline.Loop _ ->
                                 LoopAnim
                     , timingFn = Linear
-                    , keyframes = "@keyframes " ++ name ++ "-dwell" ++ " {\n" ++ dwellFrames ++ "\n}"
+                    , keyframes = "@keyframes " ++ name ++ "-dwell" ++ " {\n" ++ dwellFrames.frames ++ "\n}"
                     }
             in
             dwell :: anim :: anims
@@ -711,11 +777,25 @@ renderAnimation now attrName frames renderer anims =
         0/1 ->
 
 -}
-renderFrame : Int -> Int -> String -> List (Timeline.Frame value) -> (value -> String) -> String -> String
-renderFrame i total name frames renderer rendered =
+renderFrame :
+    Int
+    -> Int
+    -> String
+    -> List (Timeline.Frame value)
+    -> (value -> String)
+    -> (value -> String)
+    -> String
+    -> String
+    ->
+        { frames : String
+        , uniqueName : String
+        }
+renderFrame i total name frames renderer stubber rendered stub =
     case frames of
         [] ->
-            rendered
+            { frames = rendered
+            , uniqueName = stub
+            }
 
         (Timeline.Frame percent frm) :: remain ->
             if total == 1 then
@@ -724,15 +804,16 @@ renderFrame i total name frames renderer rendered =
                         ("0% {" ++ name ++ ": " ++ renderer frm ++ ";}\n")
                             ++ ("100% {" ++ name ++ ": " ++ renderer frm ++ ";}\n")
                 in
-                -- renderFrame (i + 1) total name remain renderer (rendered ++ keyframe)
-                keyframe
+                { frames = keyframe
+                , uniqueName = stubber frm
+                }
 
             else
                 let
                     keyframe =
                         String.fromFloat (100 * percent) ++ "% {" ++ name ++ ": " ++ renderer frm ++ ";}\n"
                 in
-                renderFrame (i + 1) total name remain renderer (rendered ++ keyframe)
+                renderFrame (i + 1) total name remain renderer stubber (rendered ++ keyframe) (stub ++ stubber frm)
 
 
 
@@ -1131,23 +1212,25 @@ type Transform
 
 This includes:
 
-    - scaling
-    - changing it's position
-    - rotation
+  - scaling
+  - changing position
+  - rotation
 
-    Animator.Css.transform <|
-        \state ->
-            case state of
-                Stationary ->
-                    Animator.Css.xy
-                        { x = 0
-                        , y = 0
-                        }
+```
+Animator.Css.transform <|
+    \state ->
+        case state of
+            Stationary ->
+                Animator.Css.xy
+                    { x = 0
+                    , y = 0
+                    }
 
-                Rotating ->
-                    -- do a full rotation every 5 seconds
-                    Animator.Css.rotating
-                        (Animator.seconds 5)
+            Rotating ->
+                -- do a full rotation every 5 seconds
+                Animator.Css.rotating
+                    (Animator.seconds 5)
+```
 
 **Note** - If you're doing 3d transformations, you should set a CSS `perspective` property either on this element or on a parent. If it's on a parent, then all elements will share a common `perspective` origin.
 
