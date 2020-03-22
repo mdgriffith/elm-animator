@@ -36,12 +36,10 @@ Let's check out some examples!
      - *How to **get started** with `elm-animator`*
      - *An idea of how to **incrementally upgrade** existing code to use animations*
 
-
 2. [**Loading**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Loading.elm) - Animate the loading state of a piece of content.
      - *How to animate **resting** states such as a loading spinner*
      - _Animate with content that's already been **deleted**_ (whaaaa?!)
      - How to do _**CSS Keyframe** generation_
-
 
 3. [**Page transitions**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Pages.elm) - Transition between pages 3d page transition with routing.
      - *Set up routing so there are no page **reloads***
@@ -49,11 +47,9 @@ Let's check out some examples!
      - _**CSS Keyframe** generation_ (again)
      - *How to capture `focus` and `hover` state in your model so you can animate it*
 
-
 4. [**Todo list**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Todo.elm) - An animated todo list, where items are sorted by if they're done.
      - *Ask for bounding boxes for elements*
      - *Animate something based on it's bounding box*
-
 
 5. [**Mario**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Mario.elm) - The classic Mario example!  Run around and jump.
      - *How to get started with **sprite animation***
