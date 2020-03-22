@@ -1722,61 +1722,6 @@ zeroDuration =
 
 
 
--- {-|
---     if target.arriveEarly then
---         adjust time earlier
---         extend dwell (add dwell if none)
---     if target.leaveLate
---         extend dwell even further
--- -}
--- applyAdjustment :
---     (event -> anchor)
---     -> TimeAdjustor anchor
---     ->
---         { previousEventTime : Time.Absolute
---         , applied : Adjustment
---         }
---     -> Occurring event
---     -> Maybe (Occurring event)
---     -> ( Occurring event, Maybe Adjustment )
--- applyAdjustment lookup adjustor { previousEventTime, applied } ((Occurring event start end) as target) maybeLookAhead =
---     let
---         targetAdjustments =
---             adjustor (lookup event)
---         totalDuration =
---             Time.duration previousEventTime start
---         totalPortions =
---             max
---                 (applied.leavingLate + targetAdjustments.arrivingEarly)
---                 1
---         earlyBy =
---             Quantity.multiplyBy
---                 (targetAdjustments.arrivingEarly / totalPortions)
---                 totalDuration
---         lateBy =
---             case maybeLookAhead of
---                 Nothing ->
---                     zeroDuration
---                 Just lookAhead ->
---                     let
---                         lookAheadAdjustments =
---                             adjustor (lookup (getEvent lookAhead))
---                         totalLookAheadDuration =
---                             Time.duration (endTime target) (startTime lookAhead)
---                         totalLookAheadPortions =
---                             max
---                                 (targetAdjustments.leavingLate + lookAheadAdjustments.arrivingEarly)
---                                 1
---                     in
---                     Quantity.multiplyBy
---                         (targetAdjustments.leavingLate / totalLookAheadPortions)
---                         totalLookAheadDuration
---     in
---     ( Occurring event
---         (Time.rollbackBy earlyBy start)
---         (Time.advanceBy (Quantity.plus earlyBy lateBy) end)
---     , Just targetAdjustments
---     )
 {- BOOKKEEPING -}
 
 
