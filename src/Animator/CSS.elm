@@ -7,7 +7,7 @@ module Animator.Css exposing
     , borderColor, borderRadius
     , style, color
     , explain
-    , transform
+    , Transform, transform
     , rotateTo, lookAt, rotating
     , scale, xy, xyz
     , transformWith, TransformOptions, Origin, center, offset
@@ -52,7 +52,7 @@ module Animator.Css exposing
 
 @docs explain
 
-@docs transform
+@docs Transform, transform
 
 @docs rotateTo, lookAt, rotating
 
@@ -707,7 +707,6 @@ renderAnimation now attrName frames renderer stubber anims =
                 ""
 
         name =
-            -- NOTE, this needs better distinction or else there will be cross contamination
             attrName
                 ++ "-"
                 ++ String.fromInt (floor (Time.inMilliseconds now))
@@ -941,6 +940,7 @@ explainElement transformOptions =
         , Attr.style "height" "100%"
         , Attr.style "background-color" "rgba(238, 238, 238, 0.4)"
         , Attr.style "border" "2px solid #DDD"
+        , Attr.style "z-index" "10"
         ]
         [ viewAxes transformOptions
         ]
@@ -1115,9 +1115,9 @@ color =
 
 
 {-| -}
-opacity : (event -> Float) -> Attribute event
+opacity : (event -> Movement) -> Attribute event
 opacity lookup =
-    Attribute "opacity" lookup String.fromFloat
+    Movement "opacity" lookup String.fromFloat
 
 
 {-| -}
@@ -1190,7 +1190,15 @@ borderRadius lookup =
 {- TRANSFORMS -}
 
 
-{-| -}
+{-| This represents moving something around in 3d.
+
+This includes:
+
+  - scaling
+  - changing position
+  - rotation
+
+-}
 type Transform
     = Transform
         { x : Movement
@@ -1208,29 +1216,21 @@ type Transform
         }
 
 
-{-| Move something around in 3d!
+{-|
 
-This includes:
+    Animator.Css.transform <|
+        \state ->
+            case state of
+                Stationary ->
+                    Animator.Css.xy
+                        { x = 0
+                        , y = 0
+                        }
 
-  - scaling
-  - changing position
-  - rotation
-
-```
-Animator.Css.transform <|
-    \state ->
-        case state of
-            Stationary ->
-                Animator.Css.xy
-                    { x = 0
-                    , y = 0
-                    }
-
-            Rotating ->
-                -- do a full rotation every 5 seconds
-                Animator.Css.rotating
-                    (Animator.seconds 5)
-```
+                Rotating ->
+                    -- do a full rotation every 5 seconds
+                    Animator.Css.rotating
+                        (Animator.seconds 5)
 
 **Note** - If you're doing 3d transformations, you should set a CSS `perspective` property either on this element or on a parent. If it's on a parent, then all elements will share a common `perspective` origin.
 
@@ -1429,7 +1429,7 @@ lookAt coords (Transform trans) =
 {-| -}
 type Period
     = Loop Duration
-    | Repeat Float Duration
+    | Repeat Int Duration
 
 
 {-| -}
@@ -1445,7 +1445,7 @@ loop =
 
 
 {-| -}
-repeat : Float -> Duration -> Period
+repeat : Int -> Duration -> Period
 repeat =
     Repeat
 
@@ -1536,7 +1536,7 @@ renderOsc per oscillator =
                 Interpolate.defaultArrival
                 (case per of
                     Repeat i _ ->
-                        Timeline.Repeat 1 totalDuration
+                        Timeline.Repeat i totalDuration
 
                     Loop _ ->
                         Timeline.Loop totalDuration
