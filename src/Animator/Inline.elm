@@ -5,15 +5,14 @@ module Animator.Inline exposing
     , xy, rotate, scale, transform
     )
 
-{-| This module contains some functions to render inline styles.
+{-| Render inline styles.
 
-The best way to get familiar with how to use this is to play with the [**Checkbox**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Checkbox.elm) example.
+The best way is to play with the [**Checkbox**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Checkbox.elm) example.
 
-**Note** - You'll need to make a decision between this module and `Animator.Css`.
-My general thinking is that `Inline` is more immediately intuitve, but `Css` has better performance, at least on Chrome.
+**Note** - At some point you should check out `Animator.Css`. It has a few benefits over inline styles.
 
 
-# Inline CSS
+# Inline Styles
 
 @docs opacity
 

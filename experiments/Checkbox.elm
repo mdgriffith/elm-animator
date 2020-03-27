@@ -30,11 +30,7 @@ main =
         }
 
 
-{-| This is the "animator", which is able to get and set each timeline you want animated.
-
-It will turn
-
--}
+{-| -}
 subscriptions model =
     Animator.animator Tick
         -- we tell the animator how to get the checked timeline using .checked
@@ -256,10 +252,10 @@ viewPage model =
 
 animateFace page fn =
     let
-        animated =
+        anim =
             Animator.details page fn
     in
-    face animated.position
+    face anim.position
 
 
 face i =

@@ -1,6 +1,6 @@
 module Animator.Css exposing
     ( with
-    , animated
+    , div
     , Attribute, opacity, height, width
     , fontSize, fontColor, wordSpacing, letterSpacing
     , backgroundColor
@@ -16,11 +16,21 @@ module Animator.Css exposing
     , once, repeat, loop
     )
 
-{-|
+{-| Generate CSS keyframes for your animation!
+
+This can be a very performant because
+
+1.  CSS animations are executed efficiently by the browser.
+
+2.  We only have to ask for **one** `AnimationFrame` from the browser when an animation starts and we can render the entire animation.
+
+This means `Elm` only needs to run your view code once instead of 60 times a second.
+
+`Elm` is generally fast and efficient at all this! But it can be even faster to **skip the work all together**.
 
 @docs with
 
-@docs animated
+@docs div, node
 
 
 # Properties
@@ -161,11 +171,9 @@ offset =
 {- ANIMATOR -}
 
 
-{-| Because this module is able to generate CSS **Keyframes**, it means we don't have to subscribe to absolutely every Animation Frame!
+{-| `Animator.Css.with` is different from `Animator.with` in that it will only ask for one frame when an animation is updated.
 
-`Animator.Css.with` is different from `Animator.with` in that it will only ask for one frame when an animation is updated.
-
-In that one frame, we render the entire css animation, which can run without Elm needing to do a full rerender.
+In that one frame, we render the **entire CSS animation**, which can run without `Elm` needing to do a full rerender.
 
 -}
 with :
@@ -847,13 +855,13 @@ stylesheet str =
         ]
 
 
-{-| This is a single animated element.
+{-| This is a single div element.
 
 It's just like a normal `Html` node, except it also takes a `Timeline` and a list of attribtues you want to animate.
 
 Here's a checkbox that changes backgrounds as a brief example:
 
-     Animator.Css.animated model.checked
+     Animator.Css.div model.checked
         [ Animator.Css.backgroundColor<|
             \checked ->
                 if checked then
@@ -868,24 +876,37 @@ Here's a checkbox that changes backgrounds as a brief example:
         [ Html.text "" ]
 
 -}
-animated :
+div :
     Timeline event
     -> List (Attribute event)
     -> List (Html.Attribute msg)
     -> List (Html msg)
     -> Html msg
-animated timeline animatedAttrs attrs children =
+div =
+    node "div"
+
+
+{-| Same as `Animator.div`, but you can supply a node name like `button` or something.
+-}
+node :
+    String
+    -> Timeline event
+    -> List (Attribute event)
+    -> List (Html.Attribute msg)
+    -> List (Html msg)
+    -> Html msg
+node nodeName timeline divAttrs attrs children =
     let
         animations =
-            List.foldl (renderAttrs timeline) [] animatedAttrs
+            List.foldl (renderAttrs timeline) [] divAttrs
                 |> List.reverse
 
         transformOptions =
-            getTransformOptions animatedAttrs
+            getTransformOptions divAttrs
                 |> Maybe.withDefault defaultTransformOptions
 
         explainIsOn =
-            explainActive animatedAttrs
+            explainActive divAttrs
 
         possiblyExplainAttr =
             if explainIsOn then
@@ -897,11 +918,11 @@ animated timeline animatedAttrs attrs children =
     -- Html.Keyed.node "div"
     --     []
     --     [ ( "animator-stylesheet", stylesheet (renderAnimations animations) )
-    --     , ( "animated-node"
+    --     , ( "div-node"
     --       , Html.div (Attr.class (renderClassName "" animations) :: attrs) children
     --       )
     --     ]
-    Html.div
+    Html.node nodeName
         (Attr.class (renderClassName "" animations)
             :: possiblyExplainAttr
             :: renderTransformOptions transformOptions
