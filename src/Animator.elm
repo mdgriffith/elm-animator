@@ -15,7 +15,7 @@ module Animator exposing
     , withWobble
     , Oscillator, wave, wrap, zigzag, interpolate
     , loop, once, repeat
-    , pause, shift
+    , shift
     , step
     , Frames, frame, hold, walk, framesWith
     , Resting, FramesPerSecond, fps, cycle, cycleN
@@ -130,7 +130,7 @@ Once we've created an oscillator, we need to specify how long it should take and
 
 @docs loop, once, repeat
 
-@docs pause, shift
+@docs shift
 
 
 # Sprites
