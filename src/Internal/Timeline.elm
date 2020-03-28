@@ -353,7 +353,7 @@ update : Time.Posix -> Timeline event -> Timeline event
 update possiblyNow (Timeline timeline) =
     let
         -- we can only move forward with updating
-        -- This is so that the GC doesn't cause awkward skips.
+        -- This is so that the Animator event "GC" doesn't cause awkward skips.
         -- NOTE: for something like debug mode, we might want to disable this
         -- to allow scrubbing a timeline.
         now =
@@ -431,7 +431,7 @@ clean runGC details =
                     linesAreActive details.now lines
     in
     { details
-        | running = True --running: TODO: actually flag when active
+        | running = running
         , events =
             if runGC then
                 Timetable (garbageCollectOldEvents details.now [] events)

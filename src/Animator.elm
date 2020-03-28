@@ -8,8 +8,9 @@ module Animator exposing
     , Duration, millis, seconds
     , Step, wait, event
     , interrupt, queue
-    , linear, color
+    , color
     , Movement, at, move, xy, xyz
+    , linear
     , leaveLate, arriveEarly
     , leaveSmoothly, arriveSmoothly
     , withWobble
@@ -85,9 +86,21 @@ In some more advanced cases you might want to define a _series_ of states to ani
 
 Finally, animating!
 
-@docs linear, color
+This part of the package is for animating color and number **values** directly.
+
+_However!_ You're probably more interested in animating `CSS` or `Inline` styles.
+
+Those things live in the `Animator.Css`and `Animator.Inline` modules.
+
+Check them out on the side bar 👉
+
+Though you should also check out the 👇 [Transition Personality](#transition-personality) section as well.
+
+@docs color
 
 @docs Movement, at, move, xy, xyz
+
+@docs linear
 
 
 # Transition personality
@@ -468,21 +481,46 @@ color timeline lookup =
         timeline
 
 
-{-| Interpolate a float linearly between destinations.
+{-| Interpolate linearly between destinations. This is a shortcut to help you out.
+
+You can do this with `move` by doing
+
+    Animator.move timeline <|
+        \state ->
+            if state then
+                Animator.at 0
+                    |> Animator.leaveSmoothly 0
+                    |> Animator.arriveSmoothly 0
+
+            else
+                Animator.at 1
+                    |> Animator.leaveSmoothly 0
+                    |> Animator.arriveSmoothly 0
+
+Which is equivalent to
+
+    Animator.linear timeline <|
+        \state ->
+            if state then
+                Animator.at 0
+
+            else
+                Animator.at 1
+
 -}
-linear : Timeline state -> (state -> Float) -> Float
+linear : Timeline state -> (state -> Movement) -> Float
 linear timeline lookup =
-    Timeline.foldp
-        lookup
-        Interpolate.linearly
-        timeline
+    .position <|
+        Interpolate.details timeline
+            (Interpolate.withLinearDefault << lookup)
 
 
 {-| -}
 move : Timeline state -> (state -> Movement) -> Float
 move timeline lookup =
     .position <|
-        Interpolate.details timeline lookup
+        Interpolate.details timeline
+            (Interpolate.withStandardDefault << lookup)
 
 
 {-| -}
@@ -490,14 +528,14 @@ xy : Timeline state -> (state -> { x : Movement, y : Movement }) -> { x : Float,
 xy timeline lookup =
     { x =
         Timeline.foldp
-            (lookup >> .x)
+            (lookup >> .x >> Interpolate.withStandardDefault)
             Interpolate.moving
             timeline
             |> unwrapUnits
             |> .position
     , y =
         Timeline.foldp
-            (lookup >> .y)
+            (lookup >> .y >> Interpolate.withStandardDefault)
             Interpolate.moving
             timeline
             |> unwrapUnits
@@ -510,21 +548,21 @@ xyz : Timeline state -> (state -> { x : Movement, y : Movement, z : Movement }) 
 xyz timeline lookup =
     { x =
         Timeline.foldp
-            (lookup >> .x)
+            (lookup >> .x >> Interpolate.withStandardDefault)
             Interpolate.moving
             timeline
             |> unwrapUnits
             |> .position
     , y =
         Timeline.foldp
-            (lookup >> .y)
+            (lookup >> .y >> Interpolate.withStandardDefault)
             Interpolate.moving
             timeline
             |> unwrapUnits
             |> .position
     , z =
         Timeline.foldp
-            (lookup >> .z)
+            (lookup >> .z >> Interpolate.withStandardDefault)
             Interpolate.moving
             timeline
             |> unwrapUnits
@@ -546,13 +584,43 @@ unwrapUnits { position, velocity } =
 
 {-| -}
 type alias Movement =
-    Interpolate.Movement
+    Interpolate.DefaultableMovement
 
 
 {-| -}
 at : Float -> Movement
 at =
-    Interpolate.Position Interpolate.defaultDeparture Interpolate.defaultArrival
+    Interpolate.Position
+        Interpolate.FullDefault
+
+
+withDefault toDef currentDefault =
+    case currentDefault of
+        Interpolate.FullDefault ->
+            Interpolate.PartialDefault (toDef Interpolate.emptyDefaults)
+
+        Interpolate.PartialDefault thing ->
+            Interpolate.PartialDefault (toDef thing)
+
+
+applyOption toOption movement =
+    case movement of
+        Interpolate.Position personality pos ->
+            Interpolate.Position
+                (withDefault
+                    toOption
+                    personality
+                )
+                pos
+
+        Interpolate.Oscillate personality dur fn ->
+            Interpolate.Oscillate
+                (withDefault
+                    toOption
+                    personality
+                )
+                dur
+                fn
 
 
 
@@ -569,12 +637,7 @@ Use your wobble responsibly.
 -}
 withWobble : Float -> Movement -> Movement
 withWobble p movement =
-    case movement of
-        Interpolate.Position dep arrival pos ->
-            Interpolate.Position dep { arrival | wobbliness = clamp 0 1 p } pos
-
-        Interpolate.Oscillate dep arrival dur fn ->
-            Interpolate.Oscillate dep { arrival | wobbliness = clamp 0 1 p } dur fn
+    applyOption (\def -> { def | wobbliness = Interpolate.Specified (clamp 0 1 p) }) movement
 
 
 
@@ -597,12 +660,7 @@ withWobble p movement =
 -}
 leaveLate : Float -> Movement -> Movement
 leaveLate p movement =
-    case movement of
-        Interpolate.Position dep arrival pos ->
-            Interpolate.Position { dep | late = clamp 0 1 p } arrival pos
-
-        Interpolate.Oscillate dep arrival dur fn ->
-            Interpolate.Oscillate { dep | late = clamp 0 1 p } arrival dur fn
+    applyOption (\def -> { def | departLate = Interpolate.Specified (clamp 0 1 p) }) movement
 
 
 {-| We can also arrive early to this state.
@@ -620,12 +678,7 @@ In those cases, these values are pretty small `~0.1`.
 -}
 arriveEarly : Float -> Movement -> Movement
 arriveEarly p movement =
-    case movement of
-        Interpolate.Position dep arrival pos ->
-            Interpolate.Position dep { arrival | early = clamp 0 1 p } pos
-
-        Interpolate.Oscillate dep arrival dur fn ->
-            Interpolate.Oscillate dep { arrival | early = clamp 0 1 p } dur fn
+    applyOption (\def -> { def | arriveEarly = Interpolate.Specified (clamp 0 1 p) }) movement
 
 
 {-| Underneath the hood this library uses [Bézier curves](https://en.wikipedia.org/wiki/B%C3%A9zier_curve) to model motion.
@@ -635,19 +688,18 @@ Because of this you can adjust the "smoothness" of the curve that's ultimately u
   - `leaveSmoothly 0` is essentially linear animation.
   - `leaveSmoothly 1` means the animation will start slowly and smoothly begin to accelerate.
 
-`TODO:` Add some images to better communicate what's going on here. Consider different naming if anything intuitive pops up.
+Here's a general diagram of what's going on:
 
-**Note:** Animation frameworks usually have a concept of `easeIn`, which roughly translates to "leave slowly"
+![](https://mdgriffith.github.io/elm-animator/images/default-personality.png)
+
+**Note** - The values in the above diagram are the built in defaults for most movement in `elm-animator`. They come from [`Material Design`](https://material.io/design/motion/speed.html#easing).
+
+**Note 2** - An [interactive version of the above diagram](https://ellie-app.com/8rGqnRQ8B49a1) is also available.
 
 -}
 leaveSmoothly : Float -> Movement -> Movement
 leaveSmoothly s movement =
-    case movement of
-        Interpolate.Position dep arrival pos ->
-            Interpolate.Position { dep | slowly = clamp 0 1 s } arrival pos
-
-        Interpolate.Oscillate dep arrival dur fn ->
-            Interpolate.Oscillate { dep | slowly = clamp 0 1 s } arrival dur fn
+    applyOption (\def -> { def | departSlowly = Interpolate.Specified (clamp 0 1 s) }) movement
 
 
 {-| We can also smooth out our arrival.
@@ -658,12 +710,7 @@ leaveSmoothly s movement =
 -}
 arriveSmoothly : Float -> Movement -> Movement
 arriveSmoothly s movement =
-    case movement of
-        Interpolate.Position dep arrival pos ->
-            Interpolate.Position dep { arrival | slowly = clamp 0 1 s } pos
-
-        Interpolate.Oscillate dep arrival dur fn ->
-            Interpolate.Oscillate dep { arrival | slowly = clamp 0 1 s } dur fn
+    applyOption (\def -> { def | arriveSlowly = Interpolate.Specified (clamp 0 1 s) }) movement
 
 
 {-| -}
@@ -700,8 +747,8 @@ once activeDuration osc =
                 ( preparedFn, totalDuration ) =
                     Timeline.prepareOscillator activeDuration pauses fn
             in
-            Interpolate.Oscillate Interpolate.defaultDeparture
-                Interpolate.defaultArrival
+            Interpolate.Oscillate
+                Interpolate.FullDefault
                 (Timeline.Repeat 1 totalDuration)
                 preparedFn
 
@@ -718,8 +765,8 @@ loop activeDuration osc =
                 ( preparedFn, totalDuration ) =
                     Timeline.prepareOscillator activeDuration pauses fn
             in
-            Interpolate.Oscillate Interpolate.defaultDeparture
-                Interpolate.defaultArrival
+            Interpolate.Oscillate
+                Interpolate.FullDefault
                 (Timeline.Loop totalDuration)
                 preparedFn
 
@@ -736,8 +783,8 @@ repeat n activeDuration osc =
                 ( preparedFn, totalDuration ) =
                     Timeline.prepareOscillator activeDuration pauses fn
             in
-            Interpolate.Oscillate Interpolate.defaultDeparture
-                Interpolate.defaultArrival
+            Interpolate.Oscillate
+                Interpolate.FullDefault
                 (Timeline.Repeat n totalDuration)
                 preparedFn
 
@@ -1227,7 +1274,7 @@ toSubscription toMsg model (Timeline.Animator isRunning _) =
 
 And voilà, we can begin animating!
 
-**Note:** For adding future timelines, all you need to do is add a new `with` to your `Animator`.
+**Note:** To animate more things, all you need to do is add a new `with` to your `Animator`.
 
 -}
 update : Time.Posix -> Animator model -> model -> model

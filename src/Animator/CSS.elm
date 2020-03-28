@@ -16,7 +16,7 @@ module Animator.Css exposing
     , once, repeat, loop
     )
 
-{-| Generate CSS keyframes for your animation!
+{-| Animate with CSS keyframes.
 
 This can be a very performant because
 
@@ -26,11 +26,11 @@ This can be a very performant because
 
 This means `Elm` only needs to run your view code once instead of 60 times a second.
 
-`Elm` is generally fast and efficient at all this! But it can be even faster to **skip the work all together**.
+`Elm` is generally pretty fast and efficient at all this! But it can be even faster to **skip the work all together**.
 
 @docs with
 
-@docs div, node
+@docs div
 
 
 # Properties
@@ -56,6 +56,14 @@ This means `Elm` only needs to run your view code once instead of 60 times a sec
 # Custom
 
 @docs style, color
+
+**Note on Shadows and Filters** - You might be wondering why there is no `box-shadow` or `filter`.
+
+They're not supported first class because they're expensive by default.
+
+If you're trying to animate a `box-shadow`, your best bet is to render the box shadow once, in a separate element, and then only animate opacity on that element.
+
+Basically you want to recreate what is [described in this overview.](https://tobiasahlin.com/blog/how-to-animate-box-shadow/)
 
 
 # Transform
@@ -107,7 +115,7 @@ import Pixels
 {-| -}
 type Attribute event
     = ColorAttribute String (event -> Color)
-    | Attribute String (event -> Float) (Float -> String)
+    | Linear String (event -> Movement) (Float -> String)
     | Movement String (event -> Movement) (Float -> String)
     | TransformAttr TransformOptions (event -> Transform)
     | Explain Bool
@@ -219,7 +227,7 @@ type Repeat
 
 
 type TimingFn
-    = Linear
+    = LinearTiming
 
 
 renderAnimations : List Anim -> String
@@ -335,7 +343,7 @@ renderTiming str anim =
 timingFnName : TimingFn -> String
 timingFnName fn =
     case fn of
-        Linear ->
+        LinearTiming ->
             "linear"
 
 
@@ -396,18 +404,18 @@ renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
                 stubColor
                 anim
 
-        Attribute attrName lookup toString ->
+        Linear attrName lookup toString ->
             renderAnimation details.now
                 attrName
-                (Timeline.capture 60 lookup Interpolate.linearly timeline)
-                toString
-                stubFloat
+                (Timeline.capture 60 (lookup >> Interpolate.withLinearDefault) Interpolate.moving timeline)
+                (.position >> Pixels.inPixels >> toString)
+                (.position >> Pixels.inPixels >> stubFloat)
                 anim
 
         Movement attrName lookup toString ->
             renderAnimation details.now
                 attrName
-                (Timeline.capture 60 lookup Interpolate.moving timeline)
+                (Timeline.capture 60 (lookup >> Interpolate.withStandardDefault) Interpolate.moving timeline)
                 (.position >> Pixels.inPixels >> toString)
                 (.position >> Pixels.inPixels >> stubFloat)
                 anim
@@ -420,34 +428,34 @@ renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
                             deets
 
                 x =
-                    Timeline.capture 60 (lookup >> .x) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .x >> Interpolate.withStandardDefault) Interpolate.moving timeline
 
                 y =
-                    Timeline.capture 60 (lookup >> .y) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .y >> Interpolate.withStandardDefault) Interpolate.moving timeline
 
                 z =
-                    Timeline.capture 60 (lookup >> .z) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .z >> Interpolate.withStandardDefault) Interpolate.moving timeline
 
                 rotation =
-                    Timeline.capture 60 (lookup >> .rotate) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .rotate >> Interpolate.withLinearDefault) Interpolate.moving timeline
 
                 scaleX =
-                    Timeline.capture 60 (lookup >> .scaleX) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .scaleX >> Interpolate.withStandardDefault) Interpolate.moving timeline
 
                 scaleY =
-                    Timeline.capture 60 (lookup >> .scaleY) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .scaleY >> Interpolate.withStandardDefault) Interpolate.moving timeline
 
                 scaleZ =
-                    Timeline.capture 60 (lookup >> .scaleZ) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .scaleZ >> Interpolate.withStandardDefault) Interpolate.moving timeline
 
                 facingX =
-                    Timeline.capture 60 (lookup >> .facing >> .x) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .facing >> .x >> Interpolate.withStandardDefault) Interpolate.moving timeline
 
                 facingY =
-                    Timeline.capture 60 (lookup >> .facing >> .y) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .facing >> .y >> Interpolate.withStandardDefault) Interpolate.moving timeline
 
                 facingZ =
-                    Timeline.capture 60 (lookup >> .facing >> .z) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .facing >> .z >> Interpolate.withStandardDefault) Interpolate.moving timeline
 
                 combined =
                     toTransform options
@@ -732,7 +740,7 @@ renderAnimation now attrName frames renderer stubber anims =
             , duration = duration
             , delay = 0
             , repeat = RepeatAnim 1
-            , timingFn = Linear
+            , timingFn = LinearTiming
             , keyframes = newKeyFrames
             }
     in
@@ -769,7 +777,7 @@ renderAnimation now attrName frames renderer stubber anims =
 
                             Timeline.Loop _ ->
                                 LoopAnim
-                    , timingFn = Linear
+                    , timingFn = LinearTiming
                     , keyframes = "@keyframes " ++ name ++ "-dwell" ++ " {\n" ++ dwellFrames.frames ++ "\n}"
                     }
             in
@@ -882,20 +890,7 @@ div :
     -> List (Html.Attribute msg)
     -> List (Html msg)
     -> Html msg
-div =
-    node "div"
-
-
-{-| Same as `Animator.div`, but you can supply a node name like `button` or something.
--}
-node :
-    String
-    -> Timeline event
-    -> List (Attribute event)
-    -> List (Html.Attribute msg)
-    -> List (Html msg)
-    -> Html msg
-node nodeName timeline divAttrs attrs children =
+div timeline divAttrs attrs children =
     let
         animations =
             List.foldl (renderAttrs timeline) [] divAttrs
@@ -922,7 +917,7 @@ node nodeName timeline divAttrs attrs children =
     --       , Html.div (Attr.class (renderClassName "" animations) :: attrs) children
     --       )
     --     ]
-    Html.node nodeName
+    Html.div
         (Attr.class (renderClassName "" animations)
             :: possiblyExplainAttr
             :: renderTransformOptions transformOptions
@@ -1138,7 +1133,7 @@ color =
 {-| -}
 opacity : (event -> Movement) -> Attribute event
 opacity lookup =
-    Movement "opacity" lookup String.fromFloat
+    Linear "opacity" lookup String.fromFloat
 
 
 {-| -}
@@ -1553,8 +1548,8 @@ renderOsc per oscillator =
                 ( preparedFn, totalDuration ) =
                     Timeline.prepareOscillator activeDuration pauses fn
             in
-            Interpolate.Oscillate Interpolate.defaultDeparture
-                Interpolate.defaultArrival
+            Interpolate.Oscillate
+                Interpolate.FullDefault
                 (case per of
                     Repeat i _ ->
                         Timeline.Repeat i totalDuration

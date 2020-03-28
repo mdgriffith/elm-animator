@@ -1,10 +1,12 @@
 module Internal.Interpolate exposing
     ( Movement(..), State, derivativeOfEasing
     , defaultArrival, defaultDeparture
+    , linearArrival, linearDeparture
     , adjustTiming
     , dwellPeriod, afterMove, lerp
     , coloring, linearly, moving
-    , createSpline, details, findAtXOnSpline
+    , fillDefaults, DefaultablePersonality(..), DefaultOr(..)
+    , DefaultableMovement(..), createSpline, details, emptyDefaults, findAtXOnSpline, linearDefault, standardDefault, withLinearDefault, withStandardDefault
     )
 
 {-|
@@ -13,11 +15,15 @@ module Internal.Interpolate exposing
 
 @docs defaultArrival, defaultDeparture
 
+@docs linearArrival, linearDeparture
+
 @docs Period, adjustTiming
 
 @docs startMoving, dwellFor, dwellPeriod, afterMove, lerp
 
 @docs coloring, linearly, moving
+
+@docs fillDefaults, DefaultablePersonality, DefaultOr
 
 -}
 
@@ -30,22 +36,156 @@ import Pixels
 import Quantity
 
 
-{-|
+{-| -}
+type DefaultableMovement
+    = Oscillate DefaultablePersonality Period (Float -> Float)
+    | Position DefaultablePersonality Float
 
-    oscillate around a point
 
-    or go to a specific position
-
--}
+{-| -}
 type Movement
-    = Oscillate Departure Arrival Period (Float -> Float)
-    | Position Departure Arrival Float
+    = Osc Departure Arrival Period (Float -> Float)
+    | Pos Departure Arrival Float
 
 
 {-| Number betwen 0 and 1
 -}
 type alias Proportion =
     Float
+
+
+emptyDefaults =
+    { wobbliness = Default
+    , arriveEarly = Default
+    , arriveSlowly = Default
+    , departLate = Default
+    , departSlowly = Default
+    }
+
+
+fillDefaults : Personality -> DefaultablePersonality -> Personality
+fillDefaults builtInDefault specified =
+    case specified of
+        FullDefault ->
+            builtInDefault
+
+        PartialDefault partial ->
+            { wobbliness =
+                withDefault builtInDefault.wobbliness partial.wobbliness
+            , arriveEarly =
+                withDefault builtInDefault.arriveEarly partial.arriveEarly
+            , arriveSlowly =
+                withDefault builtInDefault.arriveSlowly partial.arriveSlowly
+            , departLate =
+                withDefault builtInDefault.departLate partial.departLate
+            , departSlowly =
+                withDefault builtInDefault.departSlowly partial.departSlowly
+            }
+
+
+withStandardDefault : DefaultableMovement -> Movement
+withStandardDefault defMovement =
+    case defMovement of
+        Oscillate specifiedPersonality period fn ->
+            let
+                personality =
+                    fillDefaults standardDefault specifiedPersonality
+            in
+            Osc
+                { late = personality.departLate
+                , slowly = personality.departSlowly
+                }
+                { wobbliness = personality.wobbliness
+                , early = personality.arriveEarly
+                , slowly = personality.arriveSlowly
+                }
+                period
+                fn
+
+        Position specifiedPersonality p ->
+            let
+                personality =
+                    fillDefaults standardDefault specifiedPersonality
+            in
+            Pos
+                { late = personality.departLate
+                , slowly = personality.departSlowly
+                }
+                { wobbliness = personality.wobbliness
+                , early = personality.arriveEarly
+                , slowly = personality.arriveSlowly
+                }
+                p
+
+
+withLinearDefault : DefaultableMovement -> Movement
+withLinearDefault defMovement =
+    case defMovement of
+        Oscillate specifiedPersonality period fn ->
+            let
+                personality =
+                    fillDefaults linearDefault specifiedPersonality
+            in
+            Osc
+                { late = personality.departLate
+                , slowly = personality.departSlowly
+                }
+                { wobbliness = personality.wobbliness
+                , early = personality.arriveEarly
+                , slowly = personality.arriveSlowly
+                }
+                period
+                fn
+
+        Position specifiedPersonality p ->
+            let
+                personality =
+                    fillDefaults linearDefault specifiedPersonality
+            in
+            Pos
+                { late = personality.departLate
+                , slowly = personality.departSlowly
+                }
+                { wobbliness = personality.wobbliness
+                , early = personality.arriveEarly
+                , slowly = personality.arriveSlowly
+                }
+                p
+
+
+withDefault : thing -> DefaultOr thing -> thing
+withDefault def defaultOr =
+    case defaultOr of
+        Default ->
+            def
+
+        Specified specified ->
+            specified
+
+
+type DefaultablePersonality
+    = FullDefault
+    | PartialDefault
+        { wobbliness : DefaultOr Proportion
+        , arriveEarly : DefaultOr Proportion
+        , arriveSlowly : DefaultOr Proportion
+        , departLate : DefaultOr Proportion
+        , departSlowly : DefaultOr Proportion
+        }
+
+
+type DefaultOr thing
+    = Default
+    | Specified thing
+
+
+type alias Personality =
+    { wobbliness : Proportion
+    , arriveEarly : Proportion
+    , arriveSlowly : Proportion
+    , departLate : Proportion
+    , departSlowly : Proportion
+    }
 
 
 {-| Arrival parameters:
@@ -71,6 +211,24 @@ type alias Departure =
     }
 
 
+standardDefault =
+    { departLate = 0
+    , departSlowly = 0.4
+    , wobbliness = 0
+    , arriveEarly = 0
+    , arriveSlowly = 0.8
+    }
+
+
+linearDefault =
+    { departLate = 0
+    , departSlowly = 0
+    , wobbliness = 0
+    , arriveEarly = 0
+    , arriveSlowly = 0
+    }
+
+
 defaultDeparture : Departure
 defaultDeparture =
     { late = 0
@@ -83,6 +241,21 @@ defaultArrival =
     { wobbliness = 0
     , early = 0
     , slowly = 0.8
+    }
+
+
+linearDeparture : Departure
+linearDeparture =
+    { late = 0
+    , slowly = 0
+    }
+
+
+linearArrival : Arrival
+linearArrival =
+    { wobbliness = 0
+    , early = 0
+    , slowly = 0
     }
 
 
@@ -183,10 +356,10 @@ startMoving : Movement -> State
 startMoving movement =
     { position =
         case movement of
-            Oscillate _ _ _ toX ->
+            Osc _ _ _ toX ->
                 Pixels.pixels (toX 0)
 
-            Position depart arrive x ->
+            Pos depart arrive x ->
                 Pixels.pixels x
     , velocity = Pixels.pixelsPerSecond 0
     }
@@ -195,12 +368,12 @@ startMoving movement =
 adjustTiming : Movement -> Timeline.Adjustment
 adjustTiming m =
     case m of
-        Oscillate departure arrival _ _ ->
+        Osc departure arrival _ _ ->
             { arrivingEarly = arrival.early
             , leavingLate = departure.late
             }
 
-        Position departure arrival _ ->
+        Pos departure arrival _ ->
             { arrivingEarly = arrival.early
             , leavingLate = departure.late
             }
@@ -258,22 +431,22 @@ moving =
 dwellPeriod : Movement -> Maybe Period
 dwellPeriod movement =
     case movement of
-        Position _ _ _ ->
+        Pos _ _ _ ->
             Nothing
 
-        Oscillate _ _ period _ ->
+        Osc _ _ period _ ->
             Just period
 
 
 dwellFor : Movement -> Time.Duration -> State
 dwellFor movement duration =
     case movement of
-        Position _ _ pos ->
+        Pos _ _ pos ->
             { position = Pixels.pixels pos
             , velocity = Pixels.pixelsPerSecond 0
             }
 
-        Oscillate _ _ period toX ->
+        Osc _ _ period toX ->
             case period of
                 Loop periodDuration ->
                     let
@@ -319,18 +492,18 @@ newLerp prevEndTime maybePrev target targetTime now maybeLookAhead state =
     let
         wobble =
             case target of
-                Oscillate _ arrival _ _ ->
+                Osc _ arrival _ _ ->
                     arrival.wobbliness
 
-                Position _ arrival _ ->
+                Pos _ arrival _ ->
                     arrival.wobbliness
 
         nothingHappened =
             case target of
-                Oscillate _ _ _ _ ->
+                Osc _ _ _ _ ->
                     False
 
-                Position _ _ x ->
+                Pos _ _ x ->
                     (x == Pixels.inPixels state.position)
                         && (Pixels.inPixelsPerSecond state.velocity == 0)
     in
@@ -354,10 +527,10 @@ lerp lookup previous target future now state =
     let
         wobble =
             case lookup (Timeline.getEvent target) of
-                Oscillate _ arrival _ _ ->
+                Osc _ arrival _ _ ->
                     arrival.wobbliness
 
-                Position _ arrival _ ->
+                Pos _ arrival _ ->
                     arrival.wobbliness
     in
     if future == [] && wobble /= 0 then
@@ -370,10 +543,10 @@ lerp lookup previous target future now state =
 afterMove lookup target future =
     { position =
         case lookup (Timeline.getEvent target) of
-            Oscillate depart arrive period toX ->
+            Osc depart arrive period toX ->
                 Pixels.pixels (toX 0)
 
-            Position _ _ x ->
+            Pos _ _ x ->
                 Pixels.pixels x
     , velocity =
         velocityAtTarget lookup target (List.head future)
@@ -386,18 +559,18 @@ newSpringInterpolation prevEndTime _ target targetTime now _ state =
     let
         wobble =
             case target of
-                Oscillate _ arrival _ _ ->
+                Osc _ arrival _ _ ->
                     arrival.wobbliness
 
-                Position _ arrival _ ->
+                Pos _ arrival _ ->
                     arrival.wobbliness
 
         targetPos =
             case target of
-                Oscillate _ _ _ toX ->
+                Osc _ _ _ toX ->
                     toX 0
 
-                Position _ _ x ->
+                Pos _ _ x ->
                     x
 
         duration =
@@ -426,18 +599,18 @@ springInterpolation lookup previous target now state =
     let
         wobble =
             case lookup (Timeline.getEvent target) of
-                Oscillate _ arrival _ _ ->
+                Osc _ arrival _ _ ->
                     arrival.wobbliness
 
-                Position _ arrival _ ->
+                Pos _ arrival _ ->
                     arrival.wobbliness
 
         targetPos =
             case lookup (Timeline.getEvent target) of
-                Oscillate _ _ _ toX ->
+                Osc _ _ _ toX ->
                     toX 0
 
-                Position _ _ x ->
+                Pos _ _ x ->
                     x
 
         duration =
@@ -465,20 +638,20 @@ newInterpolateBetween startTimeInMs maybePrevious target targetTimeInMs now mayb
     let
         targetPosition =
             case target of
-                Oscillate _ _ _ toX ->
+                Osc _ _ _ toX ->
                     Pixels.pixels (toX 0)
 
-                Position _ _ x ->
+                Pos _ _ x ->
                     Pixels.pixels x
 
         targetVelocity =
             case maybeLookAhead of
                 Nothing ->
                     case target of
-                        Position _ _ _ ->
+                        Pos _ _ _ ->
                             0
 
-                        Oscillate _ _ period toX ->
+                        Osc _ _ period toX ->
                             case period of
                                 Loop periodDuration ->
                                     Pixels.inPixelsPerSecond (derivativeOfEasing toX periodDuration 0)
@@ -504,10 +677,10 @@ newInterpolateBetween startTimeInMs maybePrevious target targetTimeInMs now mayb
                         Nothing ->
                             nullDeparture
 
-                        Just (Position departure _ _) ->
+                        Just (Pos departure _ _) ->
                             departure
 
-                        Just (Oscillate departure _ _ _) ->
+                        Just (Osc departure _ _ _) ->
                             departure
                 , end =
                     { x = targetTimeInMs
@@ -519,10 +692,10 @@ newInterpolateBetween startTimeInMs maybePrevious target targetTimeInMs now mayb
                     }
                 , arrival =
                     case target of
-                        Position _ arrival _ ->
+                        Pos _ arrival _ ->
                             arrival
 
-                        Oscillate _ arrival _ _ ->
+                        Osc _ arrival _ _ ->
                             arrival
                 }
 
@@ -623,10 +796,10 @@ interpolateBetween lookup previous ((Timeline.Occurring target targetTime maybeT
     let
         targetPosition =
             case lookup target of
-                Oscillate _ _ _ toX ->
+                Osc _ _ _ toX ->
                     Pixels.pixels (toX 0)
 
-                Position _ _ x ->
+                Pos _ _ x ->
                     Pixels.pixels x
 
         targetTimeInMs =
@@ -763,18 +936,18 @@ newVelocityAtTarget target targetTime lookAhead =
     let
         targetPosition =
             case target of
-                Oscillate _ _ _ toX ->
+                Osc _ _ _ toX ->
                     Pixels.pixels (toX 0)
 
-                Position _ _ x ->
+                Pos _ _ x ->
                     Pixels.pixels x
     in
     case lookAhead.anchor of
-        Position _ _ aheadPosition ->
+        Pos _ _ aheadPosition ->
             -- our target velocity is the linear velocity between target and lookahead
             velocityBetween targetPosition (Time.millis targetTime) (Pixels.pixels aheadPosition) (Time.millis lookAhead.time)
 
-        Oscillate _ _ period toX ->
+        Osc _ _ period toX ->
             if lookAhead.resting then
                 case period of
                     Loop periodDuration ->
@@ -796,10 +969,10 @@ velocityAtTarget lookup ((Timeline.Occurring target targetTime targetEndTime) as
         case maybeLookAhead of
             Nothing ->
                 case lookup target of
-                    Position _ _ _ ->
+                    Pos _ _ _ ->
                         Pixels.pixelsPerSecond 0
 
-                    Oscillate _ _ period toX ->
+                    Osc _ _ period toX ->
                         -- if there's no dwell and no lookahead,
                         -- then we're approaching the last event
                         -- which will "dwell" automatically
@@ -819,18 +992,18 @@ velocityAtTarget lookup ((Timeline.Occurring target targetTime targetEndTime) as
                 let
                     targetPosition =
                         case lookup target of
-                            Oscillate _ _ _ toX ->
+                            Osc _ _ _ toX ->
                                 Pixels.pixels (toX 0)
 
-                            Position _ _ x ->
+                            Pos _ _ x ->
                                 Pixels.pixels x
                 in
                 case lookup lookAhead of
-                    Position _ _ aheadPosition ->
+                    Pos _ _ aheadPosition ->
                         -- our target velocity is the linear velocity between target and lookahead
                         velocityBetween targetPosition targetTime (Pixels.pixels aheadPosition) aheadTime
 
-                    Oscillate _ _ period toX ->
+                    Osc _ _ period toX ->
                         if aheadEndTime == aheadTime then
                             velocityBetween targetPosition targetTime (Pixels.pixels (toX 0)) aheadTime
 
@@ -844,10 +1017,10 @@ velocityAtTarget lookup ((Timeline.Occurring target targetTime targetEndTime) as
 
     else
         case lookup target of
-            Position _ _ _ ->
+            Pos _ _ _ ->
                 Pixels.pixelsPerSecond 0
 
-            Oscillate _ _ period toX ->
+            Osc _ _ period toX ->
                 case period of
                     Loop periodDuration ->
                         derivativeOfEasing toX periodDuration 0
@@ -858,19 +1031,19 @@ velocityAtTarget lookup ((Timeline.Occurring target targetTime targetEndTime) as
 
 getDeparture lookup (Timeline.Occurring event _ _) =
     case lookup event of
-        Position departure _ _ ->
+        Pos departure _ _ ->
             departure
 
-        Oscillate departure _ _ _ ->
+        Osc departure _ _ _ ->
             departure
 
 
 getArrival lookup (Timeline.Occurring event _ _) =
     case lookup event of
-        Position _ arrival _ ->
+        Pos _ arrival _ ->
             arrival
 
-        Oscillate _ arrival _ _ ->
+        Osc _ arrival _ _ ->
             arrival
 
 
