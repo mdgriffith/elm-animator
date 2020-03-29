@@ -694,7 +694,7 @@ Here's a general diagram of what's going on:
 
 **Note** - The values in the above diagram are the built in defaults for most movement in `elm-animator`. They come from [`Material Design`](https://material.io/design/motion/speed.html#easing).
 
-**Note 2** - An [interactive version of the above diagram](https://ellie-app.com/8rGqnRQ8B49a1) is also available.
+**Note 2** - An [interactive version of the above diagram](https://ellie-app.com/8s2yjQzQmZda1) is also available.
 
 -}
 leaveSmoothly : Float -> Movement -> Movement
