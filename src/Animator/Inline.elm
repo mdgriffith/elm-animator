@@ -1,8 +1,8 @@
 module Animator.Inline exposing
     ( opacity
     , backgroundColor, textColor, borderColor
-    , style, color
     , xy, rotate, scale, transform
+    , style, linear, color
     )
 
 {-| Render inline styles.
@@ -19,16 +19,16 @@ The best way is to play with the [**Checkbox**](https://github.com/mdgriffith/el
 @docs backgroundColor, textColor, borderColor
 
 
+## Transformations
+
+@docs xy, rotate, scale, transform
+
+
 ## Custom
 
 If you can't find an attribute here, you might need to use `Animator.Inline.style` or `Animator.Inline.color` to create it!
 
-@docs style, color
-
-
-## Transformations
-
-@docs xy, rotate, scale, transform
+@docs style, linear, color
 
 -}
 
@@ -133,3 +133,11 @@ style : Timeline event -> String -> (Float -> String) -> (event -> Movement) -> 
 style timeline name toString lookup =
     Attr.style name
         (toString (Animator.move timeline lookup))
+
+
+{-| Sets the default to `linear`. See the note on `Animator.linear` for more details!
+-}
+linear : Timeline event -> String -> (Float -> String) -> (event -> Movement) -> Html.Attribute msg
+linear timeline name toString lookup =
+    Attr.style name
+        (toString (Animator.linear timeline lookup))
