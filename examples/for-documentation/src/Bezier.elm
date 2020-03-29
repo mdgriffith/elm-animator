@@ -183,9 +183,10 @@ view model =
         [ Html.div
             [ Attr.style "display" "flex"
             , Attr.style "flex-direction" "row"
-            , Attr.style "width" "1000px"
+            , Attr.style "width" "600px"
+            , Attr.style "box-sizing" "border-box"
             , Attr.style "justify-content" "center"
-            , Attr.style "padding" "100px"
+            , Attr.style "padding-top" "50px"
             ]
             [ Html.button
                 [ Attr.style "border" "2px solid black"
@@ -208,9 +209,9 @@ view model =
                 [ Html.text "Elm Animator Default" ]
             ]
         , svg
-            [ width "1000"
+            [ width "800"
             , height "1000"
-            , viewBox "-0.6 -0.2 1.8 1.8"
+            , viewBox "-0.2 -0.2 1.8 1.8"
             ]
             [ Svg.path
                 [ fill "none"
@@ -280,7 +281,7 @@ adjust label moving point =
 
 
 factor =
-    1.8 / 1000
+    1.8 / 800
 
 
 viewCircle point label =
@@ -431,10 +432,6 @@ renderPath points =
                         |> String.join " "
                    )
            )
-
-
-
--- "M 10,90 C 30,90 25,10 50,10"
 
 
 renderPoint point =
