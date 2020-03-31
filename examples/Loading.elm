@@ -105,10 +105,6 @@ update msg model =
             )
 
         NewCommentFromServer comment ->
-            let
-                _ =
-                    Debug.log "new comment" comment
-            in
             ( { model
                 | comment =
                     model.comment
