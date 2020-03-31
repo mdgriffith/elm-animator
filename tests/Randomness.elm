@@ -7,13 +7,12 @@ import Test exposing (..)
 
 
 suite =
-    only <|
-        describe "Sin based random curve"
-            [ fuzz Fuzz.float "between 0 and 1" <|
-                \seed ->
-                    Internal.Random.random seed 0 1
-                        |> Expect.all
-                            [ Expect.atMost 1
-                            , Expect.atLeast 0
-                            ]
-            ]
+    describe "Sin based random curve"
+        [ fuzz Fuzz.float "between 0 and 1" <|
+            \seed ->
+                Internal.Random.random seed 0 1
+                    |> Expect.all
+                        [ Expect.atMost 1
+                        , Expect.atLeast 0
+                        ]
+        ]

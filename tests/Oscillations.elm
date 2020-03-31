@@ -20,19 +20,20 @@ type House
 
 
 toPosition event =
-    case event of
-        Hufflepuff ->
-            Animator.wave 0 1
-                |> Animator.loop (Animator.millis 100)
+    Interpolate.withStandardDefault <|
+        case event of
+            Hufflepuff ->
+                Animator.wave 0 1
+                    |> Animator.loop (Animator.millis 100)
 
-        Griffyndor ->
-            Animator.at 300
+            Griffyndor ->
+                Animator.at 300
 
-        Slytherin ->
-            Animator.at 700
+            Slytherin ->
+                Animator.at 700
 
-        Ravenclaw ->
-            Animator.at 1000
+            Ravenclaw ->
+                Animator.at 1000
 
 
 oscillators event =
@@ -84,7 +85,7 @@ oscillations =
                             |> Animator.loop (Animator.millis 100)
                 in
                 case osc of
-                    Interpolate.Oscillate _ _ dir fn ->
+                    Interpolate.Oscillate _ dir fn ->
                         Expect.all
                             [ \f ->
                                 Expect.within (Absolute 0.01)

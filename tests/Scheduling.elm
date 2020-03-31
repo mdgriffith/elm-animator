@@ -699,7 +699,7 @@ tailRecursion =
                                 (Time.millisToPosix 1000000)
                                 newTimeline
                             )
-                            (\x -> Animator.at (toFloat x))
+                            (\x -> Interpolate.withStandardDefault <| Animator.at (toFloat x))
                 in
                 Expect.true "Successfully interpolate with 10,000 events" True
         ]
@@ -938,27 +938,28 @@ ordering =
 
 
 toPosition event =
-    case event of
-        Starting ->
-            Animator.at 0
+    Interpolate.withStandardDefault <|
+        case event of
+            Starting ->
+                Animator.at 0
 
-        One ->
-            Animator.at 1
+            One ->
+                Animator.at 1
 
-        Two ->
-            Animator.at 2
+            Two ->
+                Animator.at 2
 
-        Three ->
-            Animator.at 3
+            Three ->
+                Animator.at 3
 
-        Four ->
-            Animator.at 4
+            Four ->
+                Animator.at 4
 
-        Five ->
-            Animator.at 5
+            Five ->
+                Animator.at 5
 
-        Unreachable ->
-            Animator.at -1
+            Unreachable ->
+                Animator.at -1
 
 
 isOrderPreserved (Timeline.Line start _ _) (( previous, preserved ) as existing) =

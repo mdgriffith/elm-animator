@@ -147,7 +147,7 @@ timeline =
                         Interpolate.details (Timeline.atTime time harryPotterHouseTimeline) toPosition
 
                     expected =
-                        Estimate.velocity 32 time harryPotterHouseTimeline toPosition
+                        Estimate.velocity 32 time harryPotterHouseTimeline toPositionWithoutDefault
                 in
                 Expect.within
                     -- NOTE: the Estimate.velocity technique can be really off if we get near peaks/valleys
@@ -263,19 +263,35 @@ type House
 toPos event =
     case event of
         Hufflepuff ->
-            100
+            Animator.at 100
 
         Griffyndor ->
-            300
+            Animator.at 300
 
         Slytherin ->
-            700
+            Animator.at 700
 
         Ravenclaw ->
-            1000
+            Animator.at 1000
 
 
 toPosition event =
+    Interpolate.withStandardDefault <|
+        case event of
+            Hufflepuff ->
+                Animator.at 100
+
+            Griffyndor ->
+                Animator.at 300
+
+            Slytherin ->
+                Animator.at 700
+
+            Ravenclaw ->
+                Animator.at 1000
+
+
+toPositionWithoutDefault event =
     case event of
         Hufflepuff ->
             Animator.at 100

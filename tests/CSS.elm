@@ -91,7 +91,7 @@ frames =
                             |> Timeline.update (Time.millisToPosix 0)
 
                     val =
-                        Timeline.capture 60 toMoving Interpolate.moving timeline
+                        Timeline.capture 60 (Interpolate.withStandardDefault << toMoving) Interpolate.moving timeline
 
                     first =
                         List.head val.frames
@@ -108,7 +108,7 @@ frames =
                             |> Timeline.update (Time.millisToPosix 0)
 
                     val =
-                        Timeline.capture 60 toMoving Interpolate.moving timeline
+                        Timeline.capture 60 (Interpolate.withStandardDefault << toMoving) Interpolate.moving timeline
 
                     first =
                         List.head (List.reverse val.frames)
