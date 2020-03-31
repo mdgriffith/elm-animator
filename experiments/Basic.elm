@@ -27,11 +27,14 @@ singleEvent =
 doubleEvent =
     singleEvent
         |> Animator.queue
-            [ Animator.wait (Animator.seconds 1)
-            , Animator.event (Animator.seconds 1) Griffyndor
+            [ Animator.wait (Animator.millis 500)
+            , Animator.event (Animator.millis 250) Griffyndor
             ]
         |> Internal.Timeline.updateNoGC (Time.millisToPosix 0)
-        |> Debug.log "double event"
+
+
+
+-- |> Debug.log "double event"
 
 
 fourContinuous =
@@ -64,20 +67,20 @@ fourWithPause =
 
 doubleInterrupted =
     doubleEvent
-        |> Animator.to (Animator.seconds 1) Ravenclaw
+        |> Animator.toOver (Animator.seconds 1) Ravenclaw
         |> Internal.Timeline.updateNoGC (Time.millisToPosix 1500)
 
 
 doubleInterruptedInterrupted =
     doubleInterrupted
-        |> Animator.to (Animator.seconds 1) Slytherin
+        |> Animator.toOver (Animator.seconds 1) Slytherin
         |> Internal.Timeline.updateNoGC (Time.millisToPosix 3001)
 
 
 fourContinuousInterrupted =
     fourContinuous
         |> Internal.Timeline.update (Time.millisToPosix 1000)
-        |> Animator.to (Animator.seconds 1) Ravenclaw
+        |> Animator.toOver (Animator.seconds 1) Ravenclaw
         |> Internal.Timeline.update (Time.millisToPosix 1500)
 
 

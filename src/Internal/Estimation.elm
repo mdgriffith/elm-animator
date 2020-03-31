@@ -24,13 +24,13 @@ velocity resolution time timeline toPosition =
             mapTime (\t -> t + resolution) time
 
         zero =
-            Interpolate.details (Timeline.atTime before timeline) toPosition
+            Interpolate.details (Timeline.atTime before timeline) (toPosition >> Interpolate.withStandardDefault)
 
         one =
-            Interpolate.details (Timeline.atTime time timeline) toPosition
+            Interpolate.details (Timeline.atTime time timeline) (toPosition >> Interpolate.withStandardDefault)
 
         two =
-            Interpolate.details (Timeline.atTime after timeline) toPosition
+            Interpolate.details (Timeline.atTime after timeline) (toPosition >> Interpolate.withStandardDefault)
 
         first =
             (one.position - zero.position) / toFloat resolution

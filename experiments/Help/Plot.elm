@@ -20,6 +20,7 @@ import Duration
 import Html exposing (Html, div, h1, node, p, text)
 import Html.Attributes exposing (class)
 import Internal.Estimation as Estimate
+import Internal.Interpolate as Interpolate
 import Internal.Spring as Spring
 import Internal.Timeline
 import LineChart as LineChart
@@ -428,7 +429,10 @@ render myTimeline toPos config =
                     Time.millisToPosix (round (toFloat startTimeInMs + (toFloat i * frameSize)))
             in
             { time = currentTime
-            , value = Animator.details (Internal.Timeline.atTime currentTime myTimeline) toPos
+            , value =
+                Interpolate.details
+                    (Internal.Timeline.atTime currentTime myTimeline)
+                    (toPos >> Interpolate.withStandardDefault)
             }
                 :: rendered
         )
