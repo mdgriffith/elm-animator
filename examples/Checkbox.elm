@@ -28,10 +28,9 @@ import Html.Events as Events
 import Time
 
 
-
 {-| (1) - In our model we'd normally store just a `Bool`.
 
-   However now we have an `Animator.Timeline Bool`
+However now we have an `Animator.Timeline Bool`
 
 -}
 type alias Model =
@@ -104,7 +103,8 @@ update msg model =
                     -- `quickly` is a function that says "go to our new state, newChecked, in 200ms"
                     -- If you want to customize the duration of the transition, check out the docs!
                     model.checked
-                        |> Animator.quickly newChecked
+                        -- |> Animator.quickly newChecked
+                        |> Animator.slowly newChecked
               }
             , Cmd.none
             )
@@ -140,7 +140,6 @@ view model =
     }
 
 
-
 viewHugeCheckbox : Animator.Timeline Bool -> Html Msg
 viewHugeCheckbox checked =
     div
@@ -156,7 +155,7 @@ viewHugeCheckbox checked =
             ]
             [ div
                 -- (7) - Rendering our timeline as inline styles.
-                -- What we're doing here is mapping our timeline states 
+                -- What we're doing here is mapping our timeline states
                 -- to what values they should be in the view.
                 -- Elm animator then uses these to interpolate where we should be.
                 [ Animator.Inline.backgroundColor checked <|
@@ -187,28 +186,28 @@ viewHugeCheckbox checked =
                     [ Animator.Inline.opacity checked <|
                         \state ->
                             if state then
-                                1
+                                Animator.at 1
 
                             else
-                                0
+                                Animator.at 0
                     , Animator.Inline.transform
                         { position = { x = 0, y = 0 }
                         , rotate =
-                            Animator.linear checked <|
+                            Animator.move checked <|
                                 \state ->
                                     if state then
-                                        turns 0
+                                        Animator.at (turns 0)
 
                                     else
-                                        turns 0.25
+                                        Animator.at (turns 0.05)
                         , scale =
-                            Animator.linear checked <|
+                            Animator.move checked <|
                                 \state ->
                                     if state then
-                                        1
+                                        Animator.at 1
 
                                     else
-                                        0
+                                        Animator.at 0.8
                         }
                     ]
                     [ text "!" ]
@@ -223,10 +222,10 @@ viewHugeCheckbox checked =
             [ Animator.Inline.opacity checked <|
                 \state ->
                     if state then
-                        1
+                        Animator.at 1
 
                     else
-                        0
+                        Animator.at 0
             ]
             [ text "Great job "
             , span
