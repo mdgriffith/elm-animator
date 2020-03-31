@@ -135,7 +135,7 @@ style timeline name toString lookup =
         (toString (Animator.move timeline lookup))
 
 
-{-| Sets the default to `linear`. See the note on `Animator.linear` for more details!
+{-| Sets the default to `linear`. See the note on [`Animator.linear`](https://package.elm-lang.org/packages/mdgriffith/elm-animator/latest/Animator#linear) for more details!
 -}
 linear : Timeline event -> String -> (Float -> String) -> (event -> Movement) -> Html.Attribute msg
 linear timeline name toString lookup =
