@@ -6,7 +6,7 @@ module Internal.Interpolate exposing
     , dwellPeriod, afterMove, lerp
     , coloring, linearly, moving
     , fillDefaults, DefaultablePersonality(..), DefaultOr(..)
-    , DefaultableMovement(..), createSpline, details, emptyDefaults, findAtXOnSpline, linearDefault, standardDefault, withLinearDefault, withStandardDefault
+    , DefaultableMovement(..), Spline(..), createSpline, details, emptyDefaults, findAtXOnSpline, linearDefault, standardDefault, withLinearDefault, withStandardDefault
     )
 
 {-|
@@ -382,16 +382,6 @@ adjustTiming m =
 zeroDuration : Duration.Duration
 zeroDuration =
     Duration.milliseconds 0
-
-
-log str val =
-    val
-
-
-
--- Debug.log
---     str
---     val
 
 
 {-| -}
@@ -1061,6 +1051,12 @@ createSpline config =
         totalX =
             config.end.x - config.start.x
 
+        startVelScale =
+            1 / (config.startVelocity.x / totalX)
+
+        endVelScale =
+            1 / (config.endVelocity.x / totalX)
+
         startVelocity =
             if config.departure.slowly == 0 then
                 config.startVelocity
@@ -1077,8 +1073,8 @@ createSpline config =
             else
                 -- config.startVelocity
                 --     |> scaleBy (config.departure.slowly * 3)
-                { x = config.startVelocity.x * (config.departure.slowly * 3)
-                , y = config.startVelocity.y * (config.departure.slowly * 3)
+                { x = startVelScale * config.startVelocity.x * (config.departure.slowly * 3)
+                , y = startVelScale * config.startVelocity.y * (config.departure.slowly * 3)
                 }
 
         endVelocity =
@@ -1097,8 +1093,8 @@ createSpline config =
             else
                 -- config.endVelocity
                 --     |> scaleBy (config.arrival.slowly * 3)
-                { x = config.endVelocity.x * (config.arrival.slowly * 3)
-                , y = config.endVelocity.y * (config.arrival.slowly * 3)
+                { x = endVelScale * config.endVelocity.x * (config.arrival.slowly * 3)
+                , y = endVelScale * config.endVelocity.y * (config.arrival.slowly * 3)
                 }
     in
     {-
