@@ -4,10 +4,12 @@ module Mario exposing (main)
 
 import Animator
 import Browser
+import Browser.Dom
 import Browser.Events
 import Html exposing (Html)
 import Html.Attributes as Attr
 import Json.Decode as Decode
+import Task
 import Time
 
 
@@ -100,7 +102,20 @@ main =
         { init =
             \() ->
                 ( init
-                , Cmd.none
+                , Browser.Dom.getViewport
+                    |> Task.attempt
+                        (\viewportResult ->
+                            case viewportResult of
+                                Ok viewport ->
+                                    WindowSize
+                                        (round viewport.scene.width)
+                                        (round viewport.scene.height)
+
+                                Err err ->
+                                    WindowSize
+                                        (round 800)
+                                        (round 600)
+                        )
                 )
         , view = view
         , update = update
@@ -173,8 +188,7 @@ update msg mario =
             )
 
 
-{-| This is the "animator", which is able to get and set each timeline you want animated.
--}
+{-| -}
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
@@ -318,57 +332,65 @@ view model =
         -- , viewSpriteInfo model.sprites
         -- , viewSpriteSheet model (Tuple.first model.sprites)
         , Html.div
-            [ Attr.class "positioner"
-            , Attr.style "position" "relative"
-            , Attr.style "top" (String.fromFloat (toFloat model.window.height - model.y) ++ "px")
-            , Attr.style "left" (String.fromFloat model.x ++ "px")
+            [ Attr.style "position" "fixed"
+            , Attr.style "left" "0"
+            , Attr.style "top" "0"
+            , Attr.style "width" (String.fromInt model.window.width ++ "px")
+            , Attr.style "height" (String.fromInt model.window.height ++ "px")
             ]
-            [ viewSprite
-                (Animator.step model.mario <|
-                    \(Mario action direction) ->
-                        let
-                            frame mySprite =
-                                case direction of
-                                    Left ->
-                                        Animator.frame mySprite
+            [ Html.div
+                [ Attr.class "positioner"
+                , Attr.style "position" "absolute"
+                , Attr.style "top" (String.fromFloat ((toFloat model.window.height / 2) - model.y) ++ "px")
+                , Attr.style "left" (String.fromFloat model.x ++ "px")
+                ]
+                [ viewSprite
+                    (Animator.step model.mario <|
+                        \(Mario action direction) ->
+                            let
+                                frame mySprite =
+                                    case direction of
+                                        Left ->
+                                            Animator.frame mySprite
 
-                                    Right ->
-                                        Animator.frame { mySprite | flipX = True }
-                        in
-                        case action of
-                            Walking ->
-                                Animator.framesWith
-                                    { transition = frame sprite.tail.stand
-                                    , resting =
-                                        Animator.cycle
-                                            (Animator.fps 15)
-                                            [ frame sprite.tail.step1
-                                            , frame sprite.tail.step2
-                                            , frame sprite.tail.stand
-                                            ]
-                                    }
+                                        Right ->
+                                            Animator.frame { mySprite | flipX = True }
+                            in
+                            case action of
+                                Walking ->
+                                    Animator.framesWith
+                                        { transition = frame sprite.tail.stand
+                                        , resting =
+                                            Animator.cycle
+                                                (Animator.fps 15)
+                                                [ frame sprite.tail.step1
+                                                , frame sprite.tail.step2
+                                                , frame sprite.tail.stand
+                                                ]
+                                        }
 
-                            Running ->
-                                Animator.framesWith
-                                    { transition = frame sprite.tail.standArms
-                                    , resting =
-                                        Animator.cycle
-                                            (Animator.fps 30)
-                                            [ frame sprite.tail.runStep1
-                                            , frame sprite.tail.runStep2
-                                            , frame sprite.tail.standArms
-                                            ]
-                                    }
+                                Running ->
+                                    Animator.framesWith
+                                        { transition = frame sprite.tail.standArms
+                                        , resting =
+                                            Animator.cycle
+                                                (Animator.fps 30)
+                                                [ frame sprite.tail.runStep1
+                                                , frame sprite.tail.runStep2
+                                                , frame sprite.tail.standArms
+                                                ]
+                                        }
 
-                            Jumping ->
-                                frame sprite.tail.jump
+                                Jumping ->
+                                    frame sprite.tail.jump
 
-                            Ducking ->
-                                frame sprite.tail.duck
+                                Ducking ->
+                                    frame sprite.tail.duck
 
-                            Standing ->
-                                frame sprite.tail.stand
-                )
+                                Standing ->
+                                    frame sprite.tail.stand
+                    )
+                ]
             ]
         ]
     }
@@ -388,10 +410,10 @@ viewSprite box =
             , Attr.style "transform-origin" "30% 50%"
             , Attr.style "transform"
                 (if box.flipX then
-                    "scaleX(-1)"
+                    "scaleX(-1) scale(2)"
 
                  else
-                    "scaleX(1)"
+                    "scaleX(1) scale(2)"
                 )
             , Attr.style "background-position"
                 ("-"
@@ -448,10 +470,10 @@ walk pad mario =
                 0
 
             else if isHeld pad.left then
-                run (isHeld pad.run) -1
+                run (isHeld pad.run) -1.8
 
             else if isHeld pad.right then
-                run (isHeld pad.run) 1
+                run (isHeld pad.run) 1.8
 
             else
                 0
@@ -485,7 +507,10 @@ gravity dt mario =
 physics : Float -> Model -> Model
 physics dt mario =
     { mario
-        | x = mario.x + dt * mario.vx
+        | x =
+            (mario.x + dt * mario.vx)
+                |> min (toFloat mario.window.width - 40)
+                |> max 0
         , y = max 0 (mario.y + dt * mario.vy)
     }
 
@@ -532,7 +557,7 @@ updateSprites model =
         { model
             | mario =
                 model.mario
-                    |> Animator.to (Animator.millis 0) newMario
+                    |> Animator.immediately newMario
         }
 
     else
@@ -733,8 +758,8 @@ body, html {
     border:0;
     display:block;
     position: relative;
-    width: 80%;
-    height: 80%;
+    width: 100%;
+    height: 100%;
 }
 
 .pixel-art {
