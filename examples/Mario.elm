@@ -1,6 +1,23 @@
 module Mario exposing (main)
 
-{-| -}
+{-|
+
+
+# Run around as Mario!
+
+This example is primarily here to show how the sprite system works.
+
+Essentially we're going to be animating like you would with a flip book!
+
+But we're also going to be doing some physics calculations directly ourselves, so this example shows how you'd use `elm-animator` side-by-side with other manual animations if you need to.
+
+(1) **Sprite Sheet** - A sprite sheet is single image file with a bunch of images at different positions in the file. [Here's the one we're using](https://github.com/mdgriffith/elm-animator/blob/master/examples/images/mario-sprites.png)
+
+To animate this, we need to pick out our subimages from our image file by knowing their bounding boxes.
+
+(2) **Animating the flipbook** - Here's the new place where we're animating Mario'd state.
+
+-}
 
 import Animator
 import Browser
@@ -328,9 +345,6 @@ view model =
     { title = "Mario - Elm Animator"
     , body =
         [ stylesheet
-
-        -- , viewSpriteInfo model.sprites
-        -- , viewSpriteSheet model (Tuple.first model.sprites)
         , Html.div
             [ Attr.style "position" "fixed"
             , Attr.style "left" "0"
@@ -339,15 +353,30 @@ view model =
             , Attr.style "height" (String.fromInt model.window.height ++ "px")
             ]
             [ Html.div
+                [ Attr.style "position" "absolute"
+                , Attr.style "top" "80px"
+                , Attr.style "left" "80px"
+                , Attr.style "user-select" "none"
+                , Attr.style "font-family" "'Roboto', sans-serif"
+                ]
+                [ Html.h1 [] [ Html.text "Mario" ]
+                , Html.div [] [ Html.text "Arrows to move, shift to run, space to jump!" ]
+                ]
+            , Html.div
                 [ Attr.class "positioner"
                 , Attr.style "position" "absolute"
                 , Attr.style "top" (String.fromFloat ((toFloat model.window.height / 2) - model.y) ++ "px")
                 , Attr.style "left" (String.fromFloat model.x ++ "px")
                 ]
+                -- (2) - Animating Mario's state with sprites
+                --      We're watching te model.mario timeline, which has both a direction and an action that mario is currently doing.
+                --
                 [ viewSprite
                     (Animator.step model.mario <|
                         \(Mario action direction) ->
                             let
+                                -- this is where we decide to show the left or the right sprite.
+                                --
                                 frame mySprite =
                                     case direction of
                                         Left ->
@@ -357,9 +386,24 @@ view model =
                                             Animator.frame { mySprite | flipX = True }
                             in
                             case action of
+                                -- for these first three states, we only have a single frame we care about.
+                                Standing ->
+                                    frame sprite.tail.stand
+
+                                Ducking ->
+                                    frame sprite.tail.duck
+
+                                Jumping ->
+                                    frame sprite.tail.jump
+
                                 Walking ->
+                                    -- when we're in a `Walking` state, we want to cycle through 3 frames.
+                                    -- And we can also specify our frames per secton
                                     Animator.framesWith
+                                        -- `transition` are the frames we'd want to take when transitioning to this state.
                                         { transition = frame sprite.tail.stand
+
+                                        -- `resting` is what we want to do while we're in this state.
                                         , resting =
                                             Animator.cycle
                                                 (Animator.fps 15)
@@ -370,6 +414,8 @@ view model =
                                         }
 
                                 Running ->
+                                    -- In order to make mario go faster, we're upping the fps
+                                    -- and we're also changing the frames so that he puts his arms out.
                                     Animator.framesWith
                                         { transition = frame sprite.tail.standArms
                                         , resting =
@@ -380,15 +426,6 @@ view model =
                                                 , frame sprite.tail.standArms
                                                 ]
                                         }
-
-                                Jumping ->
-                                    frame sprite.tail.jump
-
-                                Ducking ->
-                                    frame sprite.tail.duck
-
-                                Standing ->
-                                    frame sprite.tail.stand
                     )
                 ]
             ]
@@ -420,23 +457,9 @@ viewSprite box =
                     ++ (String.fromInt box.x ++ "px -")
                     ++ (String.fromInt box.y ++ "px")
                 )
+
+            -- we need to tell the browser to render our image and leave the pixels pixelated.
             , Attr.class "pixel-art"
-            ]
-            []
-        , Html.span
-            [ Attr.style "background-color" "green"
-            , Attr.style "width" "1px"
-            , Attr.style "height" "100%"
-            , Attr.style "left" "6px"
-            , Attr.style "position" "absolute"
-            ]
-            []
-        , Html.span
-            [ Attr.style "background-color" "green"
-            , Attr.style "width" "1px"
-            , Attr.style "height" "100%"
-            , Attr.style "left" "18px"
-            , Attr.style "position" "absolute"
             ]
             []
         ]
@@ -565,7 +588,17 @@ updateSprites model =
 
 
 
-{- Sprite Sheet -}
+{- (1) - Sprite Sheet
+
+   x, y -> the coordinates of the image on the sprite sheet
+
+   width, height -> the size of the image I want
+
+   adjustX, adjustY -> adjustX and adjustY move the position of the rendered image so that we can line it up with the previous frames.
+
+   flipX, flipY ->  The sprite sheet only shows mario looking in one direction.  Though we can flip that image if we need to!
+
+-}
 
 
 type alias Box =
