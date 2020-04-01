@@ -61,7 +61,7 @@ This means `Elm` only needs to run your view code once instead of 60 times a sec
 
 They're not supported first class because they're expensive by default.
 
-If you're trying to animate a `box-shadow`, your best bet is to render the box shadow once, in a separate element, and then only animate opacity on that element.
+If you're trying to animate a `box-shadow`, your best bet is to render the box shadow once in a separate element, and then only animate opacity on that element.
 
 Basically you want to recreate what is [described in this overview.](https://tobiasahlin.com/blog/how-to-animate-box-shadow/)
 
