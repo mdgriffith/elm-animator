@@ -1201,13 +1201,8 @@ with :
     -> Animator model
 with get set (Timeline.Animator isRunning updateModel) =
     Timeline.Animator
-        (\model ->
-            if isRunning model then
-                True
-
-            else
-                Timeline.needsUpdate (get model)
-        )
+        -- always runs
+        (always True)
         (\now model ->
             let
                 newModel =
@@ -1221,17 +1216,26 @@ with get set (Timeline.Animator isRunning updateModel) =
 withPause :
     (model -> Timeline state)
     -> (Timeline state -> model -> model)
-    -> (state -> bool)
+    -> (state -> Bool)
     -> Animator model
     -> Animator model
 withPause get set eventIsRestable (Timeline.Animator isRunning updateModel) =
     Timeline.Animator
         (\model ->
+            -- if we're already running, skip
             if isRunning model then
                 True
 
             else
-                Timeline.needsUpdate (get model)
+                let
+                    timeline =
+                        get model
+                in
+                if Timeline.needsUpdate timeline then
+                    True
+
+                else
+                    eventIsRestable (Timeline.current timeline)
         )
         (\now model ->
             let
