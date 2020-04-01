@@ -538,7 +538,7 @@ updateSprites model =
                 Jumping
 
             else if model.vx /= 0 then
-                if abs model.vx > 1 then
+                if abs model.vx > 2 then
                     Running
 
                 else
