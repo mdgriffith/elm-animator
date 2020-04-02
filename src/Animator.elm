@@ -1202,7 +1202,11 @@ animator =
     Timeline.Animator (always False) (\now model -> model)
 
 
-{-| -}
+{-| `with` will ensure that (`AnimationFrame`)[https://package.elm-lang.org/packages/elm/browser/latest/Browser-Events#onAnimationFrame] is running when the animator is transformed into a (`subscription`)[#toSubscription].
+
+**Note** — It will actually make the animation frame subscription run all the time! At some point you'll probably want to optimize when the subscription runs, which means either using (`withPause`)[#withPause] or `Animator.Css.with`
+
+-}
 with :
     (model -> Timeline state)
     -> (Timeline state -> model -> model)
@@ -1221,7 +1225,28 @@ with get set (Timeline.Animator isRunning updateModel) =
         )
 
 
-{-| -}
+{-| `withPause` will allow you to have more control over when `AnimationFrame` runs.
+
+The main thing you need to do here is capture which states are animated when they're **resting**.
+
+Let's say we have a checkbox that, for whatever reason, we want to say is spinning forever when the value is `False`
+
+    animator : Animator.Animator Model
+    animator =
+        Animator.animator
+            |> Animator.withPause .checked
+                (\newChecked model ->
+                    { model | checked = newChecked }
+                )
+                -- here is where we tell the animator that we still need
+                -- AnimationFrame when the timeline has a current value of `False`
+                (\checked ->
+                    checked == False
+                )
+
+**Note** if you're using `Animator.Css` to generate keyframes along with `Animator.Css.with`, you don't need to worry about this.
+
+-}
 withPause :
     (model -> Timeline state)
     -> (Timeline state -> model -> model)
