@@ -50,7 +50,7 @@ Notice you could add any number of timelines to this animator.
 animator : Animator.Animator Model
 animator =
     Animator.animator
-        |> Animator.with
+        |> Animator.watching
             -- we tell the animator how
             -- to get the checked timeline using .checked
             .checked

@@ -72,7 +72,7 @@ animator =
     Animator.animator
         -- *NOTE*  We're using `the Animator.Css.with` instead of the normal one.
         -- This one only needs to update
-        |> Animator.Css.with
+        |> Animator.Css.watching
             .comment
             (\newComment model ->
                 { model | comment = newComment }

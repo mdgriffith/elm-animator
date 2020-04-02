@@ -1,7 +1,7 @@
 module Animator exposing
     ( Timeline, init
     , Animator
-    , animator, with, withPause
+    , animator, watching, watchingWith
     , toSubscription, update
     , current, previous
     , go
@@ -31,7 +31,7 @@ module Animator exposing
 
 @docs Animator
 
-@docs animator, with, withPause
+@docs animator, watching, watchingWith
 
 @docs toSubscription, update
 
@@ -361,7 +361,7 @@ veryQuickly =
     millis 100
 
 
-{-| _200ms_
+{-| _200ms_ - Likely a good place to start!
 -}
 quickly : Duration
 quickly =
@@ -370,7 +370,7 @@ quickly =
 
 {-| Go to a new state!
 
-You'll need to specify a `Duration` as well. I recommend starting with `Animator.quickly` and then adjust up or down as necessary.
+You'll need to specify a `Duration` as well. Try starting with `Animator.quickly` and adjust up or down as necessary.
 
 -}
 go : Duration -> state -> Timeline state -> Timeline state
@@ -378,14 +378,14 @@ go duration ev timeline =
     interrupt [ event duration ev ] timeline
 
 
-{-| Go to this new state in _400ms_.
+{-| _400ms_.
 -}
 slowly : Duration
 slowly =
     millis 400
 
 
-{-| Go to this new state in _500ms_.
+{-| _500ms_.
 -}
 verySlowly : Duration
 verySlowly =
@@ -1202,17 +1202,17 @@ animator =
     Timeline.Animator (always False) (\now model -> model)
 
 
-{-| `with` will ensure that (`AnimationFrame`)[https://package.elm-lang.org/packages/elm/browser/latest/Browser-Events#onAnimationFrame] is running when the animator is transformed into a (`subscription`)[#toSubscription].
+{-| `with` will ensure that [`AnimationFrame`](https://package.elm-lang.org/packages/elm/browser/latest/Browser-Events#onAnimationFrame) is running when the animator is transformed into a [`subscription`](#toSubscription).
 
-**Note** — It will actually make the animation frame subscription run all the time! At some point you'll probably want to optimize when the subscription runs, which means either using (`withPause`)[#withPause] or `Animator.Css.with`
+**Note** — It will actually make the animation frame subscription run all the time! At some point you'll probably want to optimize when the subscription runs, which means either using (`watchingWith`)[#watchingWith] or `Animator.Css.with`
 
 -}
-with :
+watching :
     (model -> Timeline state)
     -> (Timeline state -> model -> model)
     -> Animator model
     -> Animator model
-with get set (Timeline.Animator isRunning updateModel) =
+watching get set (Timeline.Animator isRunning updateModel) =
     Timeline.Animator
         -- always runs
         (always True)
@@ -1225,7 +1225,7 @@ with get set (Timeline.Animator isRunning updateModel) =
         )
 
 
-{-| `withPause` will allow you to have more control over when `AnimationFrame` runs.
+{-| `watchingWith` will allow you to have more control over when `AnimationFrame` runs.
 
 The main thing you need to do here is capture which states are animated when they're **resting**.
 
@@ -1234,7 +1234,7 @@ Let's say we have a checkbox that, for whatever reason, we want to say is spinni
     animator : Animator.Animator Model
     animator =
         Animator.animator
-            |> Animator.withPause .checked
+            |> Animator.watchingWith .checked
                 (\newChecked model ->
                     { model | checked = newChecked }
                 )
@@ -1247,13 +1247,13 @@ Let's say we have a checkbox that, for whatever reason, we want to say is spinni
 **Note** if you're using `Animator.Css` to generate keyframes along with `Animator.Css.with`, you don't need to worry about this.
 
 -}
-withPause :
+watchingWith :
     (model -> Timeline state)
     -> (Timeline state -> model -> model)
     -> (state -> Bool)
     -> Animator model
     -> Animator model
-withPause get set eventIsRestable (Timeline.Animator isRunning updateModel) =
+watchingWith get set eventIsRestable (Timeline.Animator isRunning updateModel) =
     Timeline.Animator
         (\model ->
             -- if we're already running, skip

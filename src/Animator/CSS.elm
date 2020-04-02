@@ -1,5 +1,5 @@
 module Animator.Css exposing
-    ( with
+    ( watching
     , div
     , Attribute, opacity, height, width
     , fontSize, fontColor, wordSpacing, letterSpacing
@@ -28,7 +28,7 @@ This means `Elm` only needs to run your view code once instead of 60 times a sec
 
 `Elm` is generally pretty fast and efficient at all this! But it can be even faster to **skip the work all together**.
 
-@docs with
+@docs watching
 
 @docs div
 
@@ -184,12 +184,12 @@ offset =
 In that one frame, we render the **entire CSS animation**, which can run without `Elm` needing to do a full rerender.
 
 -}
-with :
+watching :
     (model -> Timeline state)
     -> (Timeline state -> model -> model)
     -> Animator model
     -> Animator model
-with get set (Timeline.Animator isRunning updateModel) =
+watching get set (Timeline.Animator isRunning updateModel) =
     Timeline.Animator
         (\model ->
             if isRunning model then

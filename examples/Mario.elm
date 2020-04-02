@@ -223,7 +223,7 @@ animator =
     Animator.animator
         -- we tell the animator how to get the checked timeline using .checked
         -- and we tell the animator how to update that timeline with updateChecked
-        |> Animator.with .mario (\mario m -> { m | mario = mario })
+        |> Animator.watching .mario (\mario m -> { m | mario = mario })
 
 
 decodeButton : Decode.Decoder Button
