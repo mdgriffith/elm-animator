@@ -123,7 +123,7 @@ frames =
                     timeline =
                         Animator.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
-                            |> Animator.toOver (Animator.seconds 1) One
+                            |> Animator.go (Animator.seconds 1) One
                             -- NOTE* possible schduling bug
                             -- scheduling an event
                             |> Timeline.update (Time.millisToPosix 1)
@@ -184,7 +184,7 @@ frames =
                             -- NOTE* possible schduling bug
                             -- scheduling an event
                             |> Timeline.update (Time.millisToPosix 1)
-                            |> Animator.toOver (Animator.seconds 1) Three
+                            |> Animator.go (Animator.seconds 1) Three
                             |> Timeline.updateNoGC (Time.millisToPosix 500)
 
                     resultFrames =

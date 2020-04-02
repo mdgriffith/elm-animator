@@ -4,8 +4,8 @@ module Animator exposing
     , animator, with, withPause
     , toSubscription, update
     , current, previous
-    , to, immediately, veryQuickly, quickly, slowly, verySlowly, toOver
-    , Duration, millis, seconds
+    , go
+    , Duration, immediately, veryQuickly, quickly, slowly, verySlowly, millis, seconds
     , Step, wait, event
     , interrupt, queue
     , color
@@ -49,14 +49,14 @@ Good question! We can either ask for the `current` value or the `previous` one.
 
 Now that we have a `Timeline` set up, we likely want to set a new **value**.
 
-In order to do that we need to specify both:
+In order to do that we need to specify both —
 
   - the new state we want to be in
   - a `Duration` for how long this transition should take.
 
-@docs to, immediately, veryQuickly, quickly, slowly, verySlowly, toOver
+@docs go
 
-@docs Duration, millis, seconds
+@docs Duration, immediately, veryQuickly, quickly, slowly, verySlowly, millis, seconds
 
 
 # Interruptions and Queueing
@@ -107,7 +107,21 @@ Though you should also check out the 👇 [Transition Personality](#transition-p
 
 While there are some nice defaults baked in, sometimes you might want to adjust how an animation happens.
 
-These adjustments all take a `Float` between `0` and `1`. Behind the scenes they will be clamped at those values.
+These adjustments talk about _arriving_ or _leaving_. That's referring to the part of the animation that is arriving to or departing from a certain state.
+
+So, for this code example:
+
+     case state of
+        True ->
+            Animator.at 0
+                |> Animator.leaveLate 0.2
+
+        False ->
+           Animator.at 50
+
+If we're at a state of `True` and go to any other state, we're going to leave `True` a little later than the normal time.
+
+**Note** — These adjustments all take a `Float` between `0` and `1`. Behind the scenes they will be clamped at those values.
 
 @docs leaveLate, arriveEarly
 
@@ -260,7 +274,17 @@ previous =
     Timeline.previous
 
 
-{-| -}
+{-| Choosing a nice duration can depend on:
+
+  - The size of the thing moving
+  - The type of movement
+  - The distance it's traveling.
+
+So, start with a nice default and adjust it as you start to understand your specific needs.
+
+**Note** — Here's [a very good overview on animation durations and speeds](https://uxdesign.cc/the-ultimate-guide-to-proper-use-of-animation-in-ux-10bd98614fa9).
+
+-}
 type alias Duration =
     Time.Duration
 
@@ -323,64 +347,49 @@ queue steps (Timeline.Timeline tl) =
         }
 
 
-{-| Specify the exact duration that this transtion should take.
+{-| 0ms
 -}
-toOver : Duration -> state -> Timeline state -> Timeline state
-toOver dur ev timeline =
-    interrupt [ event dur ev ] timeline
+immediately : Duration
+immediately =
+    millis 0
 
 
-{-| Immediately switch to a new state.
+{-| _100ms_.
 -}
-immediately : state -> Timeline state -> Timeline state
-immediately ev timeline =
-    interrupt [ event (millis 0) ev ] timeline
+veryQuickly : Duration
+veryQuickly =
+    millis 100
 
 
-{-| Go to this new state in _100ms_.
+{-| _200ms_
 -}
-veryQuickly : state -> Timeline state -> Timeline state
-veryQuickly ev timeline =
-    interrupt [ event (millis 100) ev ] timeline
+quickly : Duration
+quickly =
+    millis 200
 
 
-{-| Go to this new state in _200ms_.
--}
-quickly : state -> Timeline state -> Timeline state
-quickly ev timeline =
-    interrupt [ event (millis 200) ev ] timeline
+{-| Go to a new state!
 
-
-{-| Go to a new state in _250ms_.
-
-This is a nice default to start with, and then adjust up or down as necessary.
-
-**Note:** Here's [a very good overview on animation durations and speeds](https://uxdesign.cc/the-ultimate-guide-to-proper-use-of-animation-in-ux-10bd98614fa9).
-
-Choosing a nice duration can depend on:
-
-  - The size of the thing moving
-  - The type of movement
-  - The size of the screen
+You'll need to specify a `Duration` as well. I recommend starting with `Animator.quickly` and then adjust up or down as necessary.
 
 -}
-to : state -> Timeline state -> Timeline state
-to ev timeline =
-    interrupt [ event (millis 250) ev ] timeline
+go : Duration -> state -> Timeline state -> Timeline state
+go duration ev timeline =
+    interrupt [ event duration ev ] timeline
 
 
 {-| Go to this new state in _400ms_.
 -}
-slowly : state -> Timeline state -> Timeline state
-slowly ev timeline =
-    interrupt [ event (millis 400) ev ] timeline
+slowly : Duration
+slowly =
+    millis 400
 
 
 {-| Go to this new state in _500ms_.
 -}
-verySlowly : state -> Timeline state -> Timeline state
-verySlowly ev timeline =
-    interrupt [ event (millis 500) ev ] timeline
+verySlowly : Duration
+verySlowly =
+    millis 500
 
 
 {-| Interrupt what's currently happening with a new list.
@@ -669,7 +678,7 @@ leaveLate p movement =
   - `0.2` means we'll arrive early by 20% of the total duration.
   - `1` means we arrive at the start of the transition. So basically we instantly transition over.
 
-**Weird math note:** `arriveEarly` and `leaveLate` will collaborate to figure out how the transition happens. If `arriveEarly` and `leaveLate` sum up to more `1` for a transition, then their sum will the new maximum. Likely you don't need to worry about this :D.
+**Weird math note** — `arriveEarly` and `leaveLate` will collaborate to figure out how the transition happens. If `arriveEarly` and `leaveLate` sum up to more `1` for a transition, then their sum will the new maximum. Likely you don't need to worry about this :D.
 
 The intended use for `arriveEarly` and `leaveLate` is for staggering items in a list like in our [Todo list example](https://github.com/mdgriffith/elm-animator/blob/master/examples/Todo.elm).
 
@@ -1175,9 +1184,9 @@ Here's an animator from the [Checkbox.elm example](https://github.com/mdgriffith
 
 Notice you could add any number of timelines to this animator.
 
-**Note:** You likely only need one animator for a given project.
+**Note** — You likely only need one animator for a given project.
 
-**Note 2:** Once we have an `Animator Model`, we have two more steps in order to set things up:
+**Note 2** — Once we have an `Animator Model`, we have two more steps in order to set things up:
 
   - [create a _subscription_](#toSubscription)
   - [_update_ our model](#update)
@@ -1278,7 +1287,7 @@ toSubscription toMsg model (Timeline.Animator isRunning _) =
 
 And voilà, we can begin animating!
 
-**Note:** To animate more things, all you need to do is add a new `with` to your `Animator`.
+**Note** — To animate more things, all you need to do is add a new `with` to your `Animator`.
 
 -}
 update : Time.Posix -> Animator model -> model -> model

@@ -130,7 +130,7 @@ oscillations =
                     myTimeline =
                         Animator.init Hufflepuff
                             |> Timeline.update (Time.millisToPosix 0)
-                            |> Animator.toOver (Animator.seconds 1) Griffyndor
+                            |> Animator.go (Animator.seconds 1) Griffyndor
                             |> Timeline.update (Time.millisToPosix 0)
 
                     position =

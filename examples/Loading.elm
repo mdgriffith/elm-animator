@@ -98,7 +98,7 @@ update msg model =
             ( { model
                 | comment =
                     model.comment
-                        |> Animator.to Loading
+                        |> Animator.go Animator.quickly Loading
               }
             , Task.perform (always (NewCommentFromServer "Howdy partner!"))
                 (Process.sleep (2 * 1000))
@@ -108,7 +108,7 @@ update msg model =
             ( { model
                 | comment =
                     model.comment
-                        |> Animator.to (Success comment)
+                        |> Animator.go Animator.quickly (Success comment)
               }
             , Cmd.none
             )

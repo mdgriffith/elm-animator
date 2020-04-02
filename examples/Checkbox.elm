@@ -103,8 +103,7 @@ update msg model =
                     -- `quickly` is a function that says "go to our new state, newChecked, in 200ms"
                     -- If you want to customize the duration of the transition, check out the docs!
                     model.checked
-                        -- |> Animator.quickly newChecked
-                        |> Animator.slowly newChecked
+                        |> Animator.go Animator.slowly newChecked
               }
             , Cmd.none
             )

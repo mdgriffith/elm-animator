@@ -580,7 +580,7 @@ updateSprites model =
         { model
             | mario =
                 model.mario
-                    |> Animator.immediately newMario
+                    |> Animator.go Animator.immediately newMario
         }
 
     else
