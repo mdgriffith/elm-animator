@@ -67,20 +67,20 @@ fourWithPause =
 
 doubleInterrupted =
     doubleEvent
-        |> Animator.toOver (Animator.seconds 1) Ravenclaw
+        |> Animator.go (Animator.seconds 1) Ravenclaw
         |> Internal.Timeline.updateNoGC (Time.millisToPosix 1500)
 
 
 doubleInterruptedInterrupted =
     doubleInterrupted
-        |> Animator.toOver (Animator.seconds 1) Slytherin
+        |> Animator.go (Animator.seconds 1) Slytherin
         |> Internal.Timeline.updateNoGC (Time.millisToPosix 3001)
 
 
 fourContinuousInterrupted =
     fourContinuous
         |> Internal.Timeline.update (Time.millisToPosix 1000)
-        |> Animator.toOver (Animator.seconds 1) Ravenclaw
+        |> Animator.go (Animator.seconds 1) Ravenclaw
         |> Internal.Timeline.update (Time.millisToPosix 1500)
 
 
