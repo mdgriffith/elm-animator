@@ -99,9 +99,7 @@ update msg model =
         Check newChecked ->
             ( { model
                 | checked =
-                    -- (6) - Here we're adding a new state to our timeline
-                    -- `quickly` is a function that says "go to our new state, newChecked, in 200ms"
-                    -- If you want to customize the duration of the transition, check out the docs!
+                    -- (6) - Here we're adding a new state to our timeline.
                     model.checked
                         |> Animator.go Animator.slowly newChecked
               }
