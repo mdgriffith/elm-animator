@@ -179,7 +179,7 @@ offset =
 {- ANIMATOR -}
 
 
-{-| `Animator.Css.with` is different from `Animator.with` in that it will only ask for one frame when an animation is updated.
+{-| `Animator.Css.watching` is different from `Animator.watching` in that it will only ask for one frame when an animation is updated.
 
 In that one frame, we render the **entire CSS animation**, which can run without `Elm` needing to do a full rerender.
 

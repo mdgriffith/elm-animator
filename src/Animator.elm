@@ -1172,7 +1172,7 @@ Here's an animator from the [Checkbox.elm example](https://github.com/mdgriffith
     animator : Animator.Animator Model
     animator =
         Animator.animator
-            |> Animator.with
+            |> Animator.watching
                 -- we tell the animator how
                 -- to get the checked timeline using .checked
                 .checked
@@ -1202,9 +1202,9 @@ animator =
     Timeline.Animator (always False) (\now model -> model)
 
 
-{-| `with` will ensure that [`AnimationFrame`](https://package.elm-lang.org/packages/elm/browser/latest/Browser-Events#onAnimationFrame) is running when the animator is transformed into a [`subscription`](#toSubscription).
+{-| `watching` will ensure that [`AnimationFrame`](https://package.elm-lang.org/packages/elm/browser/latest/Browser-Events#onAnimationFrame) is running when the animator is transformed into a [`subscription`](#toSubscription).
 
-**Note** — It will actually make the animation frame subscription run all the time! At some point you'll probably want to optimize when the subscription runs, which means either using (`watchingWith`)[#watchingWith] or `Animator.Css.with`
+**Note** — It will actually make the animation frame subscription run all the time! At some point you'll probably want to optimize when the subscription runs, which means either using (`watchingWith`)[#watchingWith] or `Animator.Css.watching`
 
 -}
 watching :
@@ -1244,7 +1244,7 @@ Let's say we have a checkbox that, for whatever reason, we want to say is spinni
                     checked == False
                 )
 
-**Note** if you're using `Animator.Css` to generate keyframes along with `Animator.Css.with`, you don't need to worry about this.
+**Note** if you're using `Animator.Css` to generate keyframes along with `Animator.Css.watching`, you don't need to worry about this.
 
 -}
 watchingWith :
