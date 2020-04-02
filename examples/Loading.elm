@@ -239,7 +239,8 @@ viewComment comment =
                     , Attr.style "flex-direction" "row"
                     ]
                     [ viewCowboy
-                        -- (3) - w have debug
+                        -- (3) - This `debug` field will turn on `Animator.Css.explain` for the elements animated in the `viewCowboy` function.
+                        -- See the other note labeled (3) to get a better idea of what that means.
                         { debug = False
                         , timeline = comment
                         }
