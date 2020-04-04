@@ -111,24 +111,12 @@ view : Model -> Browser.Document Msg
 view model =
     { title = "Animator - Checkbox"
     , body =
-        [ Html.node "style"
-            []
-            [ text """@import url('https://fonts.googleapis.com/css?family=Roboto&display=swap');"""
-            ]
+        [ stylesheet
         , div
-            [ Attr.style "width" "100%"
-            , Attr.style "height" "1000px"
-            , Attr.style "font-size" "48px"
-            , Attr.style "user-select" "none"
-            , Attr.style "padding" "50px"
-            , Attr.style "font-family" "'Roboto', sans-serif"
+            [ Attr.class "root"
             ]
             [ div
-                [ Attr.style "display" "flex"
-                , Attr.style "flex-direction" "column"
-                , Attr.style "align-items" "center"
-                , Attr.style "justify-content" "center"
-                , Attr.style "padding" "200px"
+                [ Attr.class "viewport"
                 ]
                 [ viewHugeCheckbox model.checked
                 ]
@@ -169,15 +157,7 @@ viewHugeCheckbox checked =
 
                         else
                             Color.black
-                , Attr.style "border-width" "10px"
-                , Attr.style "border-style" "solid"
-                , Attr.style "color" "#000"
-                , Attr.style "width" "160px"
-                , Attr.style "height" "160px"
-                , Attr.style "border-radius" "20px"
-                , Attr.style "font-size" "160px"
-                , Attr.style "line-height" "1.0"
-                , Attr.style "text-align" "center"
+                , Attr.class "checkbox"
                 ]
                 [ div
                     [ Animator.Inline.opacity checked <|
@@ -230,4 +210,42 @@ viewHugeCheckbox checked =
                 ]
                 [ text "👍" ]
             ]
+        ]
+
+
+stylesheet : Html msg
+stylesheet =
+    Html.node "style"
+        []
+        [ text """@import url('https://fonts.googleapis.com/css?family=Roboto&display=swap');
+
+.root {
+    width: 100%;
+    height: 1000px;
+    font-size: 48px;
+    user-select: none;
+    padding: 50px;
+    font-family: 'Roboto', sans-serif;
+}
+
+.viewport {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 200px;
+}
+.checkbox {
+    border-width: 10px;
+    border-style: solid;
+    color: #000;
+    width: 160px;
+    height: 160px;
+    border-radius: 20px;
+    font-size: 160px;
+    line-height: 1.0;
+    text-align: center;
+}
+
+"""
         ]

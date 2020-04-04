@@ -118,25 +118,10 @@ view : Model -> Browser.Document Msg
 view model =
     { title = "Animator - Loading"
     , body =
-        [ Html.node "style"
-            []
-            [ text """@import url('https://fonts.googleapis.com/css?family=Roboto&display=swap');"""
-            ]
-        , div
-            [ Attr.style "width" "100%"
-            , Attr.style "font-size" "48px"
-            , Attr.style "user-select" "none"
-            , Attr.style "padding" "50px"
-            , Attr.style "box-sizing" "border-box"
-            , Attr.style "font-family" "'Roboto', sans-serif"
-            , Attr.style "padding" "200px"
-            ]
+        [ stylesheet
+        , div [ Attr.class "root" ]
             [ div
-                [ Attr.style "display" "flex"
-                , Attr.style "flex-direction" "column"
-                , Attr.style "align-items" "flex-start"
-                , Attr.style "justify-content" "center"
-                , Attr.style "width" "400px"
+                [ Attr.class "viewport"
                 ]
                 [ viewComment model.comment
                 , Html.div
@@ -146,13 +131,7 @@ view model =
                     , Attr.style "width" "100%"
                     ]
                     [ Html.button
-                        [ Attr.style "background-color" pink
-                        , Attr.style "padding" "8px 12px"
-                        , Attr.style "border" "none"
-                        , Attr.style "border-radius" "2px"
-                        , Attr.style "color" "white"
-                        , Attr.style "cursor" "pointer"
-                        , Attr.style "margin-top" "20px"
+                        [ Attr.class "button"
                         , Events.onClick AskServerForNewComment
                         ]
                         [ Html.text "Load comment" ]
@@ -163,10 +142,7 @@ view model =
     }
 
 
-pink =
-    "rgb(240, 0, 245)"
-
-
+viewComment : Animator.Timeline (RemoteData String String) -> Html Msg
 viewComment comment =
     Animator.Css.div comment
         [ Animator.Css.backgroundColor <|
@@ -252,16 +228,7 @@ viewComment comment =
 loadingIndicator : Animator.Timeline (RemoteData error success) -> Html msg
 loadingIndicator loading =
     Html.div
-        [ Attr.style "display" "flex"
-        , Attr.style "width" "100%"
-        , Attr.style "height" "100%"
-        , Attr.style "left" "0"
-        , Attr.style "top" "0"
-        , Attr.style "position" "absolute"
-        , Attr.style "box-sizing" "border-box"
-        , Attr.style "flex-direction" "row"
-        , Attr.style "justify-content" "center"
-        , Attr.style "align-items" "center"
+        [ Attr.class "loading-indicator"
         ]
         [ viewBlinkingCircle 0.2 loading
         , viewBlinkingCircle 0.3 loading
@@ -287,37 +254,23 @@ viewBlinkingCircle offset timeline =
                     _ ->
                         Animator.at 0
         ]
-        [ Attr.style "width" "12px"
-        , Attr.style "height" "12px"
-        , Attr.style "border-radius" "6px"
-        , Attr.style "background-color" pink
-        , Attr.style "margin-right" "8px"
+        [ Attr.class "circle"
         ]
         []
 
 
+viewThinking : Html msg
 viewThinking =
     Html.div
-        [ Attr.style "display" "flex"
-        , Attr.style "flex-direction" "center"
-        , Attr.style "transform" "translateY(-6px)"
-        , Attr.style "width" "72px"
-        , Attr.style "font-size" "24px"
-        , Attr.style "margin-right" "12px"
-        , Attr.style "justify-content" "center"
+        [ Attr.class "thinking"
         ]
         [ Html.text "\u{1F914}"
         ]
 
 
+viewCowboy : { debug : Bool, timeline : Animator.Timeline (RemoteData error value) } -> Html msg
 viewCowboy { debug, timeline } =
-    Html.div
-        [ Attr.style "display" "flex"
-        , Attr.style "transform" "translateY(-6px)"
-        , Attr.style "width" "72px"
-        , Attr.style "font-size" "24px"
-        , Attr.style "margin-right" "12px"
-        ]
+    Html.div [ Attr.class "cowboy" ]
         [ Animator.Css.div timeline
             -- (3) - Animator.Css.explain True will show you
             --         -> the bounding box for this element
@@ -490,3 +443,88 @@ fingerGuns offset =
         , scaleX = Animator.Css.resting 1
         , scaleY = Animator.Css.resting 1
         }
+
+
+
+{- STYLESHEET -}
+
+
+pink : String
+pink =
+    "rgb(240, 0, 245)"
+
+
+stylesheet : Html msg
+stylesheet =
+    Html.node "style"
+        []
+        [ text """@import url('https://fonts.googleapis.com/css?family=Roboto&display=swap');
+
+
+
+.circle {
+    width: 12px;
+    height: 12px;
+    border-radius: 6px;
+    background-color: rgb(240, 0, 245);
+    margin-right: 8px;
+}
+
+.thinking {
+    display: flex;
+    flex-direction: center;
+    transform: translateY(-6px);
+    width: 72px;
+    font-size: 24px;
+    margin-right: 12px;
+    justify-content: center;
+}
+.loading-indicator {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    left: 0;
+    top: 0;
+    position: absolute;
+    box-sizing: border-box;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+}
+
+.root {
+    width: 100%;
+    font-size: 48px;
+    user-select: none;
+    padding: 50px;
+    box-sizing: border-box;
+    font-family: 'Roboto', sans-serif;
+    padding: 200px;
+}
+.viewport {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    width: 400px;
+
+}
+.button {
+    background-color: rgb(240, 0, 245);
+    padding: 8px 12px;
+    border: none;
+    border-radius: 2px;
+    color: white;
+    cursor: pointer;
+    margin-top: 20px;
+
+}
+.cowboy {
+    display: flex;
+    transform: translateY(-6px);
+    width: 72px;
+    font-size: 24px;
+    margin-right: 12px;
+}
+"""
+        ]
