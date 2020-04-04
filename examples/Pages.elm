@@ -215,22 +215,15 @@ viewPage timeline page { title, content } =
                 html
 
             else
-                Html.a [ Attr.href (pageToUrl page) ]
+                Html.a
+                    [ Attr.href (pageToUrl page)
+                    , Attr.style "cursor" "pointer"
+                    ]
                     [ html ]
     in
     Animator.Css.div timeline
         (pageAnimation page)
-        (List.concat
-            [ [ Attr.class "page"
-              ]
-            , if Animator.current timeline == page then
-                []
-
-              else
-                [ Attr.style "cursor" "pointer"
-                ]
-            ]
-        )
+        [ Attr.class "page" ]
         [ Html.h2 [] [ Html.text title ]
         , loremIpsum
         ]
