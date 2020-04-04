@@ -1,35 +1,92 @@
 module Pages exposing (main)
 
-{- 
-**IN PROGRESS EXAMPLE, NOT QUITE FINISHED :D **
+{-| Animated page transitions!
 
-   This example shows three techniques.
+This example is meant to show a few things.
 
-   - 1. Page transitions where the url is modified.
-       We essentially have a `Animator.Timeline Page`
+1.  That page transitions are just like animating any other state, we'll just create an `Animator.Timeline Page` and animate with that.
 
-   - 2. General UI state!
-       -> hover + focus
+2.  How to handle routing so that the url changes as your transition.
 
 -}
-
 
 import Animator
 import Animator.Css
 import Animator.Inline
 import Browser
+import Browser.Events
+import Browser.Navigation
 import Color
 import Html exposing (..)
 import Html.Attributes as Attr
 import Html.Events as Events
 import Time
+import Url
+import Url.Builder
+import Url.Parser exposing ((</>))
+
+
+{-| -}
+type alias Model =
+    { page : Animator.Timeline Page
+    , navKey : Browser.Navigation.Key
+    , needsUpdate : Bool
+    }
+
+
+type Page
+    = Home
+    | About
+    | Blog
+    | NotFound
+
+
+urlParser : Url.Parser.Parser (Page -> a) a
+urlParser =
+    Url.Parser.oneOf
+        [ Url.Parser.map Home Url.Parser.top
+        , Url.Parser.map Blog (Url.Parser.s "blog")
+        , Url.Parser.map About (Url.Parser.s "about")
+        ]
+
+
+pageToUrl : Page -> String
+pageToUrl page =
+    case page of
+        Home ->
+            Url.Builder.absolute [] []
+
+        About ->
+            Url.Builder.absolute [ "about" ] []
+
+        Blog ->
+            Url.Builder.absolute [ "blog" ] []
+
+        NotFound ->
+            Url.Builder.absolute [ "notfound" ] []
+
+
+animator : Animator.Animator Model
+animator =
+    Animator.animator
+        |> Animator.Css.watching .page
+            (\newPage model ->
+                { model | page = newPage }
+            )
 
 
 main =
-    Browser.document
+    Browser.application
         { init =
-            \() ->
-                ( { checked = Animator.init False
+            \() url navKey ->
+                let
+                    initialPage =
+                        Url.Parser.parse urlParser url
+                            |> Maybe.withDefault NotFound
+                in
+                ( { page = Animator.init initialPage
+                  , navKey = navKey
+                  , needsUpdate = False
                   }
                 , Cmd.none
                 )
@@ -37,231 +94,245 @@ main =
         , update = update
         , subscriptions =
             \model ->
-                animator
-                    |> Animator.toSubscription Tick model
+                Sub.batch
+                    [ animator
+                        |> Animator.toSubscription Tick model
+                    ]
+        , onUrlRequest = ClickedLink
+        , onUrlChange = UrlChanged
         }
-
-
-{-| This is the "animator", which is able to get and set each timeline you want animated.
-
-It will turn
-
--}
-animator : Animator.Animator Model
-animator =
-    Animator.animator
-        -- we tell the animator how to get the checked timeline using .checked
-        -- and we tell the animator how to update that timeline with updateChecked
-        |> Animator.Css.with .checked updateChecked
-
-
-updateChecked newChecked model =
-    { model | checked = newChecked }
-
-
-{--}
-type alias Model =
-    { checked : Animator.Timeline Bool
-    }
 
 
 type Msg
     = Tick Time.Posix
-    | Check Bool
+    | ClickedLink Browser.UrlRequest
+    | UrlChanged Url.Url
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Tick newTime ->
-            ( model
-                |> Animator.update newTime animator
+            ( Animator.update newTime animator model
             , Cmd.none
             )
 
-        Check bool ->
-            ( { model
-                | checked =
-                    Animator.slowly bool model.checked
-                        
-                        -- |> Animator.toOver (Animator.millis 2000) bool
-              }
+        ClickedLink request ->
+            case request of
+                Browser.Internal url ->
+                    -- Note:  Ideally, starting a new animation with `toNewPage` would only happen in `UrlChanged`
+                    -- which occurs immediately after this message if we use `Browser.Navigation.pushUrl`
+                    --
+                    -- However there seems to be a bug in elm where a subscription to animationFrame fails to fire
+                    -- if we start a new animation just in `UrlChanged`.
+                    -- Note, this seems to be a sepcial case with routing
+                    ( toNewPage url model
+                    , Browser.Navigation.pushUrl model.navKey (Url.toString url)
+                    )
+
+                Browser.External url ->
+                    ( model
+                    , Browser.Navigation.load url
+                    )
+
+        UrlChanged url ->
+            -- This should be te only place we need to use `toNewPage`.  See above note.
+            ( toNewPage url model
             , Cmd.none
             )
+
+
+toNewPage : Url.Url -> Model -> Model
+toNewPage url model =
+    let
+        newPage =
+            Url.Parser.parse urlParser url
+                |> Maybe.withDefault NotFound
+    in
+    { model
+        | page =
+            model.page
+                -- full page animations involve moving some large stuff.
+                -- in that case using a slower duration than normal is a good place to start.
+                |> Animator.go Animator.verySlowly newPage
+    }
 
 
 view : Model -> Browser.Document Msg
 view model =
-    { title = "Animator - Checkbox"
+    { title = "Animator - Page Transitions"
     , body =
-        [ Html.node "style"
-            []
-            [ text """@import url('https://fonts.googleapis.com/css?family=Roboto&display=swap');"""
-            ]
+        [ stylesheet
         , div
-            [ Attr.style "width" "100%"
-            , Attr.style "font-size" "48px"
-            , Attr.style "user-select" "none"
-            , Attr.style "padding" "50px"
-            , Attr.style "box-sizing" "border-box"
-            , Attr.style "font-family" "'Roboto', sans-serif"
+            [ Attr.class "root"
             ]
-            [ div
-                [ Attr.style "display" "flex"
-                , Attr.style "flex-direction" "column"
-                , Attr.style "align-items" "center"
-                , Attr.style "justify-content" "center"
-                , Attr.style "padding" "200px"
+            [ nav []
+                [ link Home "Home"
+                , link Blog "Blog"
+                , link About "About"
                 ]
-                [ case Animator.current model.checked of
-                    True ->
-                        Html.text "True"
-
-                    False ->
-                        Html.text "False"
-
-                , case Animator.previous model.checked of
-                    True ->
-                        Html.text "Prev- True"
-
-                    False ->
-                        Html.text "Prev- False"
-                , viewHugeCheckbox model.checked
+            , div
+                [ Attr.class "page-row"
+                ]
+                [ viewPage model.page
+                    Home
+                    { title = "The home page"
+                    , content = loremIpsum
+                    }
+                , viewPage model.page
+                    Blog
+                    { title = "Blog"
+                    , content = loremIpsum
+                    }
+                , viewPage model.page
+                    About
+                    { title = "About"
+                    , content = loremIpsum
+                    }
                 ]
             ]
         ]
     }
 
 
-{-| Our actual checkbox!
+stylesheet =
+    Html.node "style"
+        []
+        [ text """@import url('https://fonts.googleapis.com/css?family=Roboto&display=swap');
+            
+a { 
+    text-decoration: none;
+    color: black;
+}            
 
-We want to animate the checked state.
+a:visited { 
+    text-decoration: none;
+    color: black;
+}   
+.root {
+    width: 100%;
+    height: 1000px;
+    font-size: 16px;
+    user-select: none;
+    padding: 50px;
+    font-family: 'Roboto', sans-serif;
+}
+.page-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    padding: 100px;
+    transform: scale(0.2);
+}
+.page {
+    width: 500px;
+    padding: 48px;
+    border: 1px solid black;
+    border-radius: 2px;
+    flex-shrink: 0;
+    background-color: white;
+}
 
-  - Animate the background color of the actual checkbox
-  - Animate the opacity of the checkmark
-  - Animate the rotation of the checkmark
-  - Animate the scale of the checkmark
-
--}
-viewHugeCheckbox : Animator.Timeline Bool -> Html Msg
-viewHugeCheckbox checked =
-    div
-        [ Attr.style "display" "flex"
-        , Attr.style "align-items" "center"
-        , Attr.style "flex-direction" "column"
+"""
         ]
-        [ div
-            [ Attr.style "display" "flex"
-            , Attr.style "align-items" "center"
-            , Attr.style "cursor" "pointer"
-            , Attr.style "perspective" "500px"
-            , Events.onClick (Check (not (Animator.current checked)))
+
+
+link page label =
+    Html.a
+        [ Attr.href (pageToUrl page)
+        , Attr.style "margin-right" "12px"
+        ]
+        [ Html.text label ]
+
+
+viewPage timeline page { title, content } =
+    let
+        wrapInLink html =
+            if Animator.current timeline == page then
+                html
+
+            else
+                Html.a [ Attr.href (pageToUrl page) ]
+                    [ html ]
+    in
+    Animator.Css.div timeline
+        (pageAnimation page)
+        (List.concat
+            [ [ Attr.class "page"
+              ]
+            , if Animator.current timeline == page then
+                []
+
+              else
+                [ Attr.style "cursor" "pointer"
+                ]
             ]
-            [ Animator.Css.animated checked
-                [ Animator.Css.backgroundColor <|
-                    \state ->
-                        if state then
-                            Color.rgb255 255 96 96
+        )
+        [ Html.h2 [] [ Html.text title ]
+        , loremIpsum
+        ]
+        |> wrapInLink
 
-                        else
-                            Color.white
-                , Animator.Css.borderColor <|
-                    \state ->
-                        if state then
-                            Color.rgb255 255 96 96
 
-                        else
-                            Color.black
-                , Animator.Css.transformWith
-                    { rotationAxis =
-                        { x = 0
-                        , y = 0.25
-                        , z = 0.25
-                        }
-                    , origin = Animator.Css.center
-                    }
-                  <|
-                    \on ->
-                        if on then
-                            -- Animator.Css.xy
-                            --     { x = 0
-                            --     , y = 0
-                            --     }
-                            -- Animator.Css.rotateTo (turns 0.125)
-                            Animator.Css.xy 
-                                { x = 0
-                                , y = 0
-                                }
-                            --     -- Animator.Css.transform
-                            --     |>
-                            -- Animator.Css.rotating (Animator.seconds 5)
-                            -- { x =
-                            -- Animator.wave -500 -620
-                            --     |> Animator.loop (Animator.millis 1999)
-                            -- , y =
-                            --     Animator.wave -500 -620
-                            --         |> Animator.loop (Animator.millis 1999)
-                            -- }
+pageAnimation page =
+    [ Animator.Css.opacity <|
+        \currentPage ->
+            if currentPage == page then
+                Animator.at 1
 
-                        else
-                            -- Animator.Css.xy
-                            -- -- { x =
-                            -- --     Animator.wave -200 -300
-                            -- --         |> Animator.loop (Animator.millis 1999)
-                            -- -- , y =
-                            -- --     Animator.wave -200 -300
-                            -- --         |> Animator.loop (Animator.millis 1999)
-                            -- -- }
-                            -- { x = 200
-                            -- , y = 60
-                            -- }
-                            -- |>
-                            -- Animator.Css.rotateTo (turns 0)
-                            Animator.Css.xy 
-                                { x = 0
-                                , y = 0
-                                }
-                                |> Animator.Css.lookAt 
-                                    { x = 0.7
-                                    , y = 0.2
-                                    , z = 0.8
-                                    
-                                    }
+            else
+                Animator.at 0.4
+    , Animator.Css.transform <|
+        \currentPage ->
+            if currentPage == page then
+                Animator.Css.scale 5
 
-                ]
-                [ Attr.style "border-width" "10px"
-                , Attr.style "border-style" "solid"
-                , Attr.style "color" "#000"
-                , Attr.style "width" "160px"
-                , Attr.style "height" "160px"
-                , Attr.style "border-radius" "20px"
-                , Attr.style "font-size" "160px"
-                , Attr.style "line-height" "1.0"
-                , Attr.style "text-align" "center"
-                , Attr.style "perspective" "500px"
-                ]
-                [ Html.text "!"
-                ]
-            , span
-                [ Attr.style "margin-left" "32px"
-                , Attr.style "font-size" "190px"
-                ]
-                [ text "Click me" ]
+            else
+                Animator.Css.scale 1
+
+    -- Here we're animating a style that's not directly supported by elm-animator.
+    , Animator.Css.style "margin"
+        (\float ->
+            let
+                str =
+                    String.fromFloat float
+            in
+            "0px " ++ str ++ "px"
+        )
+        (\currentPage ->
+            if currentPage == page then
+                Animator.at 1800
+
+            else
+                Animator.at 0
+        )
+
+    -- because we're zooming everywhere, we can adjust the border width so it still looks nice
+    -- even when the page thumbnail is small.
+    , Animator.Css.style "border-width"
+        (\float ->
+            String.fromFloat float ++ "px"
+        )
+        (\currentPage ->
+            if currentPage == page then
+                Animator.at 1
+
+            else
+                Animator.at 5
+        )
+    ]
+
+
+loremIpsum =
+    Html.div []
+        [ Html.div []
+            [ Html.text "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum."
             ]
-        , div
-            [ 
-                -- Animator.Css.opacity checked <|
-                -- \state ->
-                --     if state then
-                --         1
-
-                --     else
-                --         0
+        , Html.div []
+            [ Html.text "Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots in a piece of classical Latin literature from 45 BC, making it over 2000 years old. Richard McClintock, a Latin professor at Hampden-Sydney College in Virginia, looked up one of the more obscure Latin words, consectetur, from a Lorem Ipsum passage, and going through the cites of the word in classical literature, discovered the undoubtable source. Lorem Ipsum comes from sections 1.10.32 and 1.10.33 of \"de Finibus Bonorum et Malorum\" (The Extremes of Good and Evil) by Cicero, written in 45 BC. This book is a treatise on the theory of ethics, very popular during the Renaissance. The first line of Lorem Ipsum, \"Lorem ipsum dolor sit amet..\", comes from a line in section 1.10.32."
             ]
-            [ text "Great job "
-            , span
-                [ Attr.style "display" "inline-block"
-                ]
-                [ text "👍" ]
+        , Html.div []
+            [ Html.text "The standard chunk of Lorem Ipsum used since the 1500s is reproduced below for those interested. Sections 1.10.32 and 1.10.33 from \"de Finibus Bonorum et Malorum\" by Cicero are also reproduced in their exact original form, accompanied by English versions from the 1914 translation by H. Rackham."
             ]
         ]
