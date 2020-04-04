@@ -32,6 +32,8 @@ Let's check out some examples!
 
 # Overview of examples
 
+**Note** if you clone this library to play with the code locally, make sure to `cd examples` and run `elm make` from there!
+
 1. [**Checkbox**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Checkbox.elm) - Animate a checkbox as it's checked.  It covers:
      - *How to **get started** with `elm-animator`*
      - *An idea of how to **incrementally upgrade** existing code to use animations*
@@ -42,10 +44,8 @@ Let's check out some examples!
      - How to do _**CSS Keyframe** generation_
 
 3. [**Page transitions**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Pages.elm) - Transition between pages 3d page transition with routing.
-     - *Set up routing so there are no page **reloads***
+     - *Set up routing so there are no page **reloads*** (actually this is standard for SPAs in general).
      - *Animate the transition between pages*
-     - _**CSS Keyframe** generation_ (again)
-     - *How to capture `focus` and `hover` state in your model so you can animate it*
 
 4. [**Todo list**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Todo.elm) - An animated todo list, where items are sorted by if they're done.
      - *Ask for bounding boxes for elements*
