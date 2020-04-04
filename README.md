@@ -47,7 +47,7 @@ Let's check out some examples!
      - *Set up routing so there are no page **reloads*** (actually this is standard for SPAs in general).
      - *Animate the transition between pages*
 
-4. [**Todo list**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Todo.elm) - An animated todo list, where items are sorted by if they're done.
+4. [**Todo list**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Todo.elm) - **Still under construction!** - An animated todo list, where items are sorted by if they're done.
      - *Ask for bounding boxes for elements*
      - *Animate something based on it's bounding box*
 

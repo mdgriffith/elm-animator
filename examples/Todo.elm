@@ -1,82 +1,132 @@
-module Todo exposing (..)
+module Todo exposing (main)
 
-{-| 
+{-| **Under construction**
+Let's make a todo list!
 
+And do the following
 
-**IN PROGRESS EXAMPLE, NOT QUITE FINISHED :D **
+    1.  Completing items are animated to the end of the list
+    2.  Fade elements out when deleting them
+
+Why is this tricky?
+
+    1.  We need bounding boxes in order to do our reordering animation.  But we can only get bounding boxes after something has been rendered.
+    2.  How can we animate something if it's been deleted?!
+        Oh, wait, we can go back in time. Duh.
+
 -}
 
 import Animator
+import Animator.Css
 import Animator.Inline
 import Browser
+import Browser.Dom
 import Color
 import Html exposing (..)
 import Html.Attributes as Attr
 import Html.Events as Events
+import Process
+import Task
+import Time
+
+
+type alias Entry =
+    { description : String
+    , done : Bool
+    , id : Int
+
+    -- We capture bounding box information from the browser
+    -- https://package.elm-lang.org/packages/elm/browser/latest/Browser-Dom#Element
+    , box : Maybe Browser.Dom.Element
+    }
+
+
+type alias Model =
+    { entries :
+        Animator.Timeline (List Entry)
+    , mostRecentId : Int
+    , field : String
+    }
 
 
 main =
     Browser.document
         { init =
             \() ->
-                ( { checked = Animator.init False
+                ( { entries =
+                        Animator.init
+                            []
+                  , field = ""
+                  , mostRecentId = 0
                   }
                 , Cmd.none
                 )
         , view = view
         , update = update
-        , subscriptions = subscriptions
+        , subscriptions =
+            \model ->
+                animator
+                    |> Animator.toSubscription Tick model
         }
 
 
-{-| 
-
--}
-subscriptions : Model -> Sub Msg
-subscriptions model =
-    Animator.animator Tick
-        -- we tell the animator how to get the checked timeline using .checked
-        -- and we tell the animator how to update that timeline with updateChecked
-        |> Animator.with .checked updateChecked
-        |> Animator.toSubscription model
-
-
-updateChecked newChecked model =
-    { model | checked = newChecked }
-
-
-{--}
-type alias Model =
-    { checked : Animator.Timeline Bool
-    }
+{-| -}
+animator : Animator.Animator Model
+animator =
+    Animator.animator
+        |> Animator.Css.watching
+            .entries
+            (\newEntries model ->
+                { model | entries = newEntries }
+            )
 
 
 type Msg
-    = Tick Model
-    | Check Bool
+    = Tick Time.Posix
+    | Delete Int
+    | Complete Int
+    | FieldUpdated String
+    | AddEntry
+    | NewBoundingBox Int Browser.Dom.Element
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Tick newModel ->
-            ( newModel
+        Tick newTime ->
+            ( model
+                |> Animator.update newTime animator
             , Cmd.none
             )
 
-        Check bool ->
-            ( { model
-                | checked =
-                    model.checked
-                        |> Animator.to (Animator.millis 2000) bool
-              }
+        Delete id ->
+            ( model
             , Cmd.none
             )
+
+        Complete id ->
+            ( model
+            , Cmd.none
+            )
+
+        AddEntry ->
+            ( model, Cmd.none )
+
+        NewBoundingBox id box ->
+            ( model, Cmd.none )
+
+
+getBoundingBoxes items =
+    Cmd.batch (List.map getBBox (Animator.current items))
+
+
+getBBox item =
+    Cmd.none
 
 
 view : Model -> Browser.Document Msg
 view model =
-    { title = "Animator - Checkbox"
+    { title = "Animator - Loading"
     , body =
         [ Html.node "style"
             []
@@ -84,123 +134,51 @@ view model =
             ]
         , div
             [ Attr.style "width" "100%"
-            , Attr.style "height" "1000px"
             , Attr.style "font-size" "48px"
             , Attr.style "user-select" "none"
             , Attr.style "padding" "50px"
+            , Attr.style "box-sizing" "border-box"
             , Attr.style "font-family" "'Roboto', sans-serif"
+            , Attr.style "padding" "200px"
             ]
             [ div
                 [ Attr.style "display" "flex"
                 , Attr.style "flex-direction" "column"
-                , Attr.style "align-items" "center"
+                , Attr.style "align-items" "flex-start"
                 , Attr.style "justify-content" "center"
-                , Attr.style "padding" "200px"
+                , Attr.style "width" "400px"
                 ]
-                [ viewHugeCheckbox model.checked
+                [ Html.div []
+                    [ Html.div [] []
+                    , Html.div
+                        [ Attr.style "display" "flex"
+                        , Attr.style "flex-direction" "row"
+                        , Attr.style "justify-content" "space-between"
+                        , Attr.style "width" "100%"
+                        ]
+                        [ Html.button
+                            [ Attr.style "background-color" pink
+                            , Attr.style "padding" "8px 12px"
+                            , Attr.style "border" "none"
+                            , Attr.style "border-radius" "2px"
+                            , Attr.style "color" "white"
+                            , Attr.style "cursor" "pointer"
+                            , Attr.style "margin-top" "20px"
+                            , Events.onClick AddEntry
+                            ]
+                            [ Html.text "Load comment" ]
+                        ]
+                    ]
+                , viewEntries model.entries
                 ]
             ]
         ]
     }
 
 
-{-| Our actual checkbox!
+pink =
+    "rgb(240, 0, 245)"
 
-We want to animate the checked state.
 
-  - Animate the background color of the actual checkbox
-  - Animate the opacity of the checkmark
-  - Animate the rotation of the checkmark
-  - Animate the scale of the checkmark
-
--}
-viewHugeCheckbox : Animator.Timeline Bool -> Html Msg
-viewHugeCheckbox checked =
-    div
-        [ Attr.style "display" "flex"
-        , Attr.style "align-items" "center"
-        , Attr.style "flex-direction" "column"
-        ]
-        [ div
-            [ Attr.style "display" "flex"
-            , Attr.style "align-items" "center"
-            , Attr.style "cursor" "pointer"
-            , Events.onClick (Check (not (Animator.current checked)))
-            ]
-            [ div
-                [ Animator.Inline.backgroundColor checked <|
-                    \state ->
-                        if state then
-                            Color.rgb255 255 96 96
-
-                        else
-                            Color.white
-                , Animator.Inline.borderColor checked <|
-                    \state ->
-                        if state then
-                            Color.rgb255 255 96 96
-
-                        else
-                            Color.black
-                , Attr.style "border-width" "10px"
-                , Attr.style "border-style" "solid"
-                , Attr.style "color" "#000"
-                , Attr.style "width" "160px"
-                , Attr.style "height" "160px"
-                , Attr.style "border-radius" "20px"
-                , Attr.style "font-size" "160px"
-                , Attr.style "line-height" "1.0"
-                , Attr.style "text-align" "center"
-                ]
-                [ div
-                    [ Animator.Inline.opacity checked <|
-                        \state ->
-                            if state then
-                                1
-
-                            else
-                                0
-                    , Animator.Inline.transform
-                        { position = { x = 0, y = 0 }
-                        , rotate =
-                            Animator.linear checked <|
-                                \state ->
-                                    if state then
-                                        turns 0
-
-                                    else
-                                        turns 0.25
-                        , scale =
-                            Animator.linear checked <|
-                                \state ->
-                                    if state then
-                                        1
-
-                                    else
-                                        0
-                        }
-                    ]
-                    [ text "!" ]
-                ]
-            , span
-                [ Attr.style "margin-left" "32px"
-                , Attr.style "font-size" "190px"
-                ]
-                [ text "Click me" ]
-            ]
-        , div
-            [ Animator.Inline.opacity checked <|
-                \state ->
-                    if state then
-                        1
-
-                    else
-                        0
-            ]
-            [ text "Great job "
-            , span
-                [ Attr.style "display" "inline-block"
-                ]
-                [ text "👍" ]
-            ]
-        ]
+viewEntries entries =
+    Html.text ""
