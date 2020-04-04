@@ -38,14 +38,14 @@ Let's check out some examples!
      - *How to **get started** with `elm-animator`*
      - *An idea of how to **incrementally upgrade** existing code to use animations*
 
-2. [**Loading**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Loading.elm) - Animate the loading state of a piece of content.
+2. [**Page transitions**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Pages.elm) - Transition between pages 3d page transition with routing.
+     - *Set up routing so there are no page **reloads*** (actually this is standard for SPAs in general).
+     - *Animate the transition between pages*
+  
+3. [**Loading**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Loading.elm) - Animate the loading state of a piece of content.
      - *How to animate **resting** states such as a loading spinner*
      - _Animate with content that's already been **deleted**_ (whaaaa?!)
      - How to do _**CSS Keyframe** generation_
-
-3. [**Page transitions**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Pages.elm) - Transition between pages 3d page transition with routing.
-     - *Set up routing so there are no page **reloads*** (actually this is standard for SPAs in general).
-     - *Animate the transition between pages*
 
 4. [**Todo list**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Todo.elm) - **Still under construction!** - An animated todo list, where items are sorted by if they're done.
      - *Ask for bounding boxes for elements*
