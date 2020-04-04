@@ -34,6 +34,38 @@ type alias Model =
     }
 
 
+main =
+    Browser.application
+        { init =
+            \() url navKey ->
+                let
+                    initialPage =
+                        Url.Parser.parse urlParser url
+                            |> Maybe.withDefault NotFound
+                in
+                ( { page = Animator.init initialPage
+                  , navKey = navKey
+                  , needsUpdate = False
+                  }
+                , Cmd.none
+                )
+        , view = view
+        , update = update
+        , subscriptions =
+            \model ->
+                Sub.batch
+                    [ animator
+                        |> Animator.toSubscription Tick model
+                    ]
+        , onUrlRequest = ClickedLink
+        , onUrlChange = UrlChanged
+        }
+
+
+
+{- URL Handling -}
+
+
 type Page
     = Home
     | About
@@ -75,32 +107,8 @@ animator =
             )
 
 
-main =
-    Browser.application
-        { init =
-            \() url navKey ->
-                let
-                    initialPage =
-                        Url.Parser.parse urlParser url
-                            |> Maybe.withDefault NotFound
-                in
-                ( { page = Animator.init initialPage
-                  , navKey = navKey
-                  , needsUpdate = False
-                  }
-                , Cmd.none
-                )
-        , view = view
-        , update = update
-        , subscriptions =
-            \model ->
-                Sub.batch
-                    [ animator
-                        |> Animator.toSubscription Tick model
-                    ]
-        , onUrlRequest = ClickedLink
-        , onUrlChange = UrlChanged
-        }
+
+{- UPDATING -}
 
 
 type Msg
@@ -158,6 +166,10 @@ toNewPage url model =
     }
 
 
+
+{- Actually viewing our pages! -}
+
+
 view : Model -> Browser.Document Msg
 view model =
     { title = "Animator - Page Transitions"
@@ -195,57 +207,7 @@ view model =
     }
 
 
-stylesheet =
-    Html.node "style"
-        []
-        [ text """@import url('https://fonts.googleapis.com/css?family=Roboto&display=swap');
-            
-a { 
-    text-decoration: none;
-    color: black;
-}            
-
-a:visited { 
-    text-decoration: none;
-    color: black;
-}   
-.root {
-    width: 100%;
-    height: 1000px;
-    font-size: 16px;
-    user-select: none;
-    padding: 50px;
-    font-family: 'Roboto', sans-serif;
-}
-.page-row {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    padding: 100px;
-    transform: scale(0.2);
-}
-.page {
-    width: 500px;
-    padding: 48px;
-    border: 1px solid black;
-    border-radius: 2px;
-    flex-shrink: 0;
-    background-color: white;
-}
-
-"""
-        ]
-
-
-link page label =
-    Html.a
-        [ Attr.href (pageToUrl page)
-        , Attr.style "margin-right" "12px"
-        ]
-        [ Html.text label ]
-
-
+viewPage : Animator.Timeline Page -> Page -> { title : String, content : Html msg } -> Html Msg
 viewPage timeline page { title, content } =
     let
         wrapInLink html =
@@ -275,6 +237,7 @@ viewPage timeline page { title, content } =
         |> wrapInLink
 
 
+pageAnimation : Page -> List (Animator.Css.Attribute Page)
 pageAnimation page =
     [ Animator.Css.opacity <|
         \currentPage ->
@@ -324,6 +287,15 @@ pageAnimation page =
     ]
 
 
+
+{- Less Exciting Stuff
+
+   Below here is some content and a stylesheet.
+
+-}
+
+
+loremIpsum : Html msg
 loremIpsum =
     Html.div []
         [ Html.div []
@@ -335,4 +307,57 @@ loremIpsum =
         , Html.div []
             [ Html.text "The standard chunk of Lorem Ipsum used since the 1500s is reproduced below for those interested. Sections 1.10.32 and 1.10.33 from \"de Finibus Bonorum et Malorum\" by Cicero are also reproduced in their exact original form, accompanied by English versions from the 1914 translation by H. Rackham."
             ]
+        ]
+
+
+link : Page -> String -> Html msg
+link page label =
+    Html.a
+        [ Attr.href (pageToUrl page)
+        , Attr.style "margin-right" "12px"
+        ]
+        [ Html.text label ]
+
+
+stylesheet : Html msg
+stylesheet =
+    Html.node "style"
+        []
+        [ text """@import url('https://fonts.googleapis.com/css?family=Roboto&display=swap');
+            
+a { 
+    text-decoration: none;
+    color: black;
+}            
+
+a:visited { 
+    text-decoration: none;
+    color: black;
+}   
+.root {
+    width: 100%;
+    height: 1000px;
+    font-size: 16px;
+    user-select: none;
+    padding: 50px;
+    font-family: 'Roboto', sans-serif;
+}
+.page-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    padding: 100px;
+    transform: scale(0.2);
+}
+.page {
+    width: 500px;
+    padding: 48px;
+    border: 1px solid black;
+    border-radius: 2px;
+    flex-shrink: 0;
+    background-color: white;
+}
+
+"""
         ]
