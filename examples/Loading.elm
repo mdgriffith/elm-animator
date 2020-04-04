@@ -70,8 +70,9 @@ main =
 animator : Animator.Animator Model
 animator =
     Animator.animator
-        -- *NOTE*  We're using `the Animator.Css.with` instead of the normal one.
-        -- This one only needs to update
+        -- *NOTE*  We're using `the Animator.Css.watching` instead of `Animator.with`.
+        -- Instead of asking for a constant stream of animation frames, it'll only ask for one
+        -- and we'll render the entire css animation in that frame.
         |> Animator.Css.watching
             .comment
             (\newComment model ->
