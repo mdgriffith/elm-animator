@@ -1,6 +1,6 @@
 module Animator.Css exposing
     ( watching
-    , div
+    , div, node
     , Attribute, opacity, height, width
     , fontSize, fontColor, wordSpacing, letterSpacing
     , backgroundColor
@@ -30,7 +30,7 @@ This means `Elm` only needs to run your view code once instead of 60 times a sec
 
 @docs watching
 
-@docs div
+@docs div, node
 
 
 # Properties
@@ -890,7 +890,35 @@ div :
     -> List (Html.Attribute msg)
     -> List (Html msg)
     -> Html msg
-div timeline divAttrs attrs children =
+div =
+    node "div"
+
+
+{-| Specify a node name that's not a div. Here's an `<a>`.
+
+         Animator.Css.node "a" model.checked
+            [ Animator.Css.backgroundColor<|
+                \checked ->
+                    if checked then
+                        Color.rgb255 255 96 96
+
+                    else
+                        Color.white
+            ]
+            [ Attr.style "height" "30px"
+            , Attr.style "width" "30px"
+            ]
+            [ Html.text "" ]
+
+-}
+node :
+    String
+    -> Timeline event
+    -> List (Attribute event)
+    -> List (Html.Attribute msg)
+    -> List (Html msg)
+    -> Html msg
+node name timeline divAttrs attrs children =
     let
         animations =
             List.foldl (renderAttrs timeline) [] divAttrs
@@ -917,7 +945,7 @@ div timeline divAttrs attrs children =
     --       , Html.div (Attr.class (renderClassName "" animations) :: attrs) children
     --       )
     --     ]
-    Html.div
+    Html.node name
         (Attr.class (renderClassName "" animations)
             :: possiblyExplainAttr
             :: renderTransformOptions transformOptions
