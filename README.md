@@ -12,10 +12,10 @@ So, if you were previously storing a `Bool`, now you'd store `Animator.Timeline 
         [ Animator.Inline.opacity model.checked <|
             \checked ->
                 if checked then
-                    1
+                   Animator.at 1
 
                 else
-                    0
+                   Animator.at 0
         ]
         [ text "👍" ]
 
