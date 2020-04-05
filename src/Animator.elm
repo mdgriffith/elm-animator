@@ -243,14 +243,14 @@ type alias Timeline state =
 
 So, if you previously had a `Bool` in your model:
 
-    { checked = Bool }
+    type alias Model = { checked : Bool }
 
     -- created via
     { checked = False }
 
 You could replace that with an `Animator.Timeline Bool`
 
-    { checked = Animator.Timeline Bool }
+    type alias Model = { checked : Animator.Timeline Bool }
 
     -- created via
     { checked = Aniamtor.init False }
