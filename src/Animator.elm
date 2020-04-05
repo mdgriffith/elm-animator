@@ -940,7 +940,7 @@ type alias Resting item =
     Timeline.Resting item
 
 
-{-| Show a single `sprite`
+{-| Show a single `sprite`.
 -}
 frame : sprite -> Frames sprite
 frame =
