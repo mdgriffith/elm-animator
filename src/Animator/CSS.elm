@@ -113,11 +113,11 @@ import Pixels
 
 
 {-| -}
-type Attribute event
-    = ColorAttribute String (event -> Color)
-    | Linear String (event -> Movement) (Float -> String)
-    | Movement String (event -> Movement) (Float -> String)
-    | TransformAttr TransformOptions (event -> Transform)
+type Attribute state
+    = ColorAttribute String (state -> Color)
+    | Linear String (state -> Movement) (Float -> String)
+    | Movement String (state -> Movement) (Float -> String)
+    | TransformAttr TransformOptions (state -> Transform)
     | Explain Bool
 
 
@@ -136,7 +136,7 @@ If you turn this on, it will show you:
 ![](https://mdgriffith.github.io/elm-animator/images/explain-example.png)
 
 -}
-explain : Bool -> Attribute event
+explain : Bool -> Attribute state
 explain =
     Explain
 
@@ -390,7 +390,7 @@ stubFloat f =
 
 
 {-| -}
-renderAttrs : Timeline event -> Attribute event -> List Anim -> List Anim
+renderAttrs : Timeline state -> Attribute state -> List Anim -> List Anim
 renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
     case attr of
         Explain _ ->
@@ -885,8 +885,8 @@ Here's a checkbox that changes backgrounds as a brief example:
 
 -}
 div :
-    Timeline event
-    -> List (Attribute event)
+    Timeline state
+    -> List (Attribute state)
     -> List (Html.Attribute msg)
     -> List (Html msg)
     -> Html msg
@@ -913,8 +913,8 @@ div =
 -}
 node :
     String
-    -> Timeline event
-    -> List (Attribute event)
+    -> Timeline state
+    -> List (Attribute state)
     -> List (Html.Attribute msg)
     -> List (Html msg)
     -> Html msg
@@ -1102,7 +1102,7 @@ viewAxes options =
         ]
 
 
-explainActive : List (Attribute event) -> Bool
+explainActive : List (Attribute state) -> Bool
 explainActive attrs =
     case attrs of
         [] ->
@@ -1128,7 +1128,7 @@ renderTransformOptions opts =
         )
 
 
-getTransformOptions : List (Attribute event) -> Maybe TransformOptions
+getTransformOptions : List (Attribute state) -> Maybe TransformOptions
 getTransformOptions attrs =
     case attrs of
         [] ->
@@ -1147,31 +1147,31 @@ px f =
 
 
 {-| -}
-style : String -> (Float -> String) -> (event -> Movement) -> Attribute event
+style : String -> (Float -> String) -> (state -> Movement) -> Attribute state
 style name toString lookup =
     Movement name lookup toString
 
 
 {-| -}
-color : String -> (event -> Color.Color) -> Attribute event
+color : String -> (state -> Color.Color) -> Attribute state
 color =
     ColorAttribute
 
 
 {-| -}
-opacity : (event -> Movement) -> Attribute event
+opacity : (state -> Movement) -> Attribute state
 opacity lookup =
     Linear "opacity" lookup String.fromFloat
 
 
 {-| -}
-width : (event -> Movement) -> Attribute event
+width : (state -> Movement) -> Attribute state
 width lookup =
     Movement "width" lookup px
 
 
 {-| -}
-height : (event -> Movement) -> Attribute event
+height : (state -> Movement) -> Attribute state
 height lookup =
     Movement "height" lookup px
 
@@ -1181,25 +1181,25 @@ height lookup =
 
 
 {-| -}
-fontColor : (event -> Color.Color) -> Attribute event
+fontColor : (state -> Color.Color) -> Attribute state
 fontColor lookup =
     ColorAttribute "color" lookup
 
 
 {-| -}
-fontSize : (event -> Movement) -> Attribute event
+fontSize : (state -> Movement) -> Attribute state
 fontSize lookup =
     Movement "font-size" lookup px
 
 
 {-| -}
-wordSpacing : (event -> Movement) -> Attribute event
+wordSpacing : (state -> Movement) -> Attribute state
 wordSpacing lookup =
     Movement "word-spacing" lookup px
 
 
 {-| -}
-letterSpacing : (event -> Movement) -> Attribute event
+letterSpacing : (state -> Movement) -> Attribute state
 letterSpacing lookup =
     Movement "letter-spacing" lookup px
 
@@ -1209,7 +1209,7 @@ letterSpacing lookup =
 
 
 {-| -}
-backgroundColor : (event -> Color.Color) -> Attribute event
+backgroundColor : (state -> Color.Color) -> Attribute state
 backgroundColor lookup =
     ColorAttribute "background-color" lookup
 
@@ -1219,13 +1219,13 @@ backgroundColor lookup =
 
 
 {-| -}
-borderColor : (event -> Color.Color) -> Attribute event
+borderColor : (state -> Color.Color) -> Attribute state
 borderColor lookup =
     ColorAttribute "border-color" lookup
 
 
 {-| -}
-borderRadius : (event -> Movement) -> Attribute event
+borderRadius : (state -> Movement) -> Attribute state
 borderRadius lookup =
     Movement "border-radius" lookup px
 
