@@ -54,31 +54,31 @@ Here's what this looks like in practice.
         [ Html.text "Hello!" ]
 
 -}
-opacity : Timeline event -> (event -> Movement) -> Html.Attribute msg
+opacity : Timeline state -> (state -> Movement) -> Html.Attribute msg
 opacity timeline lookup =
     style timeline "opacity" String.fromFloat lookup
 
 
 {-| -}
-textColor : Timeline event -> (event -> Color) -> Html.Attribute msg
+textColor : Timeline state -> (state -> Color) -> Html.Attribute msg
 textColor timeline lookup =
     color timeline "color" lookup
 
 
 {-| -}
-backgroundColor : Timeline event -> (event -> Color) -> Html.Attribute msg
+backgroundColor : Timeline state -> (state -> Color) -> Html.Attribute msg
 backgroundColor timeline lookup =
     color timeline "background-color" lookup
 
 
 {-| -}
-borderColor : Timeline event -> (event -> Color) -> Html.Attribute msg
+borderColor : Timeline state -> (state -> Color) -> Html.Attribute msg
 borderColor timeline lookup =
     color timeline "border-color" lookup
 
 
 {-| -}
-rotate : Timeline event -> (event -> Movement) -> Html.Attribute msg
+rotate : Timeline state -> (state -> Movement) -> Html.Attribute msg
 rotate timeline lookup =
     style timeline
         "transform"
@@ -87,7 +87,7 @@ rotate timeline lookup =
 
 
 {-| -}
-scale : Timeline event -> (event -> Movement) -> Html.Attribute msg
+scale : Timeline state -> (state -> Movement) -> Html.Attribute msg
 scale timeline lookup =
     style timeline
         "transform"
@@ -96,7 +96,7 @@ scale timeline lookup =
 
 
 {-| -}
-xy : Timeline event -> (event -> { x : Movement, y : Movement }) -> Html.Attribute msg
+xy : Timeline state -> (state -> { x : Movement, y : Movement }) -> Html.Attribute msg
 xy timeline lookup =
     let
         pos =
@@ -122,14 +122,14 @@ transform transmogrify =
 
 
 {-| -}
-color : Timeline event -> String -> (event -> Color) -> Html.Attribute msg
+color : Timeline state -> String -> (state -> Color) -> Html.Attribute msg
 color timeline name lookup =
     Attr.style name
         (Color.toCssString (Animator.color timeline lookup))
 
 
 {-| -}
-style : Timeline event -> String -> (Float -> String) -> (event -> Movement) -> Html.Attribute msg
+style : Timeline state -> String -> (Float -> String) -> (state -> Movement) -> Html.Attribute msg
 style timeline name toString lookup =
     Attr.style name
         (toString (Animator.move timeline lookup))
@@ -137,7 +137,7 @@ style timeline name toString lookup =
 
 {-| Sets the default to `linear`. See the note on [`Animator.linear`](https://package.elm-lang.org/packages/mdgriffith/elm-animator/latest/Animator#linear) for more details!
 -}
-linear : Timeline event -> String -> (Float -> String) -> (event -> Movement) -> Html.Attribute msg
+linear : Timeline state -> String -> (Float -> String) -> (state -> Movement) -> Html.Attribute msg
 linear timeline name toString lookup =
     Attr.style name
         (toString (Animator.linear timeline lookup))
