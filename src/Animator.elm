@@ -1,9 +1,9 @@
 module Animator exposing
     ( Timeline, init
+    , current, previous
     , Animator
     , animator, watching, watchingWith
     , toSubscription, update
-    , current, previous
     , go
     , Duration, immediately, veryQuickly, quickly, slowly, verySlowly, millis, seconds
     , Step, wait, event
@@ -25,15 +25,13 @@ module Animator exposing
 {-|
 
 
-# Initial setup
+# Getting started
+
+`elm-animator` is about taking pieces of your model:
+- turning them into **timelines**
+- animate between their states
 
 @docs Timeline, init
-
-@docs Animator
-
-@docs animator, watching, watchingWith
-
-@docs toSubscription, update
 
 
 # Reading the timeline
@@ -43,6 +41,19 @@ You might be wondering, 'How do we get our value "out" of a `Timeline`?'
 Good question! We can either ask for the `current` value or the `previous` one.
 
 @docs current, previous
+
+
+# Wiring up the animation
+
+Once we have a `Timeline`, we need a way to update it.
+
+That's the job of the `Animator`!
+
+@docs Animator
+
+@docs animator, watching, watchingWith
+
+@docs toSubscription, update
 
 
 # Transitioning to a new state
@@ -61,7 +72,7 @@ In order to do that we need to specify both —
 
 # Interruptions and Queueing
 
-In some more advanced cases you might want to define a _series_ of states to animate through instead of just going to one directly.
+In some more **advanced** cases you might want to define a _series_ of states to animate through instead of just going to one directly.
 
     Animator.interrupt
         [ Animator.wait (Animator.millis 300)
@@ -221,12 +232,32 @@ import Quantity
 import Time
 
 
-{-| -}
+{-| A timeline of `state` values.
+
+Behind the scenes this is roughly a list of states and the times that they should occur!
+
+-}
 type alias Timeline state =
     Timeline.Timeline state
 
 
-{-| -}
+{-| Create a timeline with an initial `state`.
+
+So, if you previously had a `Bool` in your model:
+
+    { checked = Bool }
+
+    -- created via
+    { checked = False }
+
+You could replace that with an `Animator.Timeline Bool`
+
+    { checked = Animator.Timeline Bool }
+
+    -- created via
+    { checked = Aniamtor.init False }
+
+-}
 init : state -> Timeline state
 init first =
     Timeline.Timeline
@@ -1204,7 +1235,7 @@ animator =
 
 {-| `watching` will ensure that [`AnimationFrame`](https://package.elm-lang.org/packages/elm/browser/latest/Browser-Events#onAnimationFrame) is running when the animator is transformed into a [`subscription`](#toSubscription).
 
-**Note** — It will actually make the animation frame subscription run all the time! At some point you'll probably want to optimize when the subscription runs, which means either using (`watchingWith`)[#watchingWith] or `Animator.Css.watching`
+**Note** — It will actually make the animation frame subscription run all the time! At some point you'll probably want to optimize when the subscription runs, which means either using [`watchingWith`](#watchingWith) or `Animator.Css.watching`
 
 -}
 watching :
