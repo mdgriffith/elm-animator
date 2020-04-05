@@ -1256,7 +1256,7 @@ watching get set (Timeline.Animator isRunning updateModel) =
 
 The main thing you need to do here is capture which states are animated when they're **resting**.
 
-Let's say we have a checkbox that, for whatever reason, we want to say is spinning forever when the value is `False`
+Let's say we have a checkbox that, for whatever reason, we want to say is spinning forever when the value is `False`.
 
     animator : Animator.Animator Model
     animator =
