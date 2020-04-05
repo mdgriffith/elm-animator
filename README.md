@@ -4,7 +4,7 @@ Bring animations to your Elm app!
 
 Check out the talk that goes with the library, [The Immutable Animator's Toolkit](https://www.youtube.com/watch?v=Nf4rElfA8SE).
 
-Join the `#animations` channel on the [Elm Slack](join `#elm-ui` on the [Elm Slack](https://elmlang.herokuapp.com/)!
+Join the `#animations` channel on the [Elm Slack](https://elmlang.herokuapp.com/) if you want to chat!
 
 # Animating with Timelines
 
