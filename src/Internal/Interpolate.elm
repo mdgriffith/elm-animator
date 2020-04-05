@@ -3,7 +3,7 @@ module Internal.Interpolate exposing
     , defaultArrival, defaultDeparture
     , linearArrival, linearDeparture
     , adjustTiming
-    , dwellPeriod, afterMove, lerp
+    , dwellPeriod
     , coloring, linearly, moving
     , fillDefaults, DefaultablePersonality(..), DefaultOr(..)
     , DefaultableMovement(..), Spline(..), createSpline, details, emptyDefaults, findAtXOnSpline, linearDefault, standardDefault, withLinearDefault, withStandardDefault
@@ -19,7 +19,7 @@ module Internal.Interpolate exposing
 
 @docs Period, adjustTiming
 
-@docs startMoving, dwellFor, dwellPeriod, afterMove, lerp
+@docs startMoving, dwellFor, dwellPeriod
 
 @docs coloring, linearly, moving
 
@@ -414,7 +414,7 @@ moving =
     , dwellPeriod = dwellPeriod
     , adjustor = adjustTiming
     , after = afterMove
-    , lerp = newLerp
+    , lerp = lerp
     }
 
 
@@ -477,8 +477,8 @@ type alias Milliseconds =
     Float
 
 
-newLerp : Milliseconds -> Maybe Movement -> Movement -> Milliseconds -> Milliseconds -> Maybe (Timeline.LookAhead Movement) -> State -> State
-newLerp prevEndTime maybePrev target targetTime now maybeLookAhead state =
+lerp : Milliseconds -> Maybe Movement -> Movement -> Milliseconds -> Milliseconds -> Maybe (Timeline.LookAhead Movement) -> State -> State
+lerp prevEndTime maybePrev target targetTime now maybeLookAhead state =
     let
         wobble =
             case target of
@@ -504,30 +504,13 @@ newLerp prevEndTime maybePrev target targetTime now maybeLookAhead state =
         case maybeLookAhead of
             Nothing ->
                 if wobble /= 0 then
-                    newSpringInterpolation prevEndTime maybePrev target targetTime now maybeLookAhead state
+                    springInterpolation prevEndTime maybePrev target targetTime now maybeLookAhead state
 
                 else
-                    newInterpolateBetween prevEndTime maybePrev target targetTime now maybeLookAhead state
+                    interpolateBetween prevEndTime maybePrev target targetTime now maybeLookAhead state
 
             _ ->
-                newInterpolateBetween prevEndTime maybePrev target targetTime now maybeLookAhead state
-
-
-lerp lookup previous target future now state =
-    let
-        wobble =
-            case lookup (Timeline.getEvent target) of
-                Osc _ arrival _ _ ->
-                    arrival.wobbliness
-
-                Pos _ arrival _ ->
-                    arrival.wobbliness
-    in
-    if future == [] && wobble /= 0 then
-        springInterpolation lookup previous target now state
-
-    else
-        interpolateBetween lookup previous target (List.head future) now state
+                interpolateBetween prevEndTime maybePrev target targetTime now maybeLookAhead state
 
 
 afterMove lookup target future =
@@ -544,8 +527,8 @@ afterMove lookup target future =
 
 
 {-| -}
-newSpringInterpolation : Milliseconds -> Maybe Movement -> Movement -> Milliseconds -> Milliseconds -> Maybe (Timeline.LookAhead Movement) -> State -> State
-newSpringInterpolation prevEndTime _ target targetTime now _ state =
+springInterpolation : Milliseconds -> Maybe Movement -> Movement -> Milliseconds -> Milliseconds -> Maybe (Timeline.LookAhead Movement) -> State -> State
+springInterpolation prevEndTime _ target targetTime now _ state =
     let
         wobble =
             case target of
@@ -583,48 +566,8 @@ newSpringInterpolation prevEndTime _ target targetTime now _ state =
     }
 
 
-{-| -}
-springInterpolation : (event -> Movement) -> Timeline.Previous event -> Timeline.Occurring event -> Time.Absolute -> State -> State
-springInterpolation lookup previous target now state =
-    let
-        wobble =
-            case lookup (Timeline.getEvent target) of
-                Osc _ arrival _ _ ->
-                    arrival.wobbliness
-
-                Pos _ arrival _ ->
-                    arrival.wobbliness
-
-        targetPos =
-            case lookup (Timeline.getEvent target) of
-                Osc _ _ _ toX ->
-                    toX 0
-
-                Pos _ _ x ->
-                    x
-
-        duration =
-            Time.duration (Timeline.previousEndTime previous) (Timeline.startTime target)
-
-        params =
-            Spring.select wobble duration
-
-        new =
-            Spring.stepOver
-                (Time.duration (Timeline.previousEndTime previous) now)
-                params
-                targetPos
-                { position = Pixels.inPixels state.position
-                , velocity = Pixels.inPixelsPerSecond state.velocity
-                }
-    in
-    { position = Pixels.pixels new.position
-    , velocity = Pixels.pixelsPerSecond new.velocity
-    }
-
-
-newInterpolateBetween : Milliseconds -> Maybe Movement -> Movement -> Milliseconds -> Milliseconds -> Maybe (Timeline.LookAhead Movement) -> State -> State
-newInterpolateBetween startTimeInMs maybePrevious target targetTimeInMs now maybeLookAhead state =
+interpolateBetween : Milliseconds -> Maybe Movement -> Movement -> Milliseconds -> Milliseconds -> Maybe (Timeline.LookAhead Movement) -> State -> State
+interpolateBetween startTimeInMs maybePrevious target targetTimeInMs now maybeLookAhead state =
     let
         targetPosition =
             case target of
@@ -692,146 +635,6 @@ newInterpolateBetween startTimeInMs maybePrevious target targetTimeInMs now mayb
         current =
             findAtXOnSpline curve
                 now
-                -- tolerance
-                1
-                -- jumpSize
-                0.25
-                -- starting t
-                0.5
-                -- depth
-                0
-
-        firstDerivative =
-            firstDerivativeOnSpline curve current.t
-
-        -- *NOTE* We'll probably want to do oscillation mixing in the future, but it's kinda involved.
-        -- This would get you some of the way there (where maybeMixing has a postion/velocity to use instead)
-        -- but it doesn't quite work to mix two oscillators in a direct way because of weird descructive interference.
-        -- and looks especially weird when the effective origin of the oscillation actually moves.
-        -- HOWEVER, I'm open to creative solutions :D
-        -- maybeMix =
-        --     case lookup target of
-        --         Oscillate _ mixArrival mixBPeriod mixB ->
-        --             case previous of
-        --                 Timeline.Previous p ->
-        --                     case lookup (Timeline.getEvent p) of
-        --                         Position _ _ _ ->
-        --                             Nothing
-        --                         Oscillate mixDeparture _ mixAPeriod mixA ->
-        --                             if Timeline.hasDwell p && (maybeLookAhead == Nothing || Timeline.hasDwell targetOccurring) then
-        --                                 let
-        --                                     {-
-        --                                        mixA starts at
-        --                                            (previousStartTime previous) ->
-        --                                                    roll mixA forward to previousEndTime
-        --                                        mixB starts at
-        --                                            (previousEndTime previous)
-        --                                            but must match 0 for 0 at targetTime
-        --                                            rephase mixB
-        --                                            progress is the percentage progress between
-        --                                                previousStartTime + previousEndTime
-        --                                     -}
-        --                                     phaseBShift =
-        --                                         wrapUnitAfter mixBPeriod totalDuration
-        --                                     phaseAShift =
-        --                                         wrapUnitAfter mixAPeriod
-        --                                             (Time.duration
-        --                                                 (Timeline.previousEndTime previous)
-        --                                                 (Timeline.previousStartTime previous)
-        --                                             )
-        --                                     totalDuration =
-        --                                         Time.duration (Timeline.previousEndTime previous) targetTime
-        --                                     progress =
-        --                                         Time.progress (Timeline.previousEndTime previous) targetTime currentTime
-        --                                     correctedA u =
-        --                                         (wrapUnitAfter mixAPeriod (Quantity.multiplyBy u totalDuration)
-        --                                             + phaseAShift
-        --                                         )
-        --                                             |> wrap
-        --                                             |> mixA
-        --                                     correctedB u =
-        --                                         (wrapUnitAfter mixBPeriod (Quantity.multiplyBy u totalDuration)
-        --                                             - phaseBShift
-        --                                         )
-        --                                             |> wrap
-        --                                             |> mixB
-        --                                     newEasing masterU =
-        --                                         mix correctedA correctedB progress masterU
-        --                                 in
-        --                                 Just
-        --                                     { position = Pixels.pixels (newEasing progress)
-        --                                     , velocity = derivativeOfEasing newEasing totalDuration progress
-        --                                     }
-        --                             else
-        --                                 Nothing
-        --                 Timeline.PreviouslyInterrupted _ ->
-        --                     Nothing
-        --         Position _ _ x ->
-        --             Nothing
-    in
-    { position =
-        current.point.y
-            |> Pixels.pixels
-    , velocity =
-        -- rescale velocity so that it's pixels/second
-        -- `createSpline` scales this vector sometimes, we need to ensure it's the right size.
-        (firstDerivative.y / firstDerivative.x)
-            |> (*) 1000
-            |> Pixels.pixelsPerSecond
-    }
-
-
-interpolateBetween : (event -> Movement) -> Timeline.Previous event -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> Time.Absolute -> State -> State
-interpolateBetween lookup previous ((Timeline.Occurring target targetTime maybeTargetDwell) as targetOccurring) maybeLookAhead currentTime state =
-    let
-        targetPosition =
-            case lookup target of
-                Osc _ _ _ toX ->
-                    Pixels.pixels (toX 0)
-
-                Pos _ _ x ->
-                    Pixels.pixels x
-
-        targetTimeInMs =
-            Time.inMilliseconds targetTime
-
-        startTimeInMs =
-            Time.inMilliseconds (Timeline.previousEndTime previous)
-
-        targetVelocity =
-            Pixels.inPixelsPerSecond (velocityAtTarget lookup targetOccurring maybeLookAhead)
-
-        curve =
-            createSpline
-                { start =
-                    { x = startTimeInMs
-                    , y = Pixels.inPixels state.position
-                    }
-                , startVelocity =
-                    { x = 1000
-                    , y = Pixels.inPixelsPerSecond state.velocity
-                    }
-                , departure =
-                    case previous of
-                        Timeline.Previous prevOccurring ->
-                            getDeparture lookup prevOccurring
-
-                        Timeline.PreviouslyInterrupted _ ->
-                            nullDeparture
-                , end =
-                    { x = targetTimeInMs
-                    , y = Pixels.inPixels targetPosition
-                    }
-                , endVelocity =
-                    { x = 1000
-                    , y = targetVelocity
-                    }
-                , arrival = getArrival lookup targetOccurring
-                }
-
-        current =
-            findAtXOnSpline curve
-                (Time.inMilliseconds currentTime)
                 -- tolerance
                 1
                 -- jumpSize
