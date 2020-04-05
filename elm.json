@@ -1,7 +1,7 @@
 {
     "type": "package",
     "name": "mdgriffith/elm-animator",
-    "summary": "An animation engine for UI and storytelling.",
+    "summary": "A timeline-based animation engine",
     "license": "BSD-3-Clause",
     "version": "1.0.0",
     "exposed-modules": [
