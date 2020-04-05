@@ -963,7 +963,7 @@ walk =
 
 {-| Here we have the same distinction of **transition** and **resting** that the rest of the library has.
 
-With `framesWith` we can define
+With `framesWith` we can define the frames it takes to transition to this state, as well as what to do when we're in this state (maybe we want to loop through a number of frames when we're in this state).
 
 -}
 framesWith :
