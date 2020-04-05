@@ -27,9 +27,7 @@ module Animator exposing
 
 # Getting started
 
-`elm-animator` is about taking pieces of your model:
-- turning them into **timelines**
-- animate between their states
+`elm-animator` is about taking pieces of your model, turning them into **Timelines** of values, and animate between their states
 
 @docs Timeline, init
 
@@ -732,9 +730,9 @@ Here's a general diagram of what's going on:
 
 ![](https://mdgriffith.github.io/elm-animator/images/default-personality.png)
 
-**Note** - The values in the above diagram are the built in defaults for most movement in `elm-animator`. They come from [`Material Design`](https://material.io/design/motion/speed.html#easing).
+**Note** — The values in the above diagram are the built in defaults for most movement in `elm-animator`. They come from [`Material Design`](https://material.io/design/motion/speed.html#easing).
 
-**Note 2** - An [interactive version of the above diagram](https://ellie-app.com/8s2yjQzQmZda1) is also available.
+**Note 2** — An [interactive version of the above diagram](https://ellie-app.com/8s2yjQzQmZda1) is also available.
 
 -}
 leaveSmoothly : Float -> Movement -> Movement
@@ -1275,7 +1273,7 @@ Let's say we have a checkbox that, for whatever reason, we want to say is spinni
                     checked == False
                 )
 
-**Note** if you're using `Animator.Css` to generate keyframes along with `Animator.Css.watching`, you don't need to worry about this.
+**Note** — if you're using `Animator.Css` to generate keyframes along with `Animator.Css.watching`, you don't need to worry about this.
 
 -}
 watchingWith :

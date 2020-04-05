@@ -4,7 +4,9 @@ Bring animations to your Elm app!
 
 Check out the talk that goes with the library, [The Immutable Animator's Toolkit](https://www.youtube.com/watch?v=Nf4rElfA8SE).
 
-Join the `#animations` channel on the [Elm Slack](join `#elm-ui` on the [Elm Slack](https://elmlang.herokuapp.com/)!)
+Join the `#animations` channel on the [Elm Slack](join `#elm-ui` on the [Elm Slack](https://elmlang.herokuapp.com/)!
+
+# Animating with Timelines
 
 The high level idea is to track timelines of values in your model and animate between them.
 
@@ -54,13 +56,14 @@ Let's check out some examples!
      - *How to interact with a separate animation system such as physics code!*
 
 
-
 # The Goal of a Continuous UI
+
 Animation can either be a nuanced, playful helper in your UI, or it can be a nuisance.
 
 There's an immediate question of *what kinds of animation we want to cultivate in the Elm community.*
 
 With that in mind, here are two types of animation that I'd love to emphasize and `elm-animator` should be very useful for both.
+
 
 ## Continuous UI
 
@@ -77,11 +80,12 @@ There's also a fairly basic [page transition example](http://mdgriffith.github.i
 
 
 ## Calm Enrichment
+
 The second type is something I think of as *calm enrichment*.
 
-The floating city on the [Elm Japan Website](https://elmjapan.org/) (you will need to scroll down a little) is wonderful!
+The floating city on the [Elm Japan Website](https://elmjapan.org/) —you will need to scroll down a little— is wonderful!
 
 It doesn't distract from what I'm trying to accomplish on the website, it simply sits there, calmly floating.  It doesn't take anything away from my *budget of attention* that I have when visiting the website.  In fact it likely **increases** the amount of attention I'm willing to *pay*.
 
-They used [`elm-playground`](https://package.elm-lang.org/packages/evancz/elm-playground/latest/Playground) (which I am likewise inspired by) to achieve the effect and convinced me to make this sort of thing easy in `elm-animator`.
+They used [`elm-playground`](https://package.elm-lang.org/packages/evancz/elm-playground/latest/Playground) —which I am likewise inspired by— to achieve the effect and convinced me to make this sort of thing easy in `elm-animator`.
 
