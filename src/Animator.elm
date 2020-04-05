@@ -692,7 +692,7 @@ withWobble p movement =
 {-| Even though the transition officially starts at a certain time on the timeline, we can leave a little late.
 
   - `0` means we leave at the normal time.
-  - `0.2` means we'll leave when the transition is at 20%
+  - `0.2` means we'll leave when the transition is at 20%.
   - `1` means we leave at the end of the transition and instantly flip to the new state at that time.
 
 -}
@@ -741,7 +741,7 @@ leaveSmoothly s movement =
 {-| We can also smooth out our arrival.
 
   - `arriveSmoothly 0` means no smoothing, which means more of a linear animation.
-  - `arriveSmoothly 1` means the animation will "ease out" or "arrive slowly"
+  - `arriveSmoothly 1` means the animation will "ease out" or "arrive slowly".
 
 -}
 arriveSmoothly : Float -> Movement -> Movement
