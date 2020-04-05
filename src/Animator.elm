@@ -177,7 +177,7 @@ What about the wonderful world of Sprite animation?
 
 Sprite animation is where we literally have a list of images and flip through them like a flip-book.
 
-Like Mario! In fact we have a [Mario example](Link to mario example)
+Like Mario! In fact we have a [Mario example](https://github.com/mdgriffith/elm-animator/blob/master/examples/Mario.elm)!
 
 Here's an abreviated example of what the code looks like:
 
@@ -253,7 +253,7 @@ You could replace that with an `Animator.Timeline Bool`
     { checked = Animator.Timeline Bool }
 
     -- created via
-    { checked = Aniamtor.init False }
+    { checked = Animator.init False }
 
 -}
 init : state -> Timeline state
@@ -692,7 +692,7 @@ withWobble p movement =
 {-| Even though the transition officially starts at a certain time on the timeline, we can leave a little late.
 
   - `0` means we leave at the normal time.
-  - `0.2` means we'll leave when the transition is at 20%
+  - `0.2` means we'll leave when the transition is at 20%.
   - `1` means we leave at the end of the transition and instantly flip to the new state at that time.
 
 -}
@@ -707,7 +707,7 @@ leaveLate p movement =
   - `0.2` means we'll arrive early by 20% of the total duration.
   - `1` means we arrive at the start of the transition. So basically we instantly transition over.
 
-**Weird math note** — `arriveEarly` and `leaveLate` will collaborate to figure out how the transition happens. If `arriveEarly` and `leaveLate` sum up to more `1` for a transition, then their sum will the new maximum. Likely you don't need to worry about this :D.
+**Weird math note** — `arriveEarly` and `leaveLate` will collaborate to figure out how the transition happens. If `arriveEarly` and `leaveLate` sum up to more `1` for a transition, then their sum will be the new maximum. Likely you don't need to worry about this :D.
 
 The intended use for `arriveEarly` and `leaveLate` is for staggering items in a list. In those cases, these values are pretty small `~0.1`.
 
@@ -728,7 +728,7 @@ Here's a general diagram of what's going on:
 
 ![](https://mdgriffith.github.io/elm-animator/images/default-personality.png)
 
-**Note** — The values in the above diagram are the built in defaults for most movement in `elm-animator`. They come from [`Material Design`](https://material.io/design/motion/speed.html#easing).
+**Note** — The values in the above diagram are the built in defaults for most movements in `elm-animator`. They come from [`Material Design`](https://material.io/design/motion/speed.html#easing).
 
 **Note 2** — An [interactive version of the above diagram](https://ellie-app.com/8s2yjQzQmZda1) is also available.
 
@@ -741,7 +741,7 @@ leaveSmoothly s movement =
 {-| We can also smooth out our arrival.
 
   - `arriveSmoothly 0` means no smoothing, which means more of a linear animation.
-  - `arriveSmoothly 1` means the animation will "ease out" or "arrive slowly"
+  - `arriveSmoothly 1` means the animation will "ease out" or "arrive slowly".
 
 -}
 arriveSmoothly : Float -> Movement -> Movement
@@ -940,7 +940,7 @@ type alias Resting item =
     Timeline.Resting item
 
 
-{-| Show a single `sprite`
+{-| Show a single `sprite`.
 -}
 frame : sprite -> Frames sprite
 frame =
@@ -1231,7 +1231,7 @@ animator =
 
 {-| `watching` will ensure that [`AnimationFrame`](https://package.elm-lang.org/packages/elm/browser/latest/Browser-Events#onAnimationFrame) is running when the animator is transformed into a [`subscription`](#toSubscription).
 
-**Note** — It will actually make the animation frame subscription run all the time! At some point you'll probably want to optimize when the subscription runs, which means either using [`watchingWith`](#watchingWith) or `Animator.Css.watching`
+**Note** — It will actually make the animation frame subscription run all the time! At some point you'll probably want to optimize when the subscription runs, which means either using [`watchingWith`](#watchingWith) or `Animator.Css.watching`.
 
 -}
 watching :
@@ -1256,7 +1256,7 @@ watching get set (Timeline.Animator isRunning updateModel) =
 
 The main thing you need to do here is capture which states are animated when they're **resting**.
 
-Let's say we have a checkbox that, for whatever reason, we want to say is spinning forever when the value is `False`
+Let's say we have a checkbox that, for whatever reason, we want to say is spinning forever when the value is `False`.
 
     animator : Animator.Animator Model
     animator =
