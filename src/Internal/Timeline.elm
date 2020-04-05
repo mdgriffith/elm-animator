@@ -452,10 +452,6 @@ gc (Timeline details) =
     Timeline { details | events = Timetable (garbageCollectOldEvents details.now [] events) }
 
 
-log str x =
-    x
-
-
 {-| If we're dwelling at an event, we can reset the event we're dwelling on to the base of the timeline.
 
 All previous lines can be dropped.
@@ -467,79 +463,44 @@ So we track "droppable" lines until we meet a dwell.
 -}
 garbageCollectOldEvents : Time.Absolute -> List (Line event) -> List (Line event) -> List (Line event)
 garbageCollectOldEvents now droppable lines =
-    log " <-----" <|
-        case lines of
-            [] ->
-                List.reverse droppable
+    case lines of
+        [] ->
+            List.reverse droppable
 
-            (Line startAt startingEvent events) :: remaining ->
-                if log "hasnt happened yet" <| Time.thisAfterOrEqualThat startAt now then
-                    -- this line hasn't happened yet
-                    List.reverse droppable ++ lines
+        (Line startAt startingEvent events) :: remaining ->
+            if Time.thisAfterOrEqualThat startAt now then
+                -- this line hasn't happened yet
+                List.reverse droppable ++ lines
 
-                else if log "dwelling at" <| dwellingAt now startingEvent then
-                    -- we can safetly drop the droppables
-                    lines
+            else if dwellingAt now startingEvent then
+                -- we can safetly drop the droppables
+                lines
+
+            else
+                let
+                    maybeInterruptionTime =
+                        remaining
+                            |> List.head
+                            |> Maybe.map lineStartTime
+
+                    interrupted =
+                        case maybeInterruptionTime of
+                            Nothing ->
+                                False
+
+                            Just interruptionTime ->
+                                Time.thisAfterOrEqualThat now interruptionTime
+                in
+                if interrupted then
+                    garbageCollectOldEvents now (Line startAt startingEvent events :: droppable) remaining
 
                 else
-                    let
-                        maybeInterruptionTime =
-                            remaining
-                                |> List.head
-                                |> Maybe.map lineStartTime
+                    case hewLine now events of
+                        NothingCaptured ->
+                            List.reverse droppable ++ lines
 
-                        interrupted =
-                            case maybeInterruptionTime of
-                                Nothing ->
-                                    False
-
-                                Just interruptionTime ->
-                                    Time.thisAfterOrEqualThat now interruptionTime
-                    in
-                    if log "interrupted" <| interrupted then
-                        garbageCollectOldEvents now (Line startAt startingEvent events :: droppable) remaining
-
-                    else
-                        -- case List.foldl (shortenLine now) NotFinished events of
-                        --     NotFinished ->
-                        --         List.reverse droppable ++ lines
-                        --     AfterLine ->
-                        --         case List.head remaining of
-                        --             Nothing ->
-                        --                 case List.head (List.reverse events) of
-                        --                     Nothing ->
-                        --                         lines
-                        --                     Just last ->
-                        --                         [ Line (startTime last) last [] ]
-                        --             Just (Line startNext next _) ->
-                        --                 if Time.thisAfterOrEqualThat now startNext then
-                        --                     -- the next line has started
-                        --                     -- this current line can be dropped if we're dwelling
-                        --                     garbageCollectOldEvents now (Line startAt startingEvent events :: droppable) remaining
-                        --                 else
-                        --                     List.reverse droppable ++ lines
-                        --     DwellingAt newLine ->
-                        --         reverseEvents newLine :: remaining
-                        case log "hewed" <| hewLine now events of
-                            NothingCaptured ->
-                                -- case Debug.log "remaining" <| List.head remaining of
-                                --     Nothing ->
-                                --         case List.head (List.reverse events) of
-                                --             Nothing ->
-                                --                 List.reverse droppable ++ lines
-                                --             Just last ->
-                                --                 [ Line (startTime last) last [] ]
-                                --     Just (Line startNext next _) ->
-                                --         if Time.thisAfterOrEqualThat now startNext then
-                                --             -- the next line has started
-                                --             -- this current line can be dropped if we're dwelling
-                                --             garbageCollectOldEvents now (Line startAt startingEvent events :: droppable) remaining
-                                --         else
-                                --             List.reverse droppable ++ lines
-                                List.reverse droppable ++ lines
-
-                            Captured capturedLine ->
-                                capturedLine :: remaining
+                        Captured capturedLine ->
+                            capturedLine :: remaining
 
 
 reverseEvents (Line start event evs) =
@@ -1157,15 +1118,6 @@ overLines fn lookup details maybePreviousEvent (Line lineStart lineStartEv lineR
     if Time.thisBeforeThat now eventStartTime then
         -- lerp from state to lineStartEv
         -- now is before the first event start time.
-        -- either this is an interruption, in which case we lerp.
-        -- Or this is the
-        -- if we're
-        -- fn.lerp lookup
-        --     (Previous (Occurring details.initial lineStart lineStart))
-        --     lineStartEv
-        --     lineRemain
-        --     now
-        --     state
         fn.lerp
             (Time.inMilliseconds lineStart)
             (Just (lookup details.initial))
@@ -1223,17 +1175,6 @@ overLines fn lookup details maybePreviousEvent (Line lineStart lineStartEv lineR
                     if Time.thisBeforeThat now nextStartTime then
                         -- Before next.startTime
                         --     -> lerp start to next
-                        -- fn.lerp
-                        --     lookup
-                        --     (Previous lineStartEv)
-                        --     next
-                        --     lineRemain2
-                        --     now
-                        -- (if hasDwell lineStartEv then
-                        --     fn.dwellFor (lookup (getEvent lineStartEv)) (Time.duration eventStartTime eventEndTime)
-                        --  else
-                        --     state
-                        -- )
                         fn.lerp
                             (Time.inMilliseconds eventEndTime)
                             (Just (lookup (getEvent lineStartEv)))
@@ -1307,14 +1248,6 @@ overLines fn lookup details maybePreviousEvent (Line lineStart lineStartEv lineR
                                             else
                                                 fn.after lookup next lineRemain2
                                     in
-                                    -- fn.lerp
-                                    --     lookup
-                                    --     (Previous next)
-                                    --     next2
-                                    --     lineRemain3
-                                    --     now
-                                    --     after
-                                    --     |> transition
                                     fn.lerp
                                         -- next end time?
                                         (Time.inMilliseconds nextEndTime)
