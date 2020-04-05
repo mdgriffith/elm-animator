@@ -47,11 +47,7 @@ Let's check out some examples!
      - _Animate with content that's already been **deleted**_ (whaaaa?!)
      - How to do _**CSS Keyframe** generation_
 
-4. [**Todo list**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Todo.elm) - **Still under construction!** - An animated todo list, where items are sorted by if they're done.
-     - *Ask for bounding boxes for elements*
-     - *Animate something based on it's bounding box*
-
-5. [**Mario**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Mario.elm) - The classic Mario example!  Run around and jump.
+4. [**Mario**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Mario.elm) - The classic Mario example!  Run around and jump.
      - *How to get started with **sprite animation***
      - *How to interact with a separate animation system such as physics code!*
 

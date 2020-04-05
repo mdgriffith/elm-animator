@@ -1,18 +1,20 @@
 module Todo exposing (main)
 
-{-| **Under construction**
-Let's make a todo list!
+{-| Let's make a todo list!
 
 And do the following
 
     1.  Completing items are animated to the end of the list
-    2.  Fade elements out when deleting them
+    2.  Fade elements out when they're deleted
 
 Why is this tricky?
 
     1.  We need bounding boxes in order to do our reordering animation.  But we can only get bounding boxes after something has been rendered.
     2.  How can we animate something if it's been deleted?!
         Oh, wait, we can go back in time. Duh.
+
+
+
 
 -}
 
@@ -121,7 +123,8 @@ getBoundingBoxes items =
 
 
 getBBox item =
-    Cmd.none
+    case 
+    Browser.Dom.get
 
 
 view : Model -> Browser.Document Msg
