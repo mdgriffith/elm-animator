@@ -12,6 +12,7 @@ The high level idea is to track timelines of values in your model and animate be
 
 So, if you were previously storing a `Bool`, now you'd store `Animator.Timeline Bool`, and you'd be able to animate the state transitions in your `view` 
 
+```elm
     div
         [ Animator.Inline.opacity model.checked <|
             \checked ->
@@ -22,6 +23,7 @@ So, if you were previously storing a `Bool`, now you'd store `Animator.Timeline 
                    Animator.at 0
         ]
         [ text "👍" ]
+```
 
 This library handles the animation for you!  (There is slightly more work to do to get started so start with the [**Checkbox example**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Checkbox.elm))
 
