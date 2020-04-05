@@ -10,7 +10,7 @@ Join the `#animations` channel on the [Elm Slack](https://elmlang.herokuapp.com/
 
 The high level idea is to track timelines of values in your model and animate between them.
 
-So, if you were previously storing a `Bool`, now you'd store `Animator.Timeline Bool`, and you'd be able to animate the state transitions in your `view` 
+So, if you were previously storing a `Bool`, now you'd store `Animator.Timeline Bool`, and you'd be able to animate the state transitions in your `view`
 
 ```elm
     div
