@@ -253,7 +253,7 @@ You could replace that with an `Animator.Timeline Bool`
     { checked = Animator.Timeline Bool }
 
     -- created via
-    { checked = Aniamtor.init False }
+    { checked = Animator.init False }
 
 -}
 init : state -> Timeline state
