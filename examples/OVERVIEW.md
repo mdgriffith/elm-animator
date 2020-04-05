@@ -16,11 +16,11 @@ Then, we can dig in to some examples.
 2. [**Page transitions**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Pages.elm) - Transition between pages 3d page transition with routing.
      - *Set up routing so there are no page **reloads*** (actually this is standard for SPAs in general).
      - *Animate the transition between pages*
+     - How to do _**CSS Keyframe** generation_
   
 3. [**Loading**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Loading.elm) - Animate the loading state of a piece of content.
      - *How to animate **resting** states such as a loading spinner*
      - _Animate with content that's already been **deleted**_ (whaaaa?!)
-     - How to do _**CSS Keyframe** generation_
 
 4. [**Mario**](https://github.com/mdgriffith/elm-animator/blob/master/examples/Mario.elm) - The classic Mario example!  Run around and jump.
      - *How to get started with **sprite animation***

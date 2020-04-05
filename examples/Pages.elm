@@ -4,9 +4,9 @@ module Pages exposing (main)
 
 This example is meant to show a few things.
 
-1.  That page transitions are just like animating any other state, we'll just create an `Animator.Timeline Page` and animate with that.
-
-2.  How to handle routing so that the url changes as your transition.
+    1.  That page transitions are just like animating any other state, we'll just create an `Animator.Timeline Page` and animate with that.
+    2.  How to use CSS keyframes by using the `Animator.Css` module
+    3.  How to handle routing so that the url changes as your transition.
 
 -}
 
@@ -101,6 +101,9 @@ pageToUrl page =
 animator : Animator.Animator Model
 animator =
     Animator.animator
+        -- *NOTE*  We're using `the Animator.Css.watching` instead of `Animator.watching`.
+        -- Instead of asking for a constant stream of animation frames, it'll only ask for one
+        -- and we'll render the entire css animation in that frame.
         |> Animator.Css.watching .page
             (\newPage model ->
                 { model | page = newPage }
@@ -128,7 +131,7 @@ update msg model =
         ClickedLink request ->
             case request of
                 Browser.Internal url ->
-                    -- Note:  Ideally, starting a new animation with `toNewPage` would only happen in `UrlChanged`
+                    -- Note -  Ideally, starting a new animation with `toNewPage` would only happen in `UrlChanged`
                     -- which occurs immediately after this message if we use `Browser.Navigation.pushUrl`
                     --
                     -- However there seems to be a bug in elm where a subscription to animationFrame fails to fire
