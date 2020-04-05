@@ -177,7 +177,7 @@ What about the wonderful world of Sprite animation?
 
 Sprite animation is where we literally have a list of images and flip through them like a flip-book.
 
-Like Mario! In fact we have a [Mario example](Link to mario example)
+Like Mario! In fact we have a [Mario example](https://github.com/mdgriffith/elm-animator/blob/master/examples/Mario.elm)!
 
 Here's an abreviated example of what the code looks like:
 
