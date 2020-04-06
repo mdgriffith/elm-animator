@@ -869,8 +869,8 @@ It's just like a normal `Html` node, except it also takes a `Timeline` and a lis
 
 Here's a checkbox that changes backgrounds as a brief example:
 
-     Animator.Css.div model.checked
-        [ Animator.Css.backgroundColor<|
+    Animator.Css.div model.checked
+        [ Animator.Css.backgroundColor <|
             \checked ->
                 if checked then
                     Color.rgb255 255 96 96
@@ -896,19 +896,20 @@ div =
 
 {-| Specify a node name that's not a div. Here's an `<a>`.
 
-         Animator.Css.node "a" model.checked
-            [ Animator.Css.backgroundColor<|
-                \checked ->
-                    if checked then
-                        Color.rgb255 255 96 96
+    Animator.Css.node "a"
+        model.checked
+        [ Animator.Css.backgroundColor <|
+            \checked ->
+                if checked then
+                    Color.rgb255 255 96 96
 
-                    else
-                        Color.white
-            ]
-            [ Attr.style "height" "30px"
-            , Attr.style "width" "30px"
-            ]
-            [ Html.text "" ]
+                else
+                    Color.white
+        ]
+        [ Attr.style "height" "30px"
+        , Attr.style "width" "30px"
+        ]
+        [ Html.text "" ]
 
 -}
 node :
