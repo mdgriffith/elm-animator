@@ -1444,7 +1444,7 @@ rotating dur =
 
 The coordinates provided are relative to this element.
 
-The default, which is where the element is looking directly outwards from the screen is
+The default, which is where the element is looking directly outwards from the screen, is:
 
     Animator.Css.lookAt
         { x = 0
