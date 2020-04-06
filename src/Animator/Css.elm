@@ -26,7 +26,7 @@ This can be a very performant because
 
 This means `Elm` only needs to run your view code once instead of 60 times a second.
 
-`Elm` is generally pretty fast and efficient at all this! But it can be even faster to **skip the work all together**.
+`Elm` is generally pretty fast and efficient at all this! But it can be even faster to **skip the work altogether**.
 
 @docs watching
 
@@ -84,7 +84,7 @@ Basically you want to recreate what is [described in this overview.](https://tob
 
 # Advanced
 
-**Note** - One of the difficulties in making an animation library for `CSS` is that operations such as `translate` and `rotate` need to be rendered as one proeprty called `transform`.
+**Note** - One of the difficulties in making an animation library for `CSS` is that operations such as `translate` and `rotate` need to be rendered as one property called `transform`.
 
 While normally this isn't that big of a deal, one consequence for generating `CSS` keyframes is that all resting states for all transformations need to share the same `period`.
 
@@ -865,7 +865,7 @@ stylesheet str =
 
 {-| This is a single div element.
 
-It's just like a normal `Html` node, except it also takes a `Timeline` and a list of attribtues you want to animate.
+It's just like a normal `Html` node, except it also takes a `Timeline` and a list of attributes you want to animate.
 
 Here's a checkbox that changes backgrounds as a brief example:
 
