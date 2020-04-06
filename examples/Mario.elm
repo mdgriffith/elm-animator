@@ -442,7 +442,7 @@ viewSprite box =
             , Attr.style "left" (String.fromInt box.adjustX ++ "px")
             , Attr.style "width" (String.fromInt box.width ++ "px")
             , Attr.style "height" (String.fromInt box.height ++ "px")
-            , Attr.style "background-image" "url('./images/mario-sprites.png')"
+            , Attr.style "background-image" "url('http://mdgriffith.github.io/elm-animator/images/mario-sprites.png')"
             , Attr.style "background-repeat" "no-repeat"
             , Attr.style "transform-origin" "30% 50%"
             , Attr.style "transform"
