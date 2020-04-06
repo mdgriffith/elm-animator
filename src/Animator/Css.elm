@@ -26,7 +26,7 @@ This can be a very performant because
 
 This means `Elm` only needs to run your view code once instead of 60 times a second.
 
-`Elm` is generally pretty fast and efficient at all this! But it can be even faster to **skip the work all together**.
+`Elm` is generally pretty fast and efficient at all this! But it can be even faster to **skip the work altogether**.
 
 @docs watching
 
@@ -84,7 +84,7 @@ Basically you want to recreate what is [described in this overview.](https://tob
 
 # Advanced
 
-**Note** - One of the difficulties in making an animation library for `CSS` is that operations such as `translate` and `rotate` need to be rendered as one proeprty called `transform`.
+**Note** - One of the difficulties in making an animation library for `CSS` is that operations such as `translate` and `rotate` need to be rendered as one property called `transform`.
 
 While normally this isn't that big of a deal, one consequence for generating `CSS` keyframes is that all resting states for all transformations need to share the same `period`.
 
@@ -865,12 +865,12 @@ stylesheet str =
 
 {-| This is a single div element.
 
-It's just like a normal `Html` node, except it also takes a `Timeline` and a list of attribtues you want to animate.
+It's just like a normal `Html` node, except it also takes a `Timeline` and a list of attributes you want to animate.
 
 Here's a checkbox that changes backgrounds as a brief example:
 
-     Animator.Css.div model.checked
-        [ Animator.Css.backgroundColor<|
+    Animator.Css.div model.checked
+        [ Animator.Css.backgroundColor <|
             \checked ->
                 if checked then
                     Color.rgb255 255 96 96
@@ -896,19 +896,20 @@ div =
 
 {-| Specify a node name that's not a div. Here's an `<a>`.
 
-         Animator.Css.node "a" model.checked
-            [ Animator.Css.backgroundColor<|
-                \checked ->
-                    if checked then
-                        Color.rgb255 255 96 96
+    Animator.Css.node "a"
+        model.checked
+        [ Animator.Css.backgroundColor <|
+            \checked ->
+                if checked then
+                    Color.rgb255 255 96 96
 
-                    else
-                        Color.white
-            ]
-            [ Attr.style "height" "30px"
-            , Attr.style "width" "30px"
-            ]
-            [ Html.text "" ]
+                else
+                    Color.white
+        ]
+        [ Attr.style "height" "30px"
+        , Attr.style "width" "30px"
+        ]
+        [ Html.text "" ]
 
 -}
 node :
@@ -1443,7 +1444,7 @@ rotating dur =
 
 The coordinates provided are relative to this element.
 
-The default, which is where the element is looking directly outwards from the screen is
+The default, which is where the element is looking directly outwards from the screen, is:
 
     Animator.Css.lookAt
         { x = 0
