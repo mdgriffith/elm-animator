@@ -26,7 +26,7 @@ The best way is to play with the [**Checkbox**](https://github.com/mdgriffith/el
 
 ## Custom
 
-If you can't find an attribute here, you might need to use `Animator.Inline.style` or `Animator.Inline.color` to create it!
+If you can't find an attribute here, you might need to use [`Animator.Inline.style`](#style) or [`Animator.Inline.color`](#color) to create it!
 
 @docs style, linear, color
 
