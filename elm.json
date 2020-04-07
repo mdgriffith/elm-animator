@@ -3,7 +3,7 @@
     "name": "mdgriffith/elm-animator",
     "summary": "A timeline-based animation engine",
     "license": "BSD-3-Clause",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "exposed-modules": [
         "Animator",
         "Animator.Inline",
@@ -21,7 +21,7 @@
         "ianmackenzie/elm-units": "2.2.0 <= v < 3.0.0"
     },
     "test-dependencies": {
-        "elm-explorations/test": "1.2.2 <= v < 2.0.0",
-        "elm/random": "1.0.0 <= v < 2.0.0"
+        "elm/random": "1.0.0 <= v < 2.0.0",
+        "elm-explorations/test": "1.2.2 <= v < 2.0.0"
     }
 }
