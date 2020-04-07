@@ -1,8 +1,5 @@
 module Internal.Interpolate exposing
     ( Movement(..), State, derivativeOfEasing
-    , defaultArrival, defaultDeparture
-    , linearArrival, linearDeparture
-    , adjustTiming
     , dwellPeriod
     , coloring, linearly, moving
     , fillDefaults, DefaultablePersonality(..), DefaultOr(..)
@@ -13,11 +10,7 @@ module Internal.Interpolate exposing
 
 @docs Movement, State, derivativeOfEasing
 
-@docs defaultArrival, defaultDeparture
-
-@docs linearArrival, linearDeparture
-
-@docs Period, adjustTiming
+@docs Period
 
 @docs startMoving, dwellFor, dwellPeriod
 
@@ -73,29 +66,6 @@ type alias Personality =
     }
 
 
-{-| Arrival parameters:
-
-  - early [0-1]:
-    how early should we arrive to this state?
-    This is a Proportion of the entire duration of the transition.
-
-  - slowly [0-1]: actually smoothness.
-    How far do we scale the bezier curve. 0, nothing, 1 == full length of curve.
-
--}
-type alias Arrival =
-    { wobbliness : Proportion
-    , early : Proportion
-    , slowly : Proportion
-    }
-
-
-type alias Departure =
-    { late : Proportion
-    , slowly : Proportion
-    }
-
-
 {-| Number betwen 0 and 1
 -}
 type alias Proportion =
@@ -111,6 +81,7 @@ emptyDefaults =
     }
 
 
+standardDefault : Personality
 standardDefault =
     { departLate = 0
     , departSlowly = 0.4
@@ -120,57 +91,13 @@ standardDefault =
     }
 
 
+linearDefault : Personality
 linearDefault =
     { departLate = 0
     , departSlowly = 0
     , wobbliness = 0
     , arriveEarly = 0
     , arriveSlowly = 0
-    }
-
-
-defaultDeparture : Departure
-defaultDeparture =
-    { late = 0
-    , slowly = 0.4
-    }
-
-
-defaultArrival : Arrival
-defaultArrival =
-    { wobbliness = 0
-    , early = 0
-    , slowly = 0.8
-    }
-
-
-linearDeparture : Departure
-linearDeparture =
-    { late = 0
-    , slowly = 0
-    }
-
-
-linearArrival : Arrival
-linearArrival =
-    { wobbliness = 0
-    , early = 0
-    , slowly = 0
-    }
-
-
-nullDeparture : Departure
-nullDeparture =
-    { late = 0
-    , slowly = 0
-    }
-
-
-nullArrival : Arrival
-nullArrival =
-    { wobbliness = 0
-    , early = 0
-    , slowly = 0
     }
 
 
@@ -303,9 +230,7 @@ linearly =
     , dwellPeriod = \_ -> Nothing
     , adjustor =
         \_ ->
-            { arrivingEarly = 0
-            , leavingLate = 0
-            }
+            linearDefault
     , after =
         \lookup target future ->
             lookup (Timeline.getEvent target)
@@ -337,18 +262,14 @@ startMoving movement =
     }
 
 
-adjustTiming : Movement -> Timeline.Adjustment
-adjustTiming m =
+getPersonality : Movement -> Personality
+getPersonality m =
     case m of
         Osc personality _ _ ->
-            { arrivingEarly = personality.arriveEarly
-            , leavingLate = personality.departLate
-            }
+            personality
 
         Pos personality _ ->
-            { arrivingEarly = personality.arriveEarly
-            , leavingLate = personality.departLate
-            }
+            personality
 
 
 zeroDuration : Duration.Duration
@@ -384,7 +305,7 @@ moving =
     { start = startMoving
     , dwellFor = dwellFor
     , dwellPeriod = dwellPeriod
-    , adjustor = adjustTiming
+    , adjustor = getPersonality
     , after = afterMove
     , lerp = lerp
     }
@@ -998,9 +919,7 @@ coloring =
     , dwellPeriod = \_ -> Nothing
     , adjustor =
         \_ ->
-            { arrivingEarly = 0
-            , leavingLate = 0
-            }
+            linearDefault
     , after =
         \lookup target future ->
             lookup (Timeline.getEvent target)

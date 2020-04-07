@@ -6,7 +6,7 @@ module Internal.Timeline exposing
     , addToDwell
     , progress, dwellingTime
     , current
-    , Adjustment, Line(..), Timetable(..)
+    , Line(..), Timetable(..)
     , foldp, capture, captureTimeline
     , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Oscillator(..), Pause(..), Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), atTime, gc, hasChanged, justInitialized, linesAreActive, prepareOscillator, previous, previousEndTime, previousStartTime, updateNoGC
     )
@@ -27,7 +27,7 @@ module Internal.Timeline exposing
 
 @docs current
 
-@docs Adjustment, Line, Timetable
+@docs Line, Timetable
 
 @docs foldp, capture, captureTimeline
 
@@ -111,7 +111,7 @@ type Occurring event
 
 type alias Interp state anchor motion =
     { start : anchor -> motion
-    , adjustor : TimeAdjustor anchor
+    , adjustor : GetPersonality anchor
     , dwellFor : DwellFor anchor motion
     , dwellPeriod : DwellPeriod anchor
     , after : After state anchor motion
@@ -170,14 +170,17 @@ type Pause
     = Pause Time.Duration Float
 
 
-type alias Adjustment =
-    { arrivingEarly : Float
-    , leavingLate : Float
+type alias GetPersonality anchor =
+    anchor -> Personality
+
+
+type alias Personality =
+    { wobbliness : Float
+    , arriveEarly : Float
+    , arriveSlowly : Float
+    , departLate : Float
+    , departSlowly : Float
     }
-
-
-type alias TimeAdjustor anchor =
-    anchor -> Adjustment
 
 
 mapTable : (Occurring a -> Occurring b) -> Timetable a -> Timetable b
@@ -234,14 +237,14 @@ If there is no previous event, this doesnt need to be called.
 No need to create and pass in a Maybe.
 
 -}
-startTimeAdj : (event -> anchor) -> TimeAdjustor anchor -> Occurring event -> Occurring event -> Time.Absolute
-startTimeAdj lookup getAdjustment (Occurring prev _ prevEnd) (Occurring cur curStartTime _) =
+startTimeAdj : (event -> anchor) -> GetPersonality anchor -> Occurring event -> Occurring event -> Time.Absolute
+startTimeAdj lookup getPersonality (Occurring prev _ prevEnd) (Occurring cur curStartTime _) =
     let
         adjustment =
-            getAdjustment (lookup cur)
+            getPersonality (lookup cur)
 
         prevAdjustment =
-            getAdjustment (lookup prev)
+            getPersonality (lookup prev)
 
         totalDuration =
             Time.duration prevEnd curStartTime
@@ -249,12 +252,12 @@ startTimeAdj lookup getAdjustment (Occurring prev _ prevEnd) (Occurring cur curS
         -- if portions sum to more than 1, then that sum represents the full duration
         totalPortions =
             max
-                (prevAdjustment.leavingLate + adjustment.arrivingEarly)
+                (prevAdjustment.departLate + adjustment.arriveEarly)
                 1
 
         earlyBy =
             Quantity.multiplyBy
-                (adjustment.arrivingEarly / totalPortions)
+                (adjustment.arriveEarly / totalPortions)
                 totalDuration
     in
     Time.rollbackBy earlyBy curStartTime
@@ -267,7 +270,7 @@ If there is no next event, this doesnt need to be called.
 No need to create and pass in a Maybe.
 
 -}
-endTimeAdj : (event -> anchor) -> TimeAdjustor anchor -> Occurring event -> Occurring event -> Time.Absolute
+endTimeAdj : (event -> anchor) -> GetPersonality anchor -> Occurring event -> Occurring event -> Time.Absolute
 endTimeAdj lookup getAdjustment (Occurring cur _ curEnd) (Occurring next nextStartTime _) =
     let
         adjustment =
@@ -282,12 +285,12 @@ endTimeAdj lookup getAdjustment (Occurring cur _ curEnd) (Occurring next nextSta
         -- if portions sum to more than 1, then that sum represents the full duration
         totalPortions =
             max
-                (adjustment.leavingLate + nextAdjustment.arrivingEarly)
+                (adjustment.departLate + nextAdjustment.arriveEarly)
                 1
 
         lateBy =
             Quantity.multiplyBy
-                (adjustment.leavingLate / totalPortions)
+                (adjustment.departLate / totalPortions)
                 totalDuration
     in
     Time.advanceBy lateBy curEnd
@@ -1671,9 +1674,7 @@ current ((Timeline details) as timeline) =
         , dwellPeriod = \_ -> Nothing
         , adjustor =
             \_ ->
-                { arrivingEarly = 0
-                , leavingLate = 0
-                }
+                linearDefault
         , after =
             \lookup target future ->
                 getEvent target
@@ -1700,6 +1701,16 @@ type Status
     | Transitioning Float
 
 
+linearDefault : Personality
+linearDefault =
+    { departLate = 0
+    , departSlowly = 0
+    , wobbliness = 0
+    , arriveEarly = 0
+    , arriveSlowly = 0
+    }
+
+
 previous : Timeline event -> event
 previous ((Timeline details) as timeline) =
     foldp
@@ -1713,9 +1724,7 @@ previous ((Timeline details) as timeline) =
         , dwellPeriod = \_ -> Nothing
         , adjustor =
             \_ ->
-                { arrivingEarly = 0
-                , leavingLate = 0
-                }
+                linearDefault
         , after =
             \lookup target future ->
                 getEvent target
@@ -1737,9 +1746,7 @@ status ((Timeline details) as timeline) =
         , dwellPeriod = \_ -> Nothing
         , adjustor =
             \_ ->
-                { arrivingEarly = 0
-                , leavingLate = 0
-                }
+                linearDefault
         , after =
             \lookup target future ->
                 Transitioning 1
