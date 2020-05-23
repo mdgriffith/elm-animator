@@ -916,7 +916,7 @@ addEventsToLine now (Schedule delay scheduledStartingEvent reverseQueued) (Line 
         [] ->
             let
                 startNewEventsAt =
-                    Time.latest (startTime startingEvent) start
+                    Time.latest (Time.advanceBy delay (endTime startingEvent)) start
 
                 startingEventWithDwell =
                     case startingEvent of
@@ -932,38 +932,29 @@ addEventsToLine now (Schedule delay scheduledStartingEvent reverseQueued) (Line 
                 |> List.reverse
                 |> Line startLineAt startingEventWithDwell
 
-        (Occurring lastEvent lastEventTime _) :: eventTail ->
+        (Occurring lastEvent lastEventTime lastEventFinish) :: eventTail ->
             let
                 startNewEventsAt =
-                    Time.latest lastEventTime start
+                    Time.latest (Time.advanceBy delay lastEventFinish) start
 
                 newEvents =
                     List.foldl toOccurring ( startNewEventsAt, [] ) queued
                         |> Tuple.second
                         |> List.reverse
             in
-            if Time.thisAfterOrEqualThat start lastEventTime then
-                -- if the start of the scheduled events is after the last event time,
-                -- then we need to increase the dwell time of the last event to match the start time.
-                let
-                    newLastEvent =
-                        Occurring lastEvent
-                            lastEventTime
-                            (if Time.thisAfterThat start lastEventTime then
-                                start
-
-                             else
-                                lastEventTime
-                            )
-                in
-                Line startLineAt
-                    startingEvent
-                    (List.reverse (newLastEvent :: eventTail)
-                        ++ newEvents
-                    )
-
-            else
-                Line startLineAt startingEvent (events ++ newEvents)
+            -- we need to increase the dwell time of the last event
+            -- to match the start time of the new queued events.
+            let
+                newLastEvent =
+                    Occurring lastEvent
+                        lastEventTime
+                        startNewEventsAt
+            in
+            Line startLineAt
+                startingEvent
+                (List.reverse (newLastEvent :: eventTail)
+                    ++ newEvents
+                )
 
 
 toOccurring : Event event -> ( Time.Absolute, List (Occurring event) ) -> ( Time.Absolute, List (Occurring event) )
