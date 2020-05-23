@@ -26,11 +26,6 @@ type Event
     | Unreachable
 
 
-timeline =
-    Animator.init Starting
-        |> Timeline.update (Time.millisToPosix 0)
-
-
 qty =
     Quantity.Quantity
 
@@ -73,6 +68,11 @@ valueAtEquals time val tl =
         (Absolute 0.001)
         (Animator.move new toVals)
         val
+
+
+timeline =
+    Animator.init Starting
+        |> Timeline.update (Time.millisToPosix 0)
 
 
 queueing =
@@ -122,6 +122,130 @@ queueing =
                         , valueAtEquals 6000 3
                         ]
                         newTimeline
+            ]
+        , describe "Queued in ongoing"
+            [ test "multiple events queued" <|
+                \_ ->
+                    let
+                        queuedTimeline =
+                            Animator.init Starting
+                                |> Timeline.update (Time.millisToPosix 0)
+                                |> Animator.queue
+                                    [ Animator.wait (Animator.seconds 1.0)
+                                    , Animator.event (Animator.seconds 1) One
+                                    , Animator.wait (Animator.seconds 1.0)
+                                    , Animator.event (Animator.seconds 1) Two
+                                    , Animator.wait (Animator.seconds 1.0)
+                                    , Animator.event (Animator.seconds 1) Three
+                                    , Animator.wait (Animator.seconds 1.0)
+                                    ]
+                                |> Timeline.updateNoGC (Time.millisToPosix 0)
+                                |> Timeline.updateNoGC (Time.millisToPosix 3000)
+                                |> Animator.queue
+                                    [ Animator.wait (Animator.seconds 1.0)
+                                    , Animator.event (Animator.seconds 1) One
+                                    , Animator.wait (Animator.seconds 1.0)
+                                    , Animator.event (Animator.seconds 1) Two
+                                    , Animator.wait (Animator.seconds 1.0)
+                                    , Animator.event (Animator.seconds 1) Three
+                                    , Animator.wait (Animator.seconds 1.0)
+                                    ]
+                                |> Debug.log "queued"
+                                |> Timeline.updateNoGC (Time.millisToPosix 4000)
+                    in
+                    Expect.equal
+                        queuedTimeline
+                        (Timeline.Timeline
+                            { events =
+                                Timeline.Timetable
+                                    [ Timeline.Line (qty 0)
+                                        (occur Starting (qty 0) (qty 1000))
+                                        [ occur One (qty 2000) (qty 3000)
+                                        , occur Two (qty 4000) (qty 5000)
+                                        , occur Three (qty 6000) (qty 8000)
+                                        , occur One (qty 9000) (qty 10000)
+                                        , occur Two (qty 11000) (qty 12000)
+                                        , occur Three (qty 13000) (qty 14000)
+                                        ]
+                                    ]
+                            , initial = Starting
+                            , interruption = []
+                            , now = qty 4000
+                            , queued = Nothing
+                            , running = True
+                            }
+                        )
+            , test "one event queued" <|
+                \_ ->
+                    let
+                        queuedTimeline =
+                            Animator.init Starting
+                                |> Animator.go (Animator.seconds 2) One
+                                |> Timeline.updateNoGC (Time.millisToPosix 0)
+                                |> Timeline.updateNoGC (Time.millisToPosix 100)
+                                |> Timeline.updateNoGC (Time.millisToPosix 200)
+                                |> Animator.queue
+                                    [ Animator.event (Animator.seconds 1) Starting
+                                    , Animator.wait (Animator.seconds 5)
+                                    , Animator.event (Animator.seconds 2) One
+                                    ]
+                                |> Timeline.updateNoGC (Time.millisToPosix 300)
+                    in
+                    Expect.equal
+                        queuedTimeline
+                        (Timeline.Timeline
+                            { events =
+                                Timeline.Timetable
+                                    [ Timeline.Line (qty 0)
+                                        (occur Starting (qty 0) (qty 0))
+                                        []
+                                    , Timeline.Line (qty 0)
+                                        (occur One (qty 2000) (qty 2000))
+                                        [ occur Starting (qty 3000) (qty 8000)
+                                        , occur One (qty 10000) (qty 10000)
+                                        ]
+                                    ]
+                            , initial = Starting
+                            , interruption = []
+                            , now = qty 300
+                            , queued = Nothing
+                            , running = True
+                            }
+                        )
+            , only <|
+                test "Queueing events does not change the current value" <|
+                    \_ ->
+                        let
+                            currentTimeline =
+                                Animator.init Starting
+                                    |> Animator.go (Animator.seconds 2) One
+                                    |> Timeline.updateNoGC (Time.millisToPosix 0)
+                                    |> Timeline.updateNoGC (Time.millisToPosix 100)
+                                    |> Timeline.updateNoGC (Time.millisToPosix 200)
+
+                            queuedTimeline =
+                                currentTimeline
+                                    |> Animator.queue
+                                        [ Animator.event (Animator.seconds 1) Starting
+                                        , Animator.wait (Animator.seconds 5)
+                                        , Animator.event (Animator.seconds 2) One
+                                        ]
+                                    |> Timeline.updateNoGC (Time.millisToPosix 300)
+
+                            current =
+                                Animator.move
+                                    (Timeline.atTime (Time.millisToPosix 300) currentTimeline)
+                                    toVals
+
+                            queued =
+                                Animator.move
+                                    (Timeline.atTime (Time.millisToPosix 300) queuedTimeline)
+                                    toVals
+                        in
+                        Expect.within
+                            (Absolute 0.001)
+                            current
+                            queued
             ]
         , test "Queue after some time" <|
             \_ ->
