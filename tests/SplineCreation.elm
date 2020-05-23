@@ -21,11 +21,9 @@ suite =
                     spline =
                         Interpolate.createSpline
                             { arrival =
-                                { early = 0
-                                , slowly = 0.8
-                                , wobbliness = 0
-                                }
-                            , departure = { late = 0, slowly = 0.4 }
+                                Interpolate.standardDefault
+                            , departure =
+                                Interpolate.standardDefault
                             , end = { x = 2000, y = 400 }
                             , endVelocity = { x = 1000, y = 0 }
                             , start = { x = 1000, y = 100 }
@@ -48,11 +46,9 @@ suite =
                     spline =
                         Interpolate.createSpline
                             { arrival =
-                                { early = 0
-                                , slowly = 0.8
-                                , wobbliness = 0
-                                }
-                            , departure = { late = 0, slowly = 0.4 }
+                                Interpolate.standardDefault
+                            , departure =
+                                Interpolate.standardDefault
                             , start = { x = 1000, y = 100 }
                             , startVelocity = { x = 1000, y = 0 }
                             , end = { x = 1250, y = 400 }
