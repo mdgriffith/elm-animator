@@ -864,7 +864,10 @@ pause forDuration val osc =
             osc
 
 
-{-| Start at one number and move linearly to another, then wrap back to the first.
+{-| Start at one number and move linearly to another, then immediately start again at the first.
+
+This was originally intended for animating rotation where you'd want 360deg to "wrap" to 0deg.
+
 -}
 wrap : Float -> Float -> Oscillator
 wrap start end =
