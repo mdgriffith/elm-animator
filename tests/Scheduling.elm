@@ -479,8 +479,10 @@ interruptions =
                             Timeline.Timetable
                                 [ Timeline.Line (qty 0)
                                     (occur Starting (qty 0) (qty 1000))
-                                    [ occur One (qty 2000) (qty 3000)
-                                    , occur Two (qty 4000) (qty 5000)
+                                    []
+                                , Timeline.Line (qty 1000)
+                                    (occur One (qty 2000) (qty 3000))
+                                    [ occur Two (qty 4000) (qty 5000)
                                     , occur Unreachable (qty 6000) (qty 7000)
                                     ]
 
@@ -616,8 +618,10 @@ interruptions =
                             Timeline.Timetable
                                 [ Timeline.Line (qty 0)
                                     (occur Starting (qty 0) (qty 1000))
-                                    [ occur One (qty 2000) (qty 3000)
-                                    , occur Two (qty 4000) (qty 5000)
+                                    []
+                                , Timeline.Line (qty 1000)
+                                    (occur One (qty 2000) (qty 3000))
+                                    [ occur Two (qty 4000) (qty 5000)
                                     , occur Unreachable (qty 6000) (qty 7000)
                                     ]
 
@@ -674,11 +678,15 @@ interruptions =
                             Timeline.Timetable
                                 [ Timeline.Line (qty 0)
                                     (occur Starting (qty 0) (qty 1000))
-                                    [ occur One (qty 2000) (qty 3000)
-                                    , occur Two (qty 4000) (qty 5000)
+                                    []
+                                , Timeline.Line (qty 1000)
+                                    (occur One (qty 2000) (qty 3000))
+                                    [ occur Two (qty 4000) (qty 5000)
                                     , occur Three (qty 6000) (qty 6000)
-                                    , occur Four (qty 7000) (qty 8000)
-                                    , occur Five (qty 9000) (qty 9000)
+                                    ]
+                                , Timeline.Line (qty 6000)
+                                    (occur Four (qty 7000) (qty 8000))
+                                    [ occur Five (qty 9000) (qty 9000)
                                     ]
                                 ]
                         , initial = Starting
