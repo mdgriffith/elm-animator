@@ -420,7 +420,15 @@ afterMove lookup target future =
 
 
 {-| -}
-springInterpolation : Milliseconds -> Maybe Movement -> Movement -> Milliseconds -> Milliseconds -> Maybe (Timeline.LookAhead Movement) -> State -> State
+springInterpolation :
+    Milliseconds
+    -> Maybe Movement
+    -> Movement
+    -> Milliseconds
+    -> Milliseconds
+    -> Maybe (Timeline.LookAhead Movement)
+    -> State
+    -> State
 springInterpolation prevEndTime _ target targetTime now _ state =
     let
         wobble =
@@ -533,7 +541,7 @@ interpolateBetween startTimeInMs maybePrevious target targetTimeInMs now maybeLo
                 -- jumpSize
                 0.25
                 -- starting t
-                0.5
+                (guessTime now curve)
                 -- depth
                 0
 
@@ -617,7 +625,22 @@ interpolateBetween startTimeInMs maybePrevious target targetTimeInMs now maybeLo
     }
 
 
-newVelocityAtTarget : Movement -> Milliseconds -> Timeline.LookAhead Movement -> PixelsPerSecond
+guessTime : Float -> Spline -> Float
+guessTime now (Spline one two three four) =
+    if (four.x - one.x) == 0 then
+        0.5
+
+    else
+        (now - one.x) / (four.x - one.x)
+
+
+{-| Prfer this function over `velocityAtTarget`!
+-}
+newVelocityAtTarget :
+    Movement
+    -> Milliseconds
+    -> Timeline.LookAhead Movement
+    -> PixelsPerSecond
 newVelocityAtTarget target targetTime lookAhead =
     let
         targetPosition =
@@ -646,7 +669,11 @@ newVelocityAtTarget target targetTime lookAhead =
                 velocityBetween targetPosition (Time.millis targetTime) (Pixels.pixels (toX 0)) (Time.millis lookAhead.time)
 
 
-velocityAtTarget : (event -> Movement) -> Timeline.Occurring event -> Maybe (Timeline.Occurring event) -> PixelsPerSecond
+velocityAtTarget :
+    (event -> Movement)
+    -> Timeline.Occurring event
+    -> Maybe (Timeline.Occurring event)
+    -> PixelsPerSecond
 velocityAtTarget lookup ((Timeline.Occurring target targetTime targetEndTime) as t) maybeLookAhead =
     -- This is the velocity we're shooting for.
     -- case maybeTargetDwell of
@@ -737,7 +764,11 @@ createSpline config =
 
         startVelocity =
             if config.departure.departSlowly == 0 then
-                config.startVelocity
+                -- this is linear,
+                -- we don't care how fast we were going previously.
+                { x = 0
+                , y = 0
+                }
 
             else if
                 ((config.startVelocity.x - zeroPoint.x) == 0)
@@ -757,7 +788,10 @@ createSpline config =
 
         endVelocity =
             if config.arrival.arriveSlowly == 0 then
-                config.endVelocity
+                -- if this is 0, this is linear,
+                { x = 0
+                , y = 0
+                }
 
             else if
                 ((config.endVelocity.x - zeroPoint.x) == 0)
