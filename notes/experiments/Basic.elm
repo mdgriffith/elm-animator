@@ -21,7 +21,7 @@ import Time
 
 singleEvent =
     Animator.init Hufflepuff
-        |> Internal.Timeline.updateNoGC (Time.millisToPosix 0)
+        |> Internal.Timeline.updateWith False (Time.millisToPosix 0)
 
 
 doubleEvent =
@@ -30,11 +30,7 @@ doubleEvent =
             [ Animator.wait (Animator.millis 500)
             , Animator.event (Animator.millis 250) Griffyndor
             ]
-        |> Internal.Timeline.updateNoGC (Time.millisToPosix 0)
-
-
-
--- |> Debug.log "double event"
+        |> Internal.Timeline.updateWith False (Time.millisToPosix 0)
 
 
 fourContinuous =
@@ -58,7 +54,7 @@ fourWithPause =
             , Animator.event (Animator.seconds 1) Ravenclaw
             , Animator.wait (Animator.seconds 1)
             ]
-        |> Internal.Timeline.updateNoGC (Time.millisToPosix 0)
+        |> Internal.Timeline.updateWith False (Time.millisToPosix 0)
 
 
 
@@ -68,13 +64,13 @@ fourWithPause =
 doubleInterrupted =
     doubleEvent
         |> Animator.go (Animator.seconds 1) Ravenclaw
-        |> Internal.Timeline.updateNoGC (Time.millisToPosix 1500)
+        |> Internal.Timeline.updateWith False (Time.millisToPosix 1500)
 
 
 doubleInterruptedInterrupted =
     doubleInterrupted
         |> Animator.go (Animator.seconds 1) Slytherin
-        |> Internal.Timeline.updateNoGC (Time.millisToPosix 3001)
+        |> Internal.Timeline.updateWith False (Time.millisToPosix 3001)
 
 
 fourContinuousInterrupted =
@@ -99,7 +95,21 @@ fourWithPauseInterrupted =
             , Animator.event (Animator.seconds 1) Ravenclaw
             , Animator.wait (Animator.seconds 1)
             ]
-        |> Internal.Timeline.updateNoGC (Time.millisToPosix 3000)
+        |> Internal.Timeline.updateWith False (Time.millisToPosix 3000)
+
+
+fourWithPauseQueued =
+    fourWithPause
+        |> Animator.queue
+            [ Animator.wait (Animator.seconds 1)
+            , Animator.event (Animator.seconds 1) Griffyndor
+            , Animator.wait (Animator.seconds 1)
+            , Animator.event (Animator.seconds 1) Slytherin
+            , Animator.wait (Animator.seconds 1)
+            , Animator.event (Animator.seconds 1) Ravenclaw
+            , Animator.wait (Animator.seconds 1)
+            ]
+        |> Internal.Timeline.updateWith False (Time.millisToPosix 3000)
 
 
 main =
@@ -209,6 +219,10 @@ view model =
               , timeline = singleEvent
               , move = posThenOscillators
               }
+            , { name = "Linear"
+              , timeline = singleEvent
+              , move = linear
+              }
             , { name = "Sorta Wobbly"
               , timeline = singleEvent
               , move = sortaWobbly
@@ -230,6 +244,10 @@ view model =
             , { name = "Pos -> Oscillators"
               , timeline = doubleEvent
               , move = posThenOscillators
+              }
+            , { name = "Linear"
+              , timeline = doubleEvent
+              , move = linear
               }
             , { name = "Sorta wobbly"
               , timeline = doubleEvent
@@ -257,6 +275,10 @@ view model =
               , timeline = doubleInterrupted
               , move = posThenOscillators
               }
+            , { name = "Linear"
+              , timeline = doubleInterrupted
+              , move = linear
+              }
             , { name = "Sorta wobbly"
               , timeline = doubleInterrupted
               , move = sortaWobbly
@@ -278,6 +300,10 @@ view model =
             , { name = "Pos -> Oscillators"
               , timeline = doubleInterruptedInterrupted
               , move = posThenOscillators
+              }
+            , { name = "Linear"
+              , timeline = doubleInterruptedInterrupted
+              , move = linear
               }
             , { name = "Sorta wobbly"
               , timeline = doubleInterruptedInterrupted
@@ -301,6 +327,10 @@ view model =
               , timeline = fourContinuous
               , move = posThenOscillators
               }
+            , { name = "Linear"
+              , timeline = fourContinuous
+              , move = linear
+              }
             , { name = "Sorta Wobbly"
               , timeline = fourContinuous
               , move = sortaWobbly
@@ -322,6 +352,10 @@ view model =
             , { name = "Pos -> Oscillators"
               , timeline = fourWithPause
               , move = posThenOscillators
+              }
+            , { name = "Linear"
+              , timeline = fourWithPause
+              , move = linear
               }
             , { name = "Sorta Wobbly"
               , timeline = fourWithPause
@@ -345,12 +379,42 @@ view model =
               , timeline = fourWithPauseInterrupted
               , move = posThenOscillators
               }
+            , { name = "Linear"
+              , timeline = fourWithPauseInterrupted
+              , move = linear
+              }
             , { name = "Sorta Wobbly"
               , timeline = fourWithPauseInterrupted
               , move = sortaWobbly
               }
             , { name = "Wobbly"
               , timeline = fourWithPauseInterrupted
+              , move = wobbly
+              }
+            ]
+        , viewTimelineGroup "Queued - Four with Pause"
+            [ { name = "Pos"
+              , timeline = fourWithPauseQueued
+              , move = toHousePosition
+              }
+            , { name = "Oscillator"
+              , timeline = fourWithPauseQueued
+              , move = oscillators
+              }
+            , { name = "Pos -> Oscillators"
+              , timeline = fourWithPauseQueued
+              , move = posThenOscillators
+              }
+            , { name = "Linear"
+              , timeline = fourWithPauseQueued
+              , move = linear
+              }
+            , { name = "Sorta Wobbly"
+              , timeline = fourWithPauseQueued
+              , move = sortaWobbly
+              }
+            , { name = "Wobbly"
+              , timeline = fourWithPauseQueued
               , move = wobbly
               }
             ]
@@ -721,6 +785,29 @@ toHousePosition event =
 
         Ravenclaw ->
             Animator.at 1000
+
+
+linear event =
+    case event of
+        Hufflepuff ->
+            Animator.at 100
+                |> Animator.leaveSmoothly 0
+                |> Animator.arriveSmoothly 0
+
+        Griffyndor ->
+            Animator.at 400
+                |> Animator.leaveSmoothly 0
+                |> Animator.arriveSmoothly 0
+
+        Slytherin ->
+            Animator.at 700
+                |> Animator.leaveSmoothly 0
+                |> Animator.arriveSmoothly 0
+
+        Ravenclaw ->
+            Animator.at 1000
+                |> Animator.leaveSmoothly 0
+                |> Animator.arriveSmoothly 0
 
 
 oscillators event =

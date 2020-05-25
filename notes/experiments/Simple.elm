@@ -21,7 +21,7 @@ import Time
 
 singleEvent =
     Animator.init Hufflepuff
-        |> Internal.Timeline.updateNoGC (Time.millisToPosix 0)
+        |> Internal.Timeline.updateWith False (Time.millisToPosix 0)
 
 
 doubleEvent =
@@ -30,7 +30,7 @@ doubleEvent =
             [ Animator.wait (Animator.seconds 1)
             , Animator.event (Animator.millis 250) Griffyndor
             ]
-        |> Internal.Timeline.updateNoGC (Time.millisToPosix 0)
+        |> Internal.Timeline.updateWith False (Time.millisToPosix 0)
 
 
 main =
@@ -121,7 +121,7 @@ view model =
         _ =
             Interpolate.details
                 (doubleEvent
-                    |> Internal.Timeline.updateNoGC (Time.millisToPosix 1002)
+                    |> Internal.Timeline.updateWith False (Time.millisToPosix 1002)
                  -- |> Debug.log "timeline"
                 )
                 (toHousePosition >> Interpolate.withStandardDefault)
