@@ -114,7 +114,7 @@ type alias Interp state anchor motion =
     , adjustor : GetPersonality anchor
     , dwellFor : DwellFor anchor motion
     , dwellPeriod : DwellPeriod anchor
-    , after : After state anchor motion
+    , visit : Visit state anchor motion
     , lerp : Lerp anchor motion
     }
 
@@ -123,8 +123,12 @@ type alias DwellFor anchor state =
     anchor -> Time.Duration -> state
 
 
-type alias After event anchor state =
-    (event -> anchor) -> Occurring event -> List (Occurring event) -> state
+type alias Visit event anchor state =
+    (event -> anchor)
+    -> Occurring event
+    -> Time.Absolute
+    -> Maybe (LookAhead anchor)
+    -> state
 
 
 type alias Milliseconds =
@@ -1042,6 +1046,20 @@ foldp lookup fn (Timeline timelineDetails) =
                         start
 
 
+createLookAhead fn lookup currentEvent upcomingEvents =
+    case upcomingEvents of
+        [] ->
+            Nothing
+
+        upcoming :: _ ->
+            Just
+                { anchor = lookup (getEvent upcoming)
+                , time = Time.inMilliseconds (startTimeAdj lookup fn.adjustor currentEvent upcoming)
+                , resting =
+                    hasDwell upcoming
+                }
+
+
 overLines :
     Interp state anchor motion
     -> (state -> anchor)
@@ -1102,18 +1120,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart lineStartEv lineR
             (lookup (getEvent lineStartEv))
             (Time.inMilliseconds eventStartTime)
             (Time.inMilliseconds now)
-            (case lineRemain of
-                [] ->
-                    Nothing
-
-                upcoming :: _ ->
-                    Just
-                        { anchor = lookup (getEvent upcoming)
-                        , time = Time.inMilliseconds (startTimeAdj lookup fn.adjustor lineStartEv upcoming)
-                        , resting =
-                            hasDwell upcoming
-                        }
-            )
+            (createLookAhead fn lookup lineStartEv lineRemain)
             state
             |> transition
 
@@ -1132,9 +1139,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart lineStartEv lineR
             case lineRemain of
                 [] ->
                     -- dwell at lineStartEv, there's nothing to transition to
-                    fn.dwellFor
-                        (lookup (getEvent lineStartEv))
-                        (Time.duration eventStartTime now)
+                    fn.visit lookup lineStartEv now Nothing
                         |> transition
 
                 next :: lineRemain2 ->
@@ -1159,33 +1164,18 @@ overLines fn lookup details maybePreviousEvent (Line lineStart lineStartEv lineR
                             (lookup (getEvent next))
                             (Time.inMilliseconds nextStartTime)
                             (Time.inMilliseconds now)
-                            (case lineRemain2 of
-                                [] ->
-                                    Nothing
-
-                                upcoming :: _ ->
-                                    Just
-                                        { anchor = lookup (getEvent upcoming)
-                                        , time = Time.inMilliseconds (startTimeAdj lookup fn.adjustor next upcoming)
-                                        , resting =
-                                            hasDwell upcoming
-                                        }
-                            )
-                            (if hasDwell lineStartEv then
-                                fn.dwellFor (lookup (getEvent lineStartEv)) (Time.duration eventStartTime eventEndTime)
-
-                             else
-                                fn.after lookup lineStartEv lineRemain
-                            )
+                            (createLookAhead fn lookup next lineRemain2)
+                            (fn.visit lookup lineStartEv now (createLookAhead fn lookup lineStartEv lineRemain))
                             |> transition
 
                     else if Time.thisBeforeThat now nextEndTime then
                         -- After next.startTime
                         --- Before next.endTime
                         --      -> we're dwelling at `next`
-                        fn.dwellFor
-                            (lookup (getEvent next))
-                            (Time.duration nextStartTime now)
+                        fn.visit lookup
+                            next
+                            now
+                            (createLookAhead fn lookup next lineRemain2)
                             |> transition
 
                     else
@@ -1195,10 +1185,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart lineStartEv lineR
                         case lineRemain2 of
                             [] ->
                                 -- Nothing to continue on to,
-                                --      -> we're dwelling at `next`
-                                fn.dwellFor
-                                    (lookup (getEvent next))
-                                    (Time.duration nextStartTime now)
+                                fn.visit lookup next now Nothing
                                     |> transition
 
                             next2 :: lineRemain3 ->
@@ -1218,13 +1205,10 @@ overLines fn lookup details maybePreviousEvent (Line lineStart lineStartEv lineR
                                 if Time.thisBeforeThat now next2StartTime then
                                     let
                                         after =
-                                            if hasDwell next then
-                                                fn.dwellFor
-                                                    (lookup (getEvent next))
-                                                    (Time.duration nextStartTime nextEndTime)
-
-                                            else
-                                                fn.after lookup next lineRemain2
+                                            fn.visit lookup
+                                                next
+                                                now
+                                                (createLookAhead fn lookup next lineRemain2)
                                     in
                                     fn.lerp
                                         -- next end time?
@@ -1233,37 +1217,25 @@ overLines fn lookup details maybePreviousEvent (Line lineStart lineStartEv lineR
                                         (lookup (getEvent next2))
                                         (Time.inMilliseconds next2StartTime)
                                         (Time.inMilliseconds now)
-                                        (case lineRemain3 of
-                                            [] ->
-                                                Nothing
-
-                                            upcoming :: _ ->
-                                                Just
-                                                    { anchor = lookup (getEvent upcoming)
-                                                    , time = Time.inMilliseconds (startTimeAdj lookup fn.adjustor next2 upcoming)
-                                                    , resting =
-                                                        hasDwell upcoming
-                                                    }
-                                        )
+                                        (createLookAhead fn lookup next2 lineRemain3)
                                         after
                                         |> transition
 
                                 else if Time.thisBeforeThat now next2EndTime then
                                     -- we're dwelling at `next2`
-                                    fn.dwellFor
-                                        (lookup (getEvent next2))
-                                        (Time.duration next2StartTime now)
+                                    fn.visit lookup
+                                        next2
+                                        now
+                                        (createLookAhead fn lookup next2 lineRemain3)
                                         |> transition
 
                                 else
                                     let
                                         after =
-                                            if hasDwell next2 then
-                                                fn.dwellFor (lookup (getEvent next2))
-                                                    (Time.duration next2StartTime next2EndTime)
-
-                                            else
-                                                fn.after lookup next2 lineRemain3
+                                            fn.visit lookup
+                                                next2
+                                                now
+                                                (createLookAhead fn lookup next2 lineRemain3)
                                     in
                                     -- Recompose our line by removing previous events
                                     -- and continue forward!
@@ -1277,18 +1249,13 @@ overLines fn lookup details maybePreviousEvent (Line lineStart lineStartEv lineR
                                         after
 
         else
-        -- dwell at linestartEv
-        -- we've checked that it's not after or before,
-        -- so it has to be between the start and end
-        if
-            hasDwell lineStartEv
-        then
-            fn.dwellFor (lookup (getEvent lineStartEv))
-                (Time.duration eventStartTime now)
-                |> transition
-
-        else
-            fn.after lookup lineStartEv lineRemain
+            -- dwell at linestartEv
+            -- we've checked that it's not after or before,
+            -- so it has to be between the start and end
+            fn.visit lookup
+                lineStartEv
+                now
+                (createLookAhead fn lookup lineStartEv lineRemain)
                 |> transition
 
 
@@ -1657,8 +1624,8 @@ current ((Timeline details) as timeline) =
         , adjustor =
             \_ ->
                 linearDefault
-        , after =
-            \lookup target future ->
+        , visit =
+            \lookup target targetTime maybeLookAhead ->
                 getEvent target
         , lerp = pass
         }
@@ -1707,8 +1674,8 @@ previous ((Timeline details) as timeline) =
         , adjustor =
             \_ ->
                 linearDefault
-        , after =
-            \lookup target future ->
+        , visit =
+            \lookup target targetTime maybeLookAhead ->
                 getEvent target
         , lerp = getPrev
         }
@@ -1729,9 +1696,22 @@ status ((Timeline details) as timeline) =
         , adjustor =
             \_ ->
                 linearDefault
-        , after =
-            \lookup target future ->
-                Transitioning 1
+        , visit =
+            \lookup (Occurring event start eventEnd) now maybeLookAhead ->
+                let
+                    dwellTime =
+                        case maybeLookAhead of
+                            Nothing ->
+                                Time.duration start now
+
+                            _ ->
+                                Time.duration start (Time.earliest now eventEnd)
+                in
+                if Time.zeroDuration dwellTime then
+                    Transitioning 1
+
+                else
+                    Dwelling dwellTime
         , lerp =
             \prevEndTime maybePrev target targetTime now maybeLookAhead state ->
                 -- target
@@ -1775,7 +1755,7 @@ If we're in transition, this is 0.
 -}
 dwellingTime : Timeline state -> Float
 dwellingTime timeline =
-    case status timeline of
+    case Debug.log "status" <| status timeline of
         Dwelling x ->
             Duration.inMilliseconds x
 
