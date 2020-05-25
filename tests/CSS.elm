@@ -185,7 +185,7 @@ frames =
                             -- scheduling an event
                             |> Timeline.update (Time.millisToPosix 1)
                             |> Animator.go (Animator.seconds 1) Three
-                            |> Timeline.updateNoGC (Time.millisToPosix 500)
+                            |> Timeline.updateWith False (Time.millisToPosix 500)
 
                     resultFrames =
                         Timeline.capture 60 toVals Interpolate.linearly timeline

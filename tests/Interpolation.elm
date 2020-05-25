@@ -222,17 +222,17 @@ timeline =
                 let
                     doubleEvent =
                         Animator.init Hufflepuff
-                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Timeline.updateWith False (Time.millisToPosix 0)
                             |> Animator.queue
                                 [ Animator.wait (Animator.seconds 1)
                                 , Animator.event (Animator.seconds 1) Griffyndor
                                 ]
-                            |> Timeline.update (Time.millisToPosix 1000)
+                            |> Timeline.updateWith False (Time.millisToPosix 1000)
                             |> Animator.interrupt
                                 [ Animator.event (Animator.seconds 1) Ravenclaw
                                 ]
-                            |> Timeline.update (Time.millisToPosix 2500)
-                            |> Timeline.update (Time.millisToPosix 3000)
+                            |> Timeline.updateWith False (Time.millisToPosix 2500)
+                            |> Timeline.updateWith False (Time.millisToPosix 3000)
 
                     position =
                         Interpolate.details

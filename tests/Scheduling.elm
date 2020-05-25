@@ -58,6 +58,37 @@ toVals event =
             Animator.at -1
 
 
+toOscVals event =
+    case event of
+        Starting ->
+            Animator.wave 0 1
+                |> Animator.loop (Animator.millis 100)
+
+        One ->
+            Animator.wave 1 2
+                |> Animator.loop (Animator.millis 100)
+
+        Two ->
+            Animator.wave 2 3
+                |> Animator.loop (Animator.millis 100)
+
+        Three ->
+            Animator.wave 3 4
+                |> Animator.loop (Animator.millis 100)
+
+        Four ->
+            Animator.wave 4 5
+                |> Animator.loop (Animator.millis 100)
+
+        Five ->
+            Animator.wave 5 6
+                |> Animator.loop (Animator.millis 100)
+
+        Unreachable ->
+            Animator.wave -1 0
+                |> Animator.loop (Animator.millis 100)
+
+
 valueAtEquals time val tl =
     let
         new =
@@ -67,6 +98,18 @@ valueAtEquals time val tl =
     Expect.within
         (Absolute 0.001)
         (Animator.move new toVals)
+        val
+
+
+valueOscAtEquals time val tl =
+    let
+        new =
+            -- we can't call update because updates have to be monotonic
+            Timeline.atTime (Time.millisToPosix time) tl
+    in
+    Expect.within
+        (Absolute 0.001)
+        (Animator.move new toOscVals)
         val
 
 
@@ -101,8 +144,10 @@ queueing =
                                 Timeline.Timetable
                                     [ Timeline.Line (qty 0)
                                         (occur Starting (qty 0) (qty 1000))
-                                        [ occur One (qty 2000) (qty 3000)
-                                        , occur Two (qty 4000) (qty 5000)
+                                        []
+                                    , Timeline.Line (qty 1000)
+                                        (occur One (qty 2000) (qty 3000))
+                                        [ occur Two (qty 4000) (qty 5000)
                                         , occur Three (qty 6000) (qty 7000)
                                         ]
                                     ]
@@ -122,6 +167,48 @@ queueing =
                         , valueAtEquals 6000 3
                         ]
                         newTimeline
+            , test "Values are consistent right after event" <|
+                \_ ->
+                    let
+                        tl =
+                            Animator.init Starting
+                                |> Timeline.update (Time.millisToPosix 0)
+                                |> Animator.queue
+                                    [ Animator.event (Animator.seconds 1) One
+                                    , Animator.event (Animator.seconds 1) Two
+                                    , Animator.event (Animator.seconds 1) Three
+                                    ]
+                                |> Timeline.update (Time.millisToPosix 0)
+
+                        -- x =
+                        --     Timeline
+                        --         { events =
+                        --             Timetable
+                        --                 [ Line (Quantity 0)
+                        --                     (Occurring Starting (Quantity 0) (Quantity 0))
+                        --                     []
+                        --                 , Line (Quantity 0)
+                        --                     (Occurring One (Quantity 1000) (Quantity 1000))
+                        --                     [ Occurring Two (Quantity 2000) (Quantity 2000)
+                        --                     , Occurring Three (Quantity 3000) (Quantity 3000)
+                        --                     ]
+                        --                 ]
+                        --         , initial = Starting
+                        --         , interruption = []
+                        --         , now = Quantity 0
+                        --         , queued = Nothing
+                        --         , running = True
+                        --         }
+                    in
+                    Expect.all
+                        [ -- valueAtEquals 0 0
+                          valueOscAtEquals 999 1
+
+                        --   valueAtEquals 1001 1
+                        -- , valueAtEquals 2000 2
+                        -- , valueAtEquals 3000 3
+                        ]
+                        tl
             ]
         , describe "Queued in ongoing"
             [ test "multiple events queued" <|
@@ -139,8 +226,8 @@ queueing =
                                     , Animator.event (Animator.seconds 1) Three
                                     , Animator.wait (Animator.seconds 1.0)
                                     ]
-                                |> Timeline.updateNoGC (Time.millisToPosix 0)
-                                |> Timeline.updateNoGC (Time.millisToPosix 3000)
+                                |> Timeline.updateWith False (Time.millisToPosix 0)
+                                |> Timeline.updateWith False (Time.millisToPosix 3000)
                                 |> Animator.queue
                                     [ Animator.wait (Animator.seconds 1.0)
                                     , Animator.event (Animator.seconds 1) One
@@ -150,8 +237,7 @@ queueing =
                                     , Animator.event (Animator.seconds 1) Three
                                     , Animator.wait (Animator.seconds 1.0)
                                     ]
-                                |> Debug.log "queued"
-                                |> Timeline.updateNoGC (Time.millisToPosix 4000)
+                                |> Timeline.updateWith False (Time.millisToPosix 4000)
                     in
                     Expect.equal
                         queuedTimeline
@@ -160,13 +246,36 @@ queueing =
                                 Timeline.Timetable
                                     [ Timeline.Line (qty 0)
                                         (occur Starting (qty 0) (qty 1000))
-                                        [ occur One (qty 2000) (qty 3000)
-                                        , occur Two (qty 4000) (qty 5000)
+                                        []
+                                    , Timeline.Line (qty 1000)
+                                        (occur One (qty 2000) (qty 3000))
+                                        [ occur Two (qty 4000) (qty 5000)
                                         , occur Three (qty 6000) (qty 8000)
-                                        , occur One (qty 9000) (qty 10000)
-                                        , occur Two (qty 11000) (qty 12000)
+                                        ]
+                                    , Timeline.Line (qty 8000)
+                                        (occur One (qty 9000) (qty 10000))
+                                        [ occur Two (qty 11000) (qty 12000)
                                         , occur Three (qty 13000) (qty 14000)
                                         ]
+
+                                    -- , Timeline.Line (qty 0)
+                                    --     (occur Starting (qty 0) (qty 1000))
+                                    --     [ occur One (qty 2000) (qty 3000)
+                                    --     , occur Two (qty 4000) (qty 5000)
+                                    --     , occur Three (qty 6000) (qty 8000)
+                                    --     , occur One (qty 9000) (qty 10000)
+                                    --     , occur Two (qty 11000) (qty 12000)
+                                    --     , occur Three (qty 13000) (qty 14000)
+                                    --     ]
+                                    -- , Timeline.Line (qty 0)
+                                    --     (occur Starting (qty 0) (qty 1000))
+                                    --     [ occur One (qty 2000) (qty 3000)
+                                    --     , occur Two (qty 4000) (qty 5000)
+                                    --     , occur Three (qty 6000) (qty 8000)
+                                    --     , occur One (qty 9000) (qty 10000)
+                                    --     , occur Two (qty 11000) (qty 12000)
+                                    --     , occur Three (qty 13000) (qty 14000)
+                                    --     ]
                                     ]
                             , initial = Starting
                             , interruption = []
@@ -181,15 +290,15 @@ queueing =
                         queuedTimeline =
                             Animator.init Starting
                                 |> Animator.go (Animator.seconds 2) One
-                                |> Timeline.updateNoGC (Time.millisToPosix 0)
-                                |> Timeline.updateNoGC (Time.millisToPosix 100)
-                                |> Timeline.updateNoGC (Time.millisToPosix 200)
+                                |> Timeline.updateWith False (Time.millisToPosix 0)
+                                |> Timeline.updateWith False (Time.millisToPosix 100)
+                                |> Timeline.updateWith False (Time.millisToPosix 200)
                                 |> Animator.queue
                                     [ Animator.event (Animator.seconds 1) Starting
                                     , Animator.wait (Animator.seconds 5)
                                     , Animator.event (Animator.seconds 2) One
                                     ]
-                                |> Timeline.updateNoGC (Time.millisToPosix 300)
+                                |> Timeline.updateWith False (Time.millisToPosix 300)
                     in
                     Expect.equal
                         queuedTimeline
@@ -201,8 +310,10 @@ queueing =
                                         []
                                     , Timeline.Line (qty 0)
                                         (occur One (qty 2000) (qty 2000))
-                                        [ occur Starting (qty 3000) (qty 8000)
-                                        , occur One (qty 10000) (qty 10000)
+                                        []
+                                    , Timeline.Line (qty 2000)
+                                        (occur Starting (qty 3000) (qty 8000))
+                                        [ occur One (qty 10000) (qty 10000)
                                         ]
                                     ]
                             , initial = Starting
@@ -212,40 +323,39 @@ queueing =
                             , running = True
                             }
                         )
-            , only <|
-                test "Queueing events does not change the current value" <|
-                    \_ ->
-                        let
-                            currentTimeline =
-                                Animator.init Starting
-                                    |> Animator.go (Animator.seconds 2) One
-                                    |> Timeline.updateNoGC (Time.millisToPosix 0)
-                                    |> Timeline.updateNoGC (Time.millisToPosix 100)
-                                    |> Timeline.updateNoGC (Time.millisToPosix 200)
+            , test "Queueing events does not change the current value" <|
+                \_ ->
+                    let
+                        currentTimeline =
+                            Animator.init Starting
+                                |> Animator.go (Animator.seconds 2) One
+                                |> Timeline.updateWith False (Time.millisToPosix 0)
+                                |> Timeline.updateWith False (Time.millisToPosix 100)
+                                |> Timeline.updateWith False (Time.millisToPosix 200)
 
-                            queuedTimeline =
-                                currentTimeline
-                                    |> Animator.queue
-                                        [ Animator.event (Animator.seconds 1) Starting
-                                        , Animator.wait (Animator.seconds 5)
-                                        , Animator.event (Animator.seconds 2) One
-                                        ]
-                                    |> Timeline.updateNoGC (Time.millisToPosix 300)
+                        queuedTimeline =
+                            currentTimeline
+                                |> Animator.queue
+                                    [ Animator.event (Animator.seconds 1) Starting
+                                    , Animator.wait (Animator.seconds 5)
+                                    , Animator.event (Animator.seconds 2) One
+                                    ]
+                                |> Timeline.updateWith False (Time.millisToPosix 300)
 
-                            current =
-                                Animator.move
-                                    (Timeline.atTime (Time.millisToPosix 300) currentTimeline)
-                                    toVals
+                        current =
+                            Animator.move
+                                (Timeline.atTime (Time.millisToPosix 300) currentTimeline)
+                                toVals
 
-                            queued =
-                                Animator.move
-                                    (Timeline.atTime (Time.millisToPosix 300) queuedTimeline)
-                                    toVals
-                        in
-                        Expect.within
-                            (Absolute 0.001)
-                            current
-                            queued
+                        queued =
+                            Animator.move
+                                (Timeline.atTime (Time.millisToPosix 300) queuedTimeline)
+                                toVals
+                    in
+                    Expect.within
+                        (Absolute 0.001)
+                        current
+                        queued
             ]
         , test "Queue after some time" <|
             \_ ->
@@ -266,8 +376,10 @@ queueing =
                             Timeline.Timetable
                                 [ Timeline.Line (qty 0)
                                     (occur Starting (qty 0) (qty 4000))
-                                    [ occur One (qty 5000) (qty 5000)
-                                    ]
+                                    []
+                                , Timeline.Line (qty 4000)
+                                    (occur One (qty 5000) (qty 5000))
+                                    []
                                 ]
                         , initial = Starting
                         , interruption = []
@@ -285,11 +397,11 @@ queueing =
                             |> Animator.queue
                                 [ Animator.event (Animator.seconds 1) One
                                 ]
-                            |> Timeline.updateNoGC (Time.millisToPosix 4000)
+                            |> Timeline.updateWith False (Time.millisToPosix 4000)
                             |> Animator.queue
                                 [ Animator.event (Animator.seconds 1) Two
                                 ]
-                            |> Timeline.updateNoGC (Time.millisToPosix 7000)
+                            |> Timeline.updateWith False (Time.millisToPosix 7000)
                 in
                 -- specifically we expect the dwell time on `Starting` and `One` to be extended
                 Expect.equal
@@ -299,9 +411,13 @@ queueing =
                             Timeline.Timetable
                                 [ Timeline.Line (qty 0)
                                     (occur Starting (qty 0) (qty 4000))
-                                    [ occur One (qty 5000) (qty 7000)
-                                    , occur Two (qty 8000) (qty 8000)
-                                    ]
+                                    []
+                                , Timeline.Line (qty 4000)
+                                    (occur One (qty 5000) (qty 7000))
+                                    []
+                                , Timeline.Line (qty 7000)
+                                    (occur Two (qty 8000) (qty 8000))
+                                    []
                                 ]
                         , initial = Starting
                         , interruption = []
@@ -344,14 +460,14 @@ interruptions =
                     , Animator.event (Animator.seconds 1) Unreachable
                     , Animator.wait (Animator.seconds 1.0)
                     ]
-                |> Timeline.updateNoGC (Time.millisToPosix 0)
+                |> Timeline.updateWith False (Time.millisToPosix 0)
                 |> Animator.interrupt
                     [ Animator.wait (Animator.seconds 1.0)
                     , Animator.event (Animator.seconds 1) Three
                     , Animator.wait (Animator.seconds 1.0)
                     , Animator.event (Animator.seconds 1) Four
                     ]
-                |> Timeline.updateNoGC (Time.millisToPosix 3000)
+                |> Timeline.updateWith False (Time.millisToPosix 3000)
     in
     describe "Interruptions"
         [ test "Correctly schedules" <|
@@ -404,6 +520,66 @@ interruptions =
                 in
                 Expect.atLeast 0
                     (Animator.move new toVals)
+        , test "Long interruptions correctly schedule" <|
+            \_ ->
+                let
+                    fourWithPause =
+                        Animator.init Starting
+                            |> Timeline.updateWith False (Time.millisToPosix 0)
+                            |> Animator.queue
+                                [ Animator.wait (Animator.seconds 1)
+                                , Animator.event (Animator.seconds 1) One
+                                , Animator.wait (Animator.seconds 1)
+                                , Animator.event (Animator.seconds 1) Two
+                                , Animator.wait (Animator.seconds 1)
+                                , Animator.event (Animator.seconds 1) Three
+                                , Animator.wait (Animator.seconds 1)
+                                ]
+                            |> Timeline.updateWith False (Time.millisToPosix 0)
+                            |> Animator.interrupt
+                                [ Animator.wait (Animator.seconds 1)
+                                , Animator.event (Animator.seconds 1) One
+                                , Animator.wait (Animator.seconds 1)
+                                , Animator.event (Animator.seconds 1) Two
+                                , Animator.wait (Animator.seconds 1)
+                                , Animator.event (Animator.seconds 1) Three
+                                , Animator.wait (Animator.seconds 1)
+                                ]
+                            |> Timeline.updateWith False (Time.millisToPosix 3000)
+                in
+                Expect.equal
+                    fourWithPause
+                    (Timeline.Timeline
+                        { events =
+                            Timeline.Timetable
+                                [ Timeline.Line (qty 0)
+                                    (occur Starting (qty 0) (qty 1000))
+                                    []
+                                , Timeline.Line (qty 1000)
+                                    (occur One (qty 2000) (qty 3000))
+                                    [ occur Two (qty 4000) (qty 5000)
+                                    , occur Three (qty 6000) (qty 7000)
+                                    ]
+                                , Timeline.Line (qty 4000)
+                                    (occur One
+                                        (qty 5000)
+                                        (qty 6000)
+                                    )
+                                    [ occur Two
+                                        (qty 7000)
+                                        (qty 8000)
+                                    , occur Three
+                                        (qty 9000)
+                                        (qty 10000)
+                                    ]
+                                ]
+                        , initial = Starting
+                        , interruption = []
+                        , now = qty 3000
+                        , queued = Nothing
+                        , running = True
+                        }
+                    )
         , test "Correctly schedules when an interruption already occurred" <|
             \_ ->
                 let
@@ -418,20 +594,20 @@ interruptions =
                                 , Animator.event (Animator.seconds 1) Unreachable
                                 , Animator.wait (Animator.seconds 1.0)
                                 ]
-                            |> Timeline.updateNoGC (Time.millisToPosix 0)
+                            |> Timeline.updateWith False (Time.millisToPosix 0)
                             |> Animator.interrupt
                                 [ Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) Three
                                 , Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) Four
                                 ]
-                            |> Timeline.updateNoGC (Time.millisToPosix 3000)
+                            |> Timeline.updateWith False (Time.millisToPosix 3000)
                             |> Animator.interrupt
                                 [ Animator.event (Animator.seconds 1) Two
                                 , Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) One
                                 ]
-                            |> Timeline.updateNoGC (Time.millisToPosix 4500)
+                            |> Timeline.updateWith False (Time.millisToPosix 4500)
                 in
                 Expect.equal
                     doubleInterrupted
@@ -480,7 +656,7 @@ interruptions =
                                 , Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) Three
                                 ]
-                            |> Timeline.updateNoGC (Time.millisToPosix 0)
+                            |> Timeline.updateWith False (Time.millisToPosix 0)
 
                     interruptedAfterFinish =
                         baseline
@@ -489,7 +665,7 @@ interruptions =
                                 , Animator.wait (Animator.seconds 1.0)
                                 , Animator.event (Animator.seconds 1) Five
                                 ]
-                            |> Timeline.updateNoGC (Time.millisToPosix 6000)
+                            |> Timeline.updateWith False (Time.millisToPosix 6000)
                 in
                 Expect.equal
                     interruptedAfterFinish
@@ -836,6 +1012,31 @@ ordering =
                 let
                     actualTimeline =
                         Fuzz.Timeline.toTimeline { gc = True } timelineInstruction
+                in
+                case actualTimeline of
+                    Timeline.Timeline details ->
+                        case details.events of
+                            Timeline.Timetable lines ->
+                                let
+                                    order =
+                                        List.foldl isOrderPreserved ( 0, True ) lines
+                                in
+                                Expect.true "Line order is not preserved"
+                                    (Tuple.second order)
+        , test "Line order test case 3" <|
+            \_ ->
+                let
+                    instructions =
+                        Fuzz.Timeline.InstructionTimeline 0
+                            Two
+                            [ -- Fuzz.Timeline.Interruption 0 [ ( 0, Four ), ( 0, Three ), ( 2, Four ), ( 0, Five ) ]
+                              -- , Fuzz.Timeline.Interruption 1 [ ( 0, Four ), ( 0, Five ) ]
+                              -- ,
+                              Fuzz.Timeline.Queue 0 [ ( 0, Four ), ( 0, Two ), ( 0, Four ) ]
+                            ]
+
+                    actualTimeline =
+                        Fuzz.Timeline.toTimeline { gc = False } instructions
                 in
                 case actualTimeline of
                     Timeline.Timeline details ->

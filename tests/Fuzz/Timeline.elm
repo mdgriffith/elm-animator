@@ -95,7 +95,7 @@ toTimeline { gc } (InstructionTimeline startTime startEvent instructions) =
                 Timeline.update x
 
             else
-                Timeline.updateNoGC x
+                Timeline.updateWith False x
 
         addInstructions myTimeline =
             List.foldl instruct myTimeline instructions
