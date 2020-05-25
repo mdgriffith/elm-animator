@@ -685,7 +685,13 @@ applyInterruptions timeline =
             timeline
 
         _ ->
-            applyInterruptionHelper timeline.interruption { timeline | interruption = [] }
+            -- Note, we reverse the interruptions so that they're applied as First-in-First-Out.
+            -- If we do Last-in-First-Out we run into issues.
+            -- Imagine mouse events coming in where there is movement and then an end.
+            -- It means `timeline.interruptions` would be the following
+            -- [End, Move, Move, Move]
+            -- We have to reverse the list so they're processed as [Move, Move, Move, End]
+            applyInterruptionHelper (List.reverse timeline.interruption) { timeline | interruption = [] }
 
 
 applyInterruptionHelper : List (Schedule event) -> TimelineDetails event -> TimelineDetails event
