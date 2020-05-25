@@ -1,10 +1,10 @@
-# Roadmap
+# Treasure map
 
 Generally I'm a little wary of posting a direct roadmap because priorities can change as I learn more about how people are using this tool.
 
-With that in mind, I have a lot of ideas I'm generally excited about!
+So think of this more like a treasure map! We have some idea where there might be treasure. They may or maynot pan out.  This list is less of a "this is all definitely happening" and more of a "here are the areas that I'm aware of that could be cool and warrant exploration".
 
-So, think of this list as less of a "this is all definitely happening" and more of a "here are the areas that I'm aware of that could be cool and warrant exploration".
+With that in mind, I have a few ideas I'm excited about!
 
 
 - **Debugger** - Because of the `Animator`, we have a way to peek into your existing timelines and potentially easily wire up an animation debugger.
