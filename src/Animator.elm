@@ -1,9 +1,10 @@
 module Animator exposing
     ( Timeline, init
-    , current, previous
+    , current, previous, upcoming, upcomingWith, arrived, arrivedAt, arrivedAtWith
     , Animator
     , animator, watching, watchingWith
     , toSubscription, update
+    , updateTimeline
     , go
     , Duration, immediately, veryQuickly, quickly, slowly, verySlowly, millis, seconds
     , Step, wait, event
@@ -36,9 +37,9 @@ module Animator exposing
 
 You might be wondering, 'How do we get our value "out" of a `Timeline`?'
 
-Good question! We can either ask for the `current` value or the `previous` one.
+Well, we can ask the `Timeline` all sorts of questions.
 
-@docs current, previous
+@docs current, previous, upcoming, upcomingWith, arrived, arrivedAt, arrivedAtWith
 
 
 # Wiring up the animation
@@ -52,6 +53,8 @@ That's the job of the `Animator`!
 @docs animator, watching, watchingWith
 
 @docs toSubscription, update
+
+@docs updateTimeline
 
 
 # Transitioning to a new state
@@ -285,10 +288,58 @@ initWith now first =
 
 
 {-| Get the current `state` of the timeline.
+
+This value will switch to a new value when a transition begins.
+
+If you had a timeline that went from A to B to C, here's what `current` would be at various points on the timeline.
+
+```ascii
+          A---------B---------C
+               ^    ^    ^    ^
+current:       B    B    C    C
+```
+
+**Note** — If you want to detect the moment when you arrive at a new state, try using [`arrivedAt`](#arrivedAt)
+
 -}
 current : Timeline state -> state
 current =
     Timeline.current
+
+
+{-| Subtley different than [`current`](#current), this will provide the new state as soon as the transition has _finished_.
+
+```ascii
+          A---------B---------C
+               ^    ^    ^    ^
+arrived:       A    B    B    C
+```
+
+-}
+arrived : Timeline state -> state
+arrived =
+    Timeline.arrived
+
+
+{-| Sometimes we want to know when we've arrived at a state so we can trigger some other work.
+
+You can use `arrivedAt` in the `Tick` branch of your update to see if you will arrive at an event on this tick.
+
+    Tick time ->
+        if Animator.arrivedAt MyState time model.timeline then
+            --...do something special
+
+-}
+arrivedAt : state -> Time.Posix -> Timeline state -> Bool
+arrivedAt state =
+    Timeline.arrivedAt ((==) state)
+
+
+{-| Again, sometimes you'll want to supply your own equality function!
+-}
+arrivedAtWith : (state -> Bool) -> Time.Posix -> Timeline state -> Bool
+arrivedAtWith =
+    Timeline.arrivedAt
 
 
 {-| Get the previous `state` on this timeline.
@@ -297,10 +348,42 @@ As you'll see in the [Loading example](https://github.com/mdgriffith/elm-animato
 
 How cool!
 
+```ascii
+          A---------B---------C
+               ^    ^    ^
+previous:      A    A    B
+```
+
 -}
 previous : Timeline state -> state
 previous =
     Timeline.previous
+
+
+{-| Check to see if a `state` is upcoming on a timeline.
+
+**Note** — This can be used to ensure a set of states can only be [`queued`](#queue) if they aren't already running.
+
+**Note 2** — This only checks if an event is in the _future_, but does not check the value you're currently at. You might need to use [`arrived`](#arrived) as well if you also care about the current state.
+
+-}
+upcoming : state -> Timeline state -> Bool
+upcoming state =
+    Timeline.upcoming ((==) state)
+
+
+{-| For complicated values it can be computationally expensive to use `==`.
+
+`upcomingWith` allows you to specify your own equality function, so you can be smarter in checking how two value are equal.
+
+-}
+upcomingWith : (state -> Bool) -> Timeline state -> Bool
+upcomingWith =
+    Timeline.upcoming
+
+
+
+-- future : Timeline state -> List ( TIme.Posix, state )
 
 
 {-| Choosing a nice duration can depend on:
@@ -1348,3 +1431,15 @@ And voilà, we can begin animating!
 update : Time.Posix -> Animator model -> model -> model
 update newTime (Timeline.Animator _ updateModel) model =
     updateModel newTime model
+
+
+{-| If you're creating something like a game, you might want to update your `Timelines` manually instead of using an `Animator`.
+
+This will allow you to do whatever calculations you need while updating each `Timeline`.
+
+**Note** — You'll have to take care of subscribing to `Browser.Events.onAnimationFrame`.
+
+-}
+updateTimeline : Time.Posix -> Timeline state -> Timeline state
+updateTimeline =
+    Timeline.update

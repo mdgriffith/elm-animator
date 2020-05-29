@@ -232,7 +232,7 @@ linearly =
         \_ ->
             linearDefault
     , visit =
-        \lookup target targetTime maybeLookAhead ->
+        \lookup target targetTime maybeLookAhead state ->
             lookup (Timeline.getEvent target)
     , lerp =
         \prevEndTime maybePrev target targetTime now maybeLookAhead state ->
@@ -389,7 +389,8 @@ visit :
     -> Time.Absolute
     -> Maybe (Timeline.LookAhead Movement)
     -> State
-visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeLookAhead =
+    -> State
+visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeLookAhead state =
     let
         dwellTime =
             case maybeLookAhead of
@@ -964,7 +965,7 @@ coloring =
         \_ ->
             linearDefault
     , visit =
-        \lookup target targetTime maybeLookAhead ->
+        \lookup target targetTime maybeLookAhead state ->
             lookup (Timeline.getEvent target)
     , lerp = lerpColor
     }

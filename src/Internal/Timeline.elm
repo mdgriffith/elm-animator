@@ -5,10 +5,10 @@ module Internal.Timeline exposing
     , startTime, endTime, getEvent, extendEventDwell, hasDwell
     , addToDwell
     , progress, dwellingTime
-    , current
+    , current, arrivedAt, arrived, previous, upcoming
     , Line(..), Timetable(..)
     , foldp, capture, captureTimeline
-    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Oscillator(..), Pause(..), Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), atTime, gc, hasChanged, justInitialized, linesAreActive, prepareOscillator, previous, previousEndTime, previousStartTime, updateWith
+    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Oscillator(..), Pause(..), Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), atTime, gc, hasChanged, justInitialized, linesAreActive, prepareOscillator, previousEndTime, previousStartTime, updateWith
     )
 
 {-|
@@ -25,7 +25,7 @@ module Internal.Timeline exposing
 
 @docs progress, dwellingTime
 
-@docs current
+@docs current, arrivedAt, arrived, previous, upcoming
 
 @docs Line, Timetable
 
@@ -128,6 +128,7 @@ type alias Visit event anchor state =
     -> Occurring event
     -> Time.Absolute
     -> Maybe (LookAhead anchor)
+    -> state
     -> state
 
 
@@ -235,8 +236,8 @@ hasDwell (Occurring _ (Quantity.Quantity start) (Quantity.Quantity end)) =
 
 
 adjustTime : (event -> anchor) -> GetPersonality anchor -> Occurring event -> List (Occurring event) -> Occurring event
-adjustTime lookup getPersonality ((Occurring event start eventEnd) as unmodified) upcoming =
-    case upcoming of
+adjustTime lookup getPersonality ((Occurring event start eventEnd) as unmodified) upcomingOccurring =
+    case upcomingOccurring of
         [] ->
             unmodified
 
@@ -271,7 +272,7 @@ adjustTime lookup getPersonality ((Occurring event start eventEnd) as unmodified
 
 
 adjustTimeWithPrevious : (event -> anchor) -> GetPersonality anchor -> Occurring event -> Occurring event -> List (Occurring event) -> Occurring event
-adjustTimeWithPrevious lookup getPersonality (Occurring prev prevStart prevEnd) ((Occurring event start eventEnd) as unmodified) upcoming =
+adjustTimeWithPrevious lookup getPersonality (Occurring prev prevStart prevEnd) ((Occurring event start eventEnd) as unmodified) upcomingOccurring =
     let
         personality =
             getPersonality (lookup event)
@@ -293,7 +294,7 @@ adjustTimeWithPrevious lookup getPersonality (Occurring prev prevStart prevEnd) 
                 (personality.arriveEarly / totalPrevPortions)
                 totalPrevDuration
     in
-    case upcoming of
+    case upcomingOccurring of
         [] ->
             if Time.zeroDuration earlyBy then
                 unmodified
@@ -1089,16 +1090,16 @@ createLookAhead fn lookup currentEvent upcomingEvents =
 
         unadjustedUpcoming :: remain ->
             let
-                upcoming =
+                upcomingOccurring =
                     adjustTimeWithPrevious lookup fn.adjustor currentEvent unadjustedUpcoming remain
             in
             Just
-                { anchor = lookup (getEvent upcoming)
-                , time = Time.inMilliseconds (startTime upcoming)
+                { anchor = lookup (getEvent upcomingOccurring)
+                , time = Time.inMilliseconds (startTime upcomingOccurring)
 
-                -- (startTimeAdj lookup fn.adjustor currentEvent upcoming)
+                -- (startTimeAdj lookup fn.adjustor currentEvent upcomingOccurring)
                 , resting =
-                    hasDwell upcoming
+                    hasDwell upcomingOccurring
                 }
 
 
@@ -1183,6 +1184,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
             lineStartEv
             now
             (createLookAhead fn lookup unadjustedStartEvent lineRemain)
+            state
             |> transition
 
     else
@@ -1190,7 +1192,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
         case lineRemain of
             [] ->
                 -- dwell at lineStartEv, there's nothing to transition to
-                fn.visit lookup lineStartEv now Nothing
+                fn.visit lookup lineStartEv now Nothing state
                     |> transition
 
             unadjustedNext :: lineRemain2 ->
@@ -1212,6 +1214,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                             lineStartEv
                             now
                             (createLookAhead fn lookup unadjustedStartEvent lineRemain)
+                            state
                         )
                         |> transition
 
@@ -1223,6 +1226,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                         next
                         now
                         (createLookAhead fn lookup unadjustedNext lineRemain2)
+                        state
                         |> transition
 
                 else
@@ -1232,7 +1236,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                     case lineRemain2 of
                         [] ->
                             -- Nothing to continue on to,
-                            fn.visit lookup next now Nothing
+                            fn.visit lookup next now Nothing state
                                 |> transition
 
                         unadjustedNext2 :: lineRemain3 ->
@@ -1252,6 +1256,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                                             next
                                             now
                                             (createLookAhead fn lookup unadjustedNext lineRemain2)
+                                            state
                                 in
                                 fn.lerp
                                     -- next end time?
@@ -1270,6 +1275,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                                     next2
                                     now
                                     (createLookAhead fn lookup unadjustedNext2 lineRemain3)
+                                    state
                                     |> transition
 
                             else
@@ -1279,6 +1285,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                                             next2
                                             now
                                             (createLookAhead fn lookup unadjustedNext2 lineRemain3)
+                                            state
                                 in
                                 -- Recompose our line by removing previous events
                                 -- and continue forward!
@@ -1639,8 +1646,47 @@ zeroDuration =
     Duration.milliseconds 0
 
 
+type Status
+    = Dwelling Time.Duration
+    | Transitioning Float
+
+
+linearDefault : Personality
+linearDefault =
+    { departLate = 0
+    , departSlowly = 0
+    , wobbliness = 0
+    , arriveEarly = 0
+    , arriveSlowly = 0
+    }
+
+
 
 {- BOOKKEEPING -}
+
+
+arrived : Timeline event -> event
+arrived ((Timeline details) as timeline) =
+    foldp
+        identity
+        { start =
+            \_ ->
+                details.initial
+        , dwellFor =
+            \cur duration ->
+                cur
+        , dwellPeriod = \_ -> Nothing
+        , adjustor =
+            \_ ->
+                linearDefault
+        , visit =
+            \lookup target targetTime maybeLookAhead state ->
+                getEvent target
+        , lerp =
+            \_ _ _ _ _ _ state ->
+                state
+        }
+        timeline
 
 
 current : Timeline event -> event
@@ -1658,39 +1704,22 @@ current ((Timeline details) as timeline) =
             \_ ->
                 linearDefault
         , visit =
-            \lookup target targetTime maybeLookAhead ->
+            \lookup target targetTime maybeLookAhead state ->
                 getEvent target
-        , lerp = pass
+        , lerp =
+            \_ _ target _ _ _ _ ->
+                target
         }
         timeline
 
 
-pass _ _ target _ _ _ _ =
-    target
-
-
-getPrev _ maybePrevious target _ _ _ _ =
+getPrev _ maybePrevious target _ _ _ previouslyRecorded =
     case maybePrevious of
         Just p ->
             p
 
         Nothing ->
-            target
-
-
-type Status
-    = Dwelling Time.Duration
-    | Transitioning Float
-
-
-linearDefault : Personality
-linearDefault =
-    { departLate = 0
-    , departSlowly = 0
-    , wobbliness = 0
-    , arriveEarly = 0
-    , arriveSlowly = 0
-    }
+            previouslyRecorded
 
 
 previous : Timeline event -> event
@@ -1708,11 +1737,103 @@ previous ((Timeline details) as timeline) =
             \_ ->
                 linearDefault
         , visit =
-            \lookup target targetTime maybeLookAhead ->
-                getEvent target
+            \lookup target targetTime maybeLookAhead state ->
+                -- getEvent target
+                -- if we're visiting an event, we want to be looking at the previous event
+                state
         , lerp = getPrev
         }
         timeline
+
+
+arrivedAt : (event -> Bool) -> Time.Posix -> Timeline event -> Bool
+arrivedAt matches newTime (Timeline details) =
+    foldp
+        identity
+        { start =
+            \_ ->
+                False
+        , dwellFor =
+            \cur duration ->
+                matches cur
+        , dwellPeriod = \_ -> Nothing
+        , adjustor =
+            \_ ->
+                linearDefault
+        , visit =
+            \lookup target _ maybeLookAhead state ->
+                matches (getEvent target)
+                    && Time.thisBeforeThat details.now (startTime target)
+        , lerp =
+            \_ _ target targetTime now _ state ->
+                state
+                    || (matches target
+                            && Time.thisBeforeOrEqualThat details.now (Time.millis targetTime)
+                            && Time.thisAfterOrEqualThat (Time.absolute newTime) (Time.millis targetTime)
+                       )
+        }
+        (Timeline details)
+
+
+onMaybe fn maybe =
+    case maybe of
+        Nothing ->
+            False
+
+        Just thing ->
+            fn thing
+
+
+matchesEvent matches (Event _ event _) =
+    matches event
+
+
+anyScheduled : (event -> Bool) -> Schedule event -> Bool
+anyScheduled matches (Schedule dur startEvent remainingEvents) =
+    if matchesEvent matches startEvent then
+        True
+
+    else
+        List.any (matchesEvent matches) remainingEvents
+
+
+{-| -}
+upcoming : (event -> Bool) -> Timeline event -> Bool
+upcoming matches (Timeline details) =
+    -- we check both the queued and interruption caches
+    -- This function is sometimes used to prevent queueing an action multiple times
+    -- However if multiple msgs get fired in one frame, then there's still a subtle possibility that something will get double queued.
+    if onMaybe (anyScheduled matches) details.queued then
+        True
+
+    else if List.any (anyScheduled matches) details.interruption then
+        True
+
+    else
+        foldp
+            identity
+            { start =
+                \_ ->
+                    False
+            , dwellFor =
+                \cur duration ->
+                    matches cur
+            , dwellPeriod = \_ -> Nothing
+            , adjustor =
+                \_ ->
+                    linearDefault
+            , visit =
+                \lookup target _ maybeLookAhead state ->
+                    matches (getEvent target)
+                        && Time.thisBeforeThat details.now (startTime target)
+            , lerp =
+                \_ _ target targetTime _ _ state ->
+                    state
+                        || (matches target
+                                && Time.thisBeforeThat details.now (Time.millis targetTime)
+                           )
+            }
+            (Timeline { details | now = Time.millis (1 / 0) })
 
 
 status : Timeline event -> Status
@@ -1730,7 +1851,7 @@ status ((Timeline details) as timeline) =
             \_ ->
                 linearDefault
         , visit =
-            \lookup (Occurring event start eventEnd) now maybeLookAhead ->
+            \lookup (Occurring event start eventEnd) now maybeLookAhead state ->
                 let
                     dwellTime =
                         case maybeLookAhead of
@@ -1788,7 +1909,7 @@ If we're in transition, this is 0.
 -}
 dwellingTime : Timeline state -> Float
 dwellingTime timeline =
-    case Debug.log "status" <| status timeline of
+    case status timeline of
         Dwelling x ->
             Duration.inMilliseconds x
 
