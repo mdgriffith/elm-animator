@@ -157,9 +157,9 @@ Well, in that case you can use an `Oscillator`.
             Animator.at 0
 
         Loading ->
-            -- animate from 0 to 360 and
-            -- then wrap back around to 0
-            Animator.wrap 0 360
+            -- animate from 0deg to 360deg and
+            -- then wrap back around to 0deg
+            Animator.wrap 0 (2 * pi) -- 2 * pi == 360deg
                 -- loop every 700ms
                 |> Animator.loop (Animator.millis 700)
 
