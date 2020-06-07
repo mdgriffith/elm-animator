@@ -112,15 +112,10 @@ type Occurring event
 type alias Interp state anchor motion =
     { start : anchor -> motion
     , adjustor : GetPersonality anchor
-    , dwellFor : DwellFor anchor motion
     , dwellPeriod : DwellPeriod anchor
     , visit : Visit state anchor motion
     , lerp : Lerp anchor motion
     }
-
-
-type alias DwellFor anchor state =
-    anchor -> Time.Duration -> state
 
 
 type alias Visit event anchor state =
@@ -1686,9 +1681,6 @@ arrived ((Timeline details) as timeline) =
         { start =
             \_ ->
                 details.initial
-        , dwellFor =
-            \cur duration ->
-                cur
         , dwellPeriod = \_ -> Nothing
         , adjustor =
             \_ ->
@@ -1710,9 +1702,6 @@ current ((Timeline details) as timeline) =
         { start =
             \_ ->
                 details.initial
-        , dwellFor =
-            \cur duration ->
-                cur
         , dwellPeriod = \_ -> Nothing
         , adjustor =
             \_ ->
@@ -1743,9 +1732,6 @@ previous ((Timeline details) as timeline) =
         { start =
             \_ ->
                 details.initial
-        , dwellFor =
-            \cur duration ->
-                cur
         , dwellPeriod = \_ -> Nothing
         , adjustor =
             \_ ->
@@ -1767,9 +1753,6 @@ arrivedAt matches newTime (Timeline details) =
         { start =
             \_ ->
                 False
-        , dwellFor =
-            \cur duration ->
-                matches cur
         , dwellPeriod = \_ -> Nothing
         , adjustor =
             \_ ->
@@ -1829,9 +1812,6 @@ upcoming matches (Timeline details) =
             { start =
                 \_ ->
                     False
-            , dwellFor =
-                \cur duration ->
-                    matches cur
             , dwellPeriod = \_ -> Nothing
             , adjustor =
                 \_ ->
@@ -1857,9 +1837,6 @@ status ((Timeline details) as timeline) =
         { start =
             \_ ->
                 Transitioning 0
-        , dwellFor =
-            \cur duration ->
-                Dwelling duration
         , dwellPeriod = \_ -> Nothing
         , adjustor =
             \_ ->

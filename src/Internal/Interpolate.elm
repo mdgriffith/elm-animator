@@ -12,7 +12,7 @@ module Internal.Interpolate exposing
 
 @docs Period
 
-@docs startMoving, dwellFor, dwellPeriod
+@docs startMoving, dwellPeriod
 
 @docs coloring, linearly, moving
 
@@ -226,7 +226,6 @@ type alias XY thing =
 linearly : Timeline.Interp event Float Float
 linearly =
     { start = identity
-    , dwellFor = \point duration -> point
     , dwellPeriod = \_ -> Nothing
     , adjustor =
         \_ ->
@@ -303,7 +302,6 @@ unwrapUnits { position, velocity } =
 moving : Timeline.Interp event Movement State
 moving =
     { start = startMoving
-    , dwellFor = dwellFor
     , dwellPeriod = dwellPeriod
     , adjustor = getPersonality
     , visit = visit
@@ -319,51 +317,6 @@ dwellPeriod movement =
 
         Osc _ period _ ->
             Just period
-
-
-dwellFor : Movement -> Time.Duration -> State
-dwellFor movement duration =
-    case movement of
-        Pos _ pos ->
-            { position = Pixels.pixels pos
-            , velocity = Pixels.pixelsPerSecond 0
-            }
-
-        Osc _ period toX ->
-            case period of
-                Loop periodDuration ->
-                    let
-                        progress =
-                            wrapUnitAfter periodDuration duration
-                    in
-                    { position = Pixels.pixels (toX progress)
-                    , velocity = derivativeOfEasing toX periodDuration progress
-                    }
-
-                Repeat n periodDuration ->
-                    let
-                        iterationTimeMS =
-                            Duration.inMilliseconds periodDuration
-
-                        totalMS =
-                            Duration.inMilliseconds duration
-
-                        iteration =
-                            floor (totalMS / iterationTimeMS)
-                    in
-                    if iteration >= n then
-                        { position = Pixels.pixels (toX 1)
-                        , velocity = Pixels.pixelsPerSecond 0
-                        }
-
-                    else
-                        let
-                            progress =
-                                wrapUnitAfter periodDuration duration
-                        in
-                        { position = Pixels.pixels (toX progress)
-                        , velocity = derivativeOfEasing toX periodDuration progress
-                        }
 
 
 {-| This is the combination of the previous `dwellFor` and `after` functions.
@@ -959,7 +912,6 @@ velocityBetween one oneTime two twoTime =
 coloring : Timeline.Interp event Color.Color Color.Color
 coloring =
     { start = identity
-    , dwellFor = \clr duration -> clr
     , dwellPeriod = \_ -> Nothing
     , adjustor =
         \_ ->
