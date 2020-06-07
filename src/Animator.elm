@@ -159,8 +159,8 @@ Well, in that case you can use an `Oscillator`.
         Loading ->
             -- animate from 0deg to 360deg and
             -- then wrap back around to 0deg
+            -- we're using radians here, so 2 * pi == 360deg
             Animator.wrap 0 (2 * pi)
-                -- 2 * pi == 360deg
                 -- loop every 700ms
                 |> Animator.loop (Animator.millis 700)
 
