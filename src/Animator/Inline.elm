@@ -77,7 +77,13 @@ borderColor timeline lookup =
     color timeline "border-color" lookup
 
 
-{-| -}
+{-| Rotate to a specific angle, where increasing numbers move clockwise.
+
+The actual number provided should be in radians.
+
+Alternatively you could use [turns or degrees](https://package.elm-lang.org/packages/elm/core/latest/Basics#degrees) instead.
+
+-}
 rotate : Timeline state -> (state -> Movement) -> Html.Attribute msg
 rotate timeline lookup =
     style timeline
