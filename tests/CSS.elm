@@ -252,10 +252,6 @@ frames =
                 in
                 Expect.equal
                     description
-                    -- { events = []
-                    -- , now = Time.millis 0
-                    -- , startTime = Time.millis 0
-                    -- }
                     { events =
                         [ Timeline.EventSummary 1 (qty 0) (Timeline.KnownDuration (qty 0.001))
                         , Timeline.InterruptionSummary
