@@ -1402,6 +1402,17 @@ capture fps lookup fn (Timeline timelineDetails) =
                                             Loop totalDur ->
                                                 Time.advanceBy totalDur dwellStartTime
 
+                                    lastConcreteState =
+                                        overLines
+                                            fn
+                                            lookup
+                                            -- maybe we break this out to a separate param to avoid updating?
+                                            { timelineDetails | now = dwellStartTime }
+                                            Nothing
+                                            firstLine
+                                            remainingLines
+                                            start
+
                                     lastEventEv =
                                         lookup (getEvent lastEvent)
 
@@ -1421,8 +1432,11 @@ capture fps lookup fn (Timeline timelineDetails) =
                                             , endTime = endAt
                                             }
                                             (\currentTime ->
-                                                fn.dwellFor lastEventEv
-                                                    (Time.duration dwellStartTime currentTime)
+                                                fn.visit lookup
+                                                    lastEvent
+                                                    currentTime
+                                                    Nothing
+                                                    lastConcreteState
                                             )
                                             []
                                 in
