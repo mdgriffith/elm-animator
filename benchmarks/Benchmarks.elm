@@ -1,4 +1,4 @@
-module Benchmarks exposing (main)
+module Benchmarks exposing (suite)
 
 import Animator
 import Animator.Css
@@ -14,18 +14,16 @@ import Random
 import Time
 
 
-main : BenchmarkProgram
-main =
-    program <|
-        Benchmark.describe "Animator benchmarks"
-            [ springs
-            , randomness
-            , basicInterpolation
-            , unwrappingValues
-            , floatComparison
-            , interpolationComponents
-            , functionCalling
-            ]
+suite =
+    Benchmark.describe "Animator benchmarks"
+        [ springs
+        , randomness
+        , basicInterpolation
+        , unwrappingValues
+        , floatComparison
+        , interpolationComponents
+        , functionCalling
+        ]
 
 
 springs : Benchmark
@@ -145,17 +143,18 @@ basicInterpolation =
     describe "Interpolate to a point on a 4 event timeline"
         [ benchmark "interpolate to position" <|
             \_ ->
-                Animator.details timeline toPos
+                Interpolate.details timeline
+                    (Interpolate.withStandardDefault << toPos)
         , benchmark "iterating generation(60fps)" <|
             \_ ->
                 Timeline.capture 60
-                    toPos
+                    (Interpolate.withStandardDefault << toPos)
                     Interpolate.moving
                     timeline
         , benchmark "iterating generation(15fps), but interpolated" <|
             \_ ->
                 Timeline.capture 15
-                    toPos
+                    (Interpolate.withStandardDefault << toPos)
                     Interpolate.moving
                     timeline
         ]
@@ -284,7 +283,7 @@ baseSpline =
             , y = 250
             }
         , departure =
-            Interpolate.defaultDeparture
+            Interpolate.standardDefault
         , end =
             { x = 1000
             , y = 1000
@@ -294,7 +293,7 @@ baseSpline =
             , y = 0
             }
         , arrival =
-            Interpolate.defaultArrival
+            Interpolate.standardDefault
         }
 
 
@@ -312,7 +311,7 @@ interpolationComponents =
                         , y = 250
                         }
                     , departure =
-                        Interpolate.defaultDeparture
+                        Interpolate.standardDefault
                     , end =
                         { x = 1000
                         , y = 1000
@@ -322,7 +321,7 @@ interpolationComponents =
                         , y = 0
                         }
                     , arrival =
-                        Interpolate.defaultArrival
+                        Interpolate.standardDefault
                     }
         , benchmark "Find x on spline" <|
             \_ ->
