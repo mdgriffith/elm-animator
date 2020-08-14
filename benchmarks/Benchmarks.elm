@@ -19,10 +19,8 @@ suite =
         [ springs
         , randomness
         , basicInterpolation
-        , unwrappingValues
         , floatComparison
         , interpolationComponents
-        , functionCalling
         ]
 
 
@@ -32,7 +30,7 @@ springs =
         steps =
             List.repeat 0 20
     in
-    describe "Spring Calculations"
+    describe "Springs"
         [ benchmark "stepwise - 100 steps" <|
             -- This turns out to be ~410% faster than the presolved differential equation on FF
             \_ ->
@@ -75,7 +73,7 @@ randomness =
                 Random.initialSeed 8675309
                     |> Random.step (Random.float 0 1)
                     |> Tuple.first
-        , benchmark "scaled sine approach" <|
+        , benchmark "scaled sine method" <|
             -- learned this approach from https://thebookofshaders.com/10/
             -- super cool!
             -- and turns out 32x faster than elm/random
@@ -110,15 +108,12 @@ timeTwo =
 floatComparison : Benchmark
 floatComparison =
     describe "Comparing Floats"
-        [ benchmark "Normal float compare" <|
+        [ benchmark "Standard" <|
             \_ ->
                 before 5 20
-        , benchmark "Minus trick, float compare" <|
+        , benchmark "(one - two) < 0 form" <|
             \_ ->
                 beforeMinus 5 20
-        , benchmark "Unwrapping and comparison" <|
-            \_ ->
-                Time.thisBeforeThat timeOne timeTwo
         ]
 
 
@@ -145,13 +140,13 @@ basicInterpolation =
             \_ ->
                 Interpolate.details timeline
                     (Interpolate.withStandardDefault << toPos)
-        , benchmark "iterating generation(60fps)" <|
+        , benchmark "capture frames(60fps)" <|
             \_ ->
                 Timeline.capture 60
                     (Interpolate.withStandardDefault << toPos)
                     Interpolate.moving
                     timeline
-        , benchmark "iterating generation(15fps), but interpolated" <|
+        , benchmark "capture frames(15fps)" <|
             \_ ->
                 Timeline.capture 15
                     (Interpolate.withStandardDefault << toPos)
@@ -182,96 +177,6 @@ toPos event =
             Animator.at 1000
 
 
-functionWithRecord { one, two, three, four, five, six } =
-    one * two * three
-
-
-functionWithArgs one two three four five six =
-    one * two * three
-
-
-functionCalling =
-    let
-        one =
-            5
-
-        two =
-            10
-
-        three =
-            1000
-
-        four =
-            "string"
-
-        five =
-            True
-
-        six =
-            Just 52
-    in
-    describe "Is having arguments as a record significantly different from positional?"
-        -- Normally we shouldnt consider this, but for lib internals, why not?
-        -- records are twice as fast!
-        -- my guess is because they skip the wrapping of functions that elm does for currying.
-        [ benchmark "Function with record arg" <|
-            \_ ->
-                functionWithRecord
-                    { one = one
-                    , two = two
-                    , three = three
-                    , four = four
-                    , five = five
-                    , six = six
-                    }
-        , benchmark "Function with positional" <|
-            \_ ->
-                functionWithArgs one two three four five six
-        ]
-
-
-type Wrapped
-    = Wrapped Int Int Int
-
-
-wrapped =
-    Wrapped 1 2 3
-
-
-getY (Wrapped x y z) =
-    y
-
-
-record =
-    WrappedRecord 1 2 3
-
-
-type alias WrappedRecord =
-    { x : Int
-    , y : Int
-    , z : Int
-    }
-
-
-unwrappingValues =
-    describe "Is having records in a type faster than a record?"
-        -- Normally we shouldnt consider this, but for lib internals, why not?
-        -- records are twice as fast!
-        -- my guess is because they skip the wrapping of functions that elm does for currying.
-        [ benchmark "Wrapped in type" <|
-            \_ ->
-                case wrapped of
-                    Wrapped x y z ->
-                        y
-        , benchmark "Wrapped in type, accessor fn" <|
-            \_ ->
-                getY wrapped
-        , benchmark "Wrapped in record" <|
-            \_ ->
-                record.y
-        ]
-
-
 baseSpline =
     Interpolate.createSpline
         { start =
@@ -298,7 +203,7 @@ baseSpline =
 
 
 interpolationComponents =
-    describe "How fast are the differnt steps of interpolation"
+    describe "Interpolation"
         [ benchmark "Create spline" <|
             \_ ->
                 Interpolate.createSpline
