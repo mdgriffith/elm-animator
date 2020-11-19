@@ -121,8 +121,8 @@ transform :
     -> Html.Attribute msg
 transform transmogrify =
     Attr.style "transform"
-        (("rotate(" ++ String.fromFloat transmogrify.rotate ++ "rad)")
-            ++ ("translate(" ++ String.fromFloat transmogrify.position.x ++ "px, " ++ String.fromFloat transmogrify.position.y ++ "px)")
+        (("translate(" ++ String.fromFloat transmogrify.position.x ++ "px, " ++ String.fromFloat transmogrify.position.y ++ "px)")
+            ++ ("rotate(" ++ String.fromFloat transmogrify.rotate ++ "rad)")
             ++ ("scale(" ++ String.fromFloat transmogrify.scale ++ ")")
         )
 
