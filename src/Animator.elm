@@ -1300,7 +1300,26 @@ Here's an animator from the [Checkbox.elm example](https://github.com/mdgriffith
                     { model | checked = newChecked }
                 )
 
-Notice you could add any number of timelines to this animator.
+Notice you could add any number of timelines to this animator:
+
+    animator : Animator.Animator Model
+    animator =
+        Animator.animator
+            |> Animator.watching
+                -- we tell the animator how
+                -- to get the checked timeline using .checked
+                .checked
+                -- and we tell the animator how
+                -- to update that timeline as well
+                (\newChecked model ->
+                    { model | checked = newChecked }
+                )
+            |> Animator.watching
+                .anotherChecked
+                (\anotherCheckboxState ->
+                    { model | anotherChecked = anotherCheckboxState }
+                )
+
 
 **Note** — You likely only need one animator for a given project.
 
