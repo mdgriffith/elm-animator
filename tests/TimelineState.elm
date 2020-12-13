@@ -39,21 +39,6 @@ current =
                 in
                 Expect.equal (Animator.current start)
                     Starting
-        , test "when transitioning, is target value/" <|
-            \_ ->
-                let
-                    timeline =
-                        Animator.init Starting
-                            |> Timeline.update (Time.millisToPosix 0)
-                            |> Animator.queue
-                                [ Animator.event (Animator.seconds 1) One
-                                , Animator.event (Animator.seconds 1) Two
-                                ]
-                            |> Timeline.update (Time.millisToPosix 0)
-                            |> Timeline.update (Time.millisToPosix 500)
-                in
-                Expect.equal (Animator.current timeline)
-                    One
         , test "is current value when arrived" <|
             \_ ->
                 let
@@ -66,6 +51,38 @@ current =
                 in
                 Expect.equal (Animator.current timeline)
                     One
+        , test "when queueing many events, is current value" <|
+            \_ ->
+                let
+                    timeline =
+                        Animator.init Starting
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.queue
+                                [ Animator.event (Animator.seconds 1) One
+                                , Animator.event (Animator.seconds 1) Two
+                                , Animator.event (Animator.seconds 1) Three
+                                ]
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Timeline.update (Time.millisToPosix 2500)
+                in
+                Expect.equal (Animator.current timeline)
+                    Three
+        , test "when queueing many events, at event, is current value" <|
+            \_ ->
+                let
+                    timeline =
+                        Animator.init Starting
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.queue
+                                [ Animator.event (Animator.seconds 1) One
+                                , Animator.event (Animator.seconds 1) Two
+                                , Animator.event (Animator.seconds 1) Three
+                                ]
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Timeline.update (Time.millisToPosix 3000)
+                in
+                Expect.equal (Animator.current timeline)
+                    Three
         ]
 
 
@@ -157,6 +174,23 @@ previous =
                 in
                 Expect.equal (Animator.previous timeline)
                     Starting
+        , test "is the previous value after progressing to second state" <|
+            \_ ->
+                let
+                    timeline =
+                        Animator.init Starting
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.go (Animator.seconds 1) One
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Timeline.update (Time.millisToPosix 1500)
+                            |> Animator.go (Animator.seconds 1) Two
+                            |> Timeline.update (Time.millisToPosix 2000)
+                            |> Animator.go (Animator.seconds 1) Three
+                            |> Timeline.update (Time.millisToPosix 2100)
+                            |> Timeline.update (Time.millisToPosix 2200)
+                in
+                Expect.equal (Animator.previous timeline)
+                    Two
         ]
 
 

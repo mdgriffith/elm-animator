@@ -80,6 +80,10 @@ type alias TimelineDetails event =
     }
 
 
+initialEvent state =
+    Occurring state (Time.millis 0) (Time.millis 0)
+
+
 {-| A time table is a list of timelines that will occur.
 
 Events proceed from earlier to later.
@@ -1018,6 +1022,40 @@ addToDwell duration maybeDwell =
                 Just (Quantity.plus duration existing)
 
 
+
+-- {-| Focus allows you to focus on a specific piece of state.
+-- Let's say you have a record with two fields
+--     { one = 0
+--     , two = -10
+--     }
+-- You being to transition `one` to 1.
+--     { one = 0
+--     , two = -10
+--     }
+--         --200ms-->
+--         { one = 1
+--         , two = -10
+--         }
+-- And while that's happening, you also schedule `two` to go to 0.
+--     { one = 0 -> 1
+--     , two = -10 -> 0
+--     }
+--         --x30ms->  (interrupted 30ms in)
+--             { one = 1
+--             , two = -10
+--             }
+--         --200ms->
+--             { one = 1
+--             , two = 0
+--             }
+-- Because we're watching the
+-- The critical part of this is that
+-- -}
+-- focus : (state -> focus) -> Timeline state -> Timeline focus
+-- focus toFocus (Timeline details) =
+--     Debug.todo ""
+
+
 {-| This is a "Fold from the past", just like foldl is "fold from the left".
 
 It's named as a nod to Elm's original foldp when `Signal`s were still a thing!
@@ -1063,7 +1101,7 @@ foldp lookup fn (Timeline timelineDetails) =
                 start =
                     fn.start (lookup timelineDetails.initial)
             in
-            case timetable of
+            case log "FOLDP" timetable of
                 [] ->
                     start
 
@@ -1098,6 +1136,51 @@ createLookAhead fn lookup currentEvent upcomingEvents =
                 }
 
 
+log x y =
+    Debug.log x y
+
+
+{-|
+
+    At event A -> visit A
+    After event A, no future -> visit A
+    After event A, future event B ->
+        visit A
+        lerp @transition time, A -> B
+
+Tricky part is when the transition "crosses lines"
+
+    After event A, future event B, new Line C starts ->
+        visit A
+        lerp @ transition1 A -> B
+        lerp @ transition2 (A -> B) -> C
+
+-}
+throughLines :
+    (state -> anchor)
+    -> Interp state anchor motion
+    -> TimelineDetails state
+    -> Line state
+    -> List (Line state)
+    -> motion
+    -> motion
+throughLines toAnchor interp details line future state =
+    let
+        now =
+            case future of
+                [] ->
+                    details.now
+
+                (Line futureStart _ _) :: restOfFuture ->
+                    if Time.thisBeforeThat futureStart details.now then
+                        futureStart
+
+                    else
+                        details.now
+    in
+    state
+
+
 {-| Some notes about this function:
 
   - `visit` must always be called with adjusted values.
@@ -1122,18 +1205,29 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
     -- if an interruption occurs, we want to interpolate to the point of the interruption
     -- then transition over to the new line.
     let
-        transition newState =
+        transition prev newState =
             -- After we interpolate, we check here if we are actually done
             -- or if we were just interrupted and need to keep going
-            case futureLines of
+            case log "FUTURE" futureLines of
                 [] ->
                     newState
 
                 ((Line futureStart futureStartEv futureRemain) as future) :: restOfFuture ->
-                    if Time.thisBeforeOrEqualThat futureStart details.now then
+                    if log "FUTURE -> PROGRESS" <| Time.thisBeforeOrEqualThat futureStart details.now then
+                        let
+                            _ =
+                                log "NEXT LINE"
+                                    { new = newState
+                                    , maybePrev = maybePreviousEvent
+                                    , lineStart = lineStart
+                                    , unadjustedStartEvent = unadjustedStartEvent
+                                    , lineRemain = lineRemain
+                                    , futureStart = futureStart
+                                    }
+                        in
                         -- NOTE, we could pass an event to maybePreviousEvent
                         -- which might make time adjustments accurate across transitions
-                        overLines fn lookup details Nothing future restOfFuture newState
+                        overLines fn lookup details (Just prev) future restOfFuture newState
 
                     else
                         newState
@@ -1150,6 +1244,18 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                     else
                         details.now
 
+        _ =
+            log "maybePrevous" maybePreviousEvent
+
+        _ =
+            log "-----> STARTING"
+                { state = state
+                , maybePrev = maybePreviousEvent
+                , lineStart = lineStart
+                , unadjustedStartEvent = unadjustedStartEvent
+                , lineRemain = lineRemain
+                }
+
         lineStartEv =
             case maybePreviousEvent of
                 Nothing ->
@@ -1158,20 +1264,26 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                 Just prev ->
                     adjustTimeWithPrevious lookup fn.adjustor prev unadjustedStartEvent lineRemain
     in
-    if Time.thisBeforeThat now (startTime lineStartEv) then
+    if log "START" <| Time.thisBeforeThat now (startTime lineStartEv) then
         -- lerp from state to lineStartEv
         -- now is before the first event start time.
         fn.lerp
             (Time.inMilliseconds lineStart)
-            (Just (lookup details.initial))
+            (case maybePreviousEvent of
+                Nothing ->
+                    Just (lookup details.initial)
+
+                Just p ->
+                    Just (lookup (getEvent p))
+            )
             (lookup (getEvent lineStartEv))
             (Time.inMilliseconds (startTime lineStartEv))
             (Time.inMilliseconds now)
             (createLookAhead fn lookup unadjustedStartEvent lineRemain)
             state
-            |> transition
+            |> transition lineStartEv
 
-    else if Time.thisBeforeThat now (endTime lineStartEv) then
+    else if log "TRANSITION" <| Time.thisBeforeThat now (endTime lineStartEv) then
         -- dwell at linestartEv
         -- we've checked that it's not after or before,
         -- so it has to be between the start and end
@@ -1180,22 +1292,23 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
             now
             (createLookAhead fn lookup unadjustedStartEvent lineRemain)
             state
-            |> transition
+            |> transition lineStartEv
 
     else
         -- after linestartEv
-        case lineRemain of
+        case log "NEXT" lineRemain of
             [] ->
                 -- dwell at lineStartEv, there's nothing to transition to
                 fn.visit lookup lineStartEv now Nothing state
-                    |> transition
+                    |> transition lineStartEv
+                    |> log "post transition"
 
             unadjustedNext :: lineRemain2 ->
                 let
                     next =
                         adjustTimeWithPrevious lookup fn.adjustor unadjustedStartEvent unadjustedNext lineRemain2
                 in
-                if Time.thisBeforeThat now (startTime next) then
+                if log "ONE" <| Time.thisBeforeThat now (startTime next) then
                     -- Before next.startTime
                     --     -> lerp start to next
                     fn.lerp
@@ -1211,7 +1324,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                             (createLookAhead fn lookup unadjustedStartEvent lineRemain)
                             state
                         )
-                        |> transition
+                        |> transition lineStartEv
 
                 else if Time.thisBeforeThat now (endTime next) then
                     -- After next.startTime
@@ -1222,7 +1335,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                         now
                         (createLookAhead fn lookup unadjustedNext lineRemain2)
                         state
-                        |> transition
+                        |> transition lineStartEv
 
                 else
                     -- After lineStart.endTime
@@ -1232,7 +1345,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                         [] ->
                             -- Nothing to continue on to,
                             fn.visit lookup next now Nothing state
-                                |> transition
+                                |> transition next
 
                         unadjustedNext2 :: lineRemain3 ->
                             let
@@ -1244,7 +1357,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                                         unadjustedNext2
                                         lineRemain3
                             in
-                            if Time.thisBeforeThat now (startTime next2) then
+                            if log "TWO" <| Time.thisBeforeThat now (startTime next2) then
                                 let
                                     after =
                                         fn.visit lookup
@@ -1262,7 +1375,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                                     (Time.inMilliseconds now)
                                     (createLookAhead fn lookup unadjustedNext2 lineRemain3)
                                     after
-                                    |> transition
+                                    |> transition next
 
                             else if Time.thisBeforeThat now (endTime next2) then
                                 -- we're dwelling at `next2`
@@ -1271,7 +1384,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                                     now
                                     (createLookAhead fn lookup unadjustedNext2 lineRemain3)
                                     state
-                                    |> transition
+                                    |> transition next2
 
                             else
                                 let
@@ -1708,15 +1821,27 @@ current ((Timeline details) as timeline) =
                 linearDefault
         , visit =
             \lookup target targetTime maybeLookAhead state ->
+                let
+                    _ =
+                        Debug.log "    VISIT" ( state, target )
+                in
                 getEvent target
         , lerp =
-            \_ _ target _ _ _ _ ->
+            \_ maybePrevious target _ _ _ state ->
+                let
+                    _ =
+                        Debug.log "   LERP" ( maybePrevious, state, target )
+                in
                 target
         }
         timeline
 
 
 getPrev _ maybePrevious target _ _ _ previouslyRecorded =
+    let
+        _ =
+            log "   LERP PREV" ( maybePrevious, target, previouslyRecorded )
+    in
     case maybePrevious of
         Just p ->
             p
@@ -1738,9 +1863,15 @@ previous ((Timeline details) as timeline) =
                 linearDefault
         , visit =
             \lookup target targetTime maybeLookAhead state ->
-                -- getEvent target
-                -- if we're visiting an event, we want to be looking at the previous event
+                let
+                    _ =
+                        log "    VISIT PREV" ( state, target, maybeLookAhead )
+                in
                 state
+
+        -- state
+        -- if we're visiting an event, we want to be looking at the previous event
+        -- state
         , lerp = getPrev
         }
         timeline
