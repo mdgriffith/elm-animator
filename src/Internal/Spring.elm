@@ -17,7 +17,7 @@ import Internal.Time as Time
 
 Much faster!
 
-<https://ellie-app.com/bNgtgs4trSda1>
+    https :// ellie - app.com / bNgBDt7GspVa1
 
 -}
 analytical :
