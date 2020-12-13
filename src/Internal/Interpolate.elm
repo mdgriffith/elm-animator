@@ -486,9 +486,8 @@ springInterpolation prevEndTime _ target targetTime now _ state =
             Spring.select wobble duration
 
         new =
-            Spring.stepOver
+            Spring.analytical params
                 (Time.duration (Time.millis prevEndTime) (Time.millis now))
-                params
                 targetPos
                 { position = Pixels.inPixels state.position
                 , velocity = Pixels.inPixelsPerSecond state.velocity

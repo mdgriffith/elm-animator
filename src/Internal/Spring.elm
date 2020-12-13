@@ -17,10 +17,12 @@ import Internal.Time as Time
 
 Much faster!
 
+<https://ellie-app.com/bNgtgs4trSda1>
+
 -}
 analytical :
     SpringParams
-    -> Float
+    -> Time.Duration
     -> Float
     ->
         { velocity : Float
@@ -30,13 +32,13 @@ analytical :
         { velocity : Float
         , position : Float
         }
-analytical spring ms target initial =
+analytical spring duration target initial =
     let
         offset =
             target - initial.position
 
         t =
-            ms * magicNumber / 1000
+            Duration.inMilliseconds duration * magicNumber / 1000
 
         magicNumber =
             Basics.sqrt (spring.stiffness / spring.mass)

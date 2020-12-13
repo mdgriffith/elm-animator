@@ -33,31 +33,26 @@ springs =
     describe "Springs"
         [ benchmark "stepwise - 100 steps" <|
             \_ ->
-                
                 Spring.stepOver  (Animator.millis (16 * 20))
                     { stiffness = 180
                     , damping = 12
                     , mass = 1
-                    } 0
-
-                     { velocity = 0
-                    , position = 300
-
+                    } 
+                    300
+                    { velocity = 0
+                    , position = 0
                     }
-
-
         , benchmark "Analytical measure" <|
-           
             \_ ->
                 Spring.analytical 
                     { stiffness = 180
                     , damping = 12
                     , mass = 1
                     }
-                    (16 * 20)
+                    (Animator.millis (16 * 20))
+                    300
                     { velocity = 0
-                    , position = 300
-
+                    , position = 0
                     }
 
 
