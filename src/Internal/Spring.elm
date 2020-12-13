@@ -1,5 +1,6 @@
 module Internal.Spring exposing
     ( SpringParams
+    , analytical
     , criticalDamping
     , select
     , settlesAt
@@ -10,6 +11,60 @@ module Internal.Spring exposing
 
 import Duration
 import Internal.Time as Time
+
+
+{-| Calculate the position and velocity analytically instead of iteratively.
+
+Much faster!
+
+-}
+analytical :
+    SpringParams
+    -> Float
+    -> Float
+    ->
+        { velocity : Float
+        , position : Float
+        }
+    ->
+        { velocity : Float
+        , position : Float
+        }
+analytical spring ms target initial =
+    let
+        offset =
+            target - initial.position
+
+        t =
+            ms * magicNumber / 1000
+
+        magicNumber =
+            Basics.sqrt (spring.stiffness / spring.mass)
+
+        dampingRatio =
+            spring.damping / (2 * Basics.sqrt (spring.mass * spring.stiffness))
+
+        inner =
+            Basics.sqrt
+                (1 - (dampingRatio ^ 2))
+
+        cosinElement =
+            offset
+                * Basics.cos (inner * t)
+
+        c2 =
+            dampingRatio * (offset / inner)
+
+        sinElement =
+            c2 * Basics.sin (inner * t)
+
+        newPosition =
+            (Basics.e ^ ((-1 * dampingRatio) * t))
+                * (cosinElement + sinElement)
+    in
+    { position = newPosition
+    , velocity = 0
+    }
 
 
 {-| Whew, math. Exciting isn't it?
