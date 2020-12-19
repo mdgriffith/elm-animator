@@ -34,7 +34,8 @@ analytical :
         }
 analytical spring duration target initial =
     let
-        offset =
+        c1 =
+            -- offset
             target - initial.position
 
         t =
@@ -51,11 +52,11 @@ analytical spring duration target initial =
                 (1 - (dampingRatio ^ 2))
 
         cosinElement =
-            offset
+            c1
                 * Basics.cos (inner * t)
 
         c2 =
-            dampingRatio * (offset / inner)
+            dampingRatio * (c1 / inner)
 
         sinElement =
             c2 * Basics.sin (inner * t)
@@ -63,10 +64,125 @@ analytical spring duration target initial =
         newPosition =
             (Basics.e ^ ((-1 * dampingRatio) * t))
                 * (cosinElement + sinElement)
+
+        -- Calculate velocity
+        attentuationFactor =
+            Basics.e ^ ((-1 * dampingRatio) * t)
+
+        firstFactor =
+            ((dampingRatio * c1) - (c2 * inner))
+                * (Basics.cos <| inner * t)
+
+        secondFactor =
+            ((dampingRatio * c2) + (c1 * inner))
+                * (Basics.sin <| inner * t)
+
+        newVelocity =
+            attentuationFactor
+                * (firstFactor + secondFactor)
     in
     { position = newPosition
-    , velocity = 0
+    , velocity = newVelocity * magicNumber
     }
+
+
+zeroPoints :
+    SpringParams
+    -> Float
+    -> Float
+    ->
+        { velocity : Float
+        , position : Float
+        }
+    -> List Float
+zeroPoints spring ms target initial =
+    let
+        inner =
+            Basics.sqrt
+                (1 - (dampingRatio ^ 2))
+
+        c1 =
+            -- offset
+            target - initial.position
+
+        c2 =
+            dampingRatio * (c1 / inner)
+
+        dampingRatio =
+            spring.damping / (2 * Basics.sqrt (spring.mass * spring.stiffness))
+
+        t k =
+            -1 * (1 / Basics.sqrt (1 - (dampingRatio ^ 2))) * (Basics.atan (c1 / c2) - k * pi)
+
+        magicNumber =
+            Basics.sqrt (spring.stiffness / spring.mass)
+    in
+    [ (t 0 * 1000)
+        / magicNumber
+    , (t 1 * 1000)
+        / magicNumber
+    , (t 2 * 1000)
+        / magicNumber
+    , (t 3 * 1000)
+        / magicNumber
+    , (t 4 * 1000)
+        / magicNumber
+    ]
+
+
+peaks :
+    SpringParams
+    -> Float
+    -> Float
+    ->
+        { velocity : Float
+        , position : Float
+        }
+    -> List Float
+peaks spring ms target initial =
+    let
+        inner =
+            Basics.sqrt
+                (1 - (dampingRatio ^ 2))
+
+        c1 =
+            -- offset
+            target - initial.position
+
+        c2 =
+            dampingRatio * (c1 / inner)
+
+        dampingRatio =
+            spring.damping / (2 * Basics.sqrt (spring.mass * spring.stiffness))
+
+        magicNumber =
+            Basics.sqrt (spring.stiffness / spring.mass)
+
+        t k =
+            (-1 / inner)
+                * (Basics.atan
+                    (top / bottom)
+                    - k
+                    * Basics.pi
+                  )
+
+        top =
+            (dampingRatio * c1) - (c2 * inner)
+
+        bottom =
+            (dampingRatio * c2) + (c1 * inner)
+    in
+    [ (t 0 * 1000)
+        / magicNumber
+    , (t 1 * 1000)
+        / magicNumber
+    , (t 2 * 1000)
+        / magicNumber
+    , (t 3 * 1000)
+        / magicNumber
+    , (t 4 * 1000)
+        / magicNumber
+    ]
 
 
 {-| Whew, math. Exciting isn't it?

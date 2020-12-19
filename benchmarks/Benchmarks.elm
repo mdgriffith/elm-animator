@@ -16,11 +16,76 @@ import Time
 
 suite =
     Benchmark.describe "Animator benchmarks"
-        [ springs
-        , randomness
-        , basicInterpolation
-        , floatComparison
-        , interpolationComponents
+        [ 
+            
+        --     springs
+        -- , randomness
+        -- , basicInterpolation
+        -- , floatComparison
+        -- , interpolationComponents
+        foldp
+        ]
+
+
+foldp =
+    let
+        timeline =
+            Animator.init Hufflepuff
+                |> Animator.queue
+                    [ Animator.wait (Animator.seconds 1)
+                    , Animator.event (Animator.seconds 1) Griffyndor
+                    , Animator.wait (Animator.seconds 1)
+                    , Animator.event (Animator.seconds 1) Slytherin
+                    , Animator.wait (Animator.seconds 1)
+                    , Animator.event (Animator.seconds 1) Ravenclaw
+                    , Animator.wait (Animator.seconds 1)
+                    ]
+                |> Timeline.update (Time.millisToPosix 0)
+                |> Timeline.update (Time.millisToPosix 1400)
+    in
+    describe "foldp"
+        [ benchmark "new foldp" <| 
+            \_ -> 
+                Timeline.foldp 
+                    identity 
+                    { start =
+                        \_ ->
+                            Hufflepuff
+                    , dwellPeriod = \_ -> Nothing
+                    , adjustor =
+                        \_ ->
+                            Timeline.linearDefault
+                    , visit =
+                        \lookup target targetTime maybeLookAhead state ->
+                            Timeline.getEvent target
+                    , lerp =
+                        \_ maybePrevious target _ _ _ state ->
+                            target
+                    }
+
+                    timeline
+
+        , benchmark "old foldp" <| 
+            \_ -> 
+                Timeline.foldpOld
+                    identity 
+                    { start =
+                        \_ ->
+                            Hufflepuff
+                    , dwellPeriod = \_ -> Nothing
+                    , adjustor =
+                        \_ ->
+                            Timeline.linearDefault
+                    , visit =
+                        \lookup target targetTime maybeLookAhead state ->
+                            Timeline.getEvent target
+                    , lerp =
+                        \_ maybePrevious target _ _ _ state ->
+                            target
+                    }
+                    timeline
+
+
         ]
 
 
@@ -54,9 +119,6 @@ springs =
                     { velocity = 0
                     , position = 0
                     }
-
-
-                
         , benchmark "presolved differential equation" <|
             \_ ->
                 let
