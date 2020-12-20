@@ -147,94 +147,94 @@ timelines =
           oneStart =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.go (Animator.seconds 1000) One
+                |> Animator.go (Animator.millis 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
         , oneDuring =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.go (Animator.seconds 1000) One
+                |> Animator.go (Animator.millis 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
                 |> Timeline.update (Time.millisToPosix 1000)
         , oneFinished =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.go (Animator.seconds 1000) One
+                |> Animator.go (Animator.millis 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
                 |> Timeline.update (Time.millisToPosix 1500)
         , oneAfter =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.go (Animator.seconds 1000) One
+                |> Animator.go (Animator.millis 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
                 |> Timeline.update (Time.millisToPosix 1501)
         , twoStart =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.go (Animator.seconds 1000) One
+                |> Animator.go (Animator.millis 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
-                |> Animator.go (Animator.seconds 1000) Two
+                |> Animator.go (Animator.millis 1000) Two
                 |> Timeline.update (Time.millisToPosix 1000)
         , twoDuring =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.go (Animator.seconds 1000) One
+                |> Animator.go (Animator.millis 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
-                |> Animator.go (Animator.seconds 1000) Two
+                |> Animator.go (Animator.millis 1000) Two
                 |> Timeline.update (Time.millisToPosix 1000)
                 |> Timeline.update (Time.millisToPosix 1500)
         , twoFinished =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.go (Animator.seconds 1000) One
+                |> Animator.go (Animator.millis 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
-                |> Animator.go (Animator.seconds 1000) Two
+                |> Animator.go (Animator.millis 1000) Two
                 |> Timeline.update (Time.millisToPosix 1000)
                 |> Timeline.update (Time.millisToPosix 2000)
         , twoAfter =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.go (Animator.seconds 1000) One
+                |> Animator.go (Animator.millis 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
-                |> Animator.go (Animator.seconds 1000) Two
+                |> Animator.go (Animator.millis 1000) Two
                 |> Timeline.update (Time.millisToPosix 1000)
                 |> Timeline.update (Time.millisToPosix 2001)
         , threeStart =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.go (Animator.seconds 1000) One
+                |> Animator.go (Animator.millis 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
-                |> Animator.go (Animator.seconds 1000) Two
+                |> Animator.go (Animator.millis 1000) Two
                 |> Timeline.update (Time.millisToPosix 1000)
-                |> Animator.go (Animator.seconds 1000) Three
+                |> Animator.go (Animator.millis 1000) Three
                 |> Timeline.update (Time.millisToPosix 1500)
         , threeDuring =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.go (Animator.seconds 1000) One
+                |> Animator.go (Animator.millis 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
-                |> Animator.go (Animator.seconds 1000) Two
+                |> Animator.go (Animator.millis 1000) Two
                 |> Timeline.update (Time.millisToPosix 1000)
-                |> Animator.go (Animator.seconds 1000) Three
+                |> Animator.go (Animator.millis 1000) Three
                 |> Timeline.update (Time.millisToPosix 1500)
                 |> Timeline.update (Time.millisToPosix 2000)
         , threeFinished =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.go (Animator.seconds 1000) One
+                |> Animator.go (Animator.millis 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
-                |> Animator.go (Animator.seconds 1000) Two
+                |> Animator.go (Animator.millis 1000) Two
                 |> Timeline.update (Time.millisToPosix 1000)
-                |> Animator.go (Animator.seconds 1000) Three
+                |> Animator.go (Animator.millis 1000) Three
                 |> Timeline.update (Time.millisToPosix 1500)
                 |> Timeline.update (Time.millisToPosix 2500)
         , threeAfter =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.go (Animator.seconds 1000) One
+                |> Animator.go (Animator.millis 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
-                |> Animator.go (Animator.seconds 1000) Two
+                |> Animator.go (Animator.millis 1000) Two
                 |> Timeline.update (Time.millisToPosix 1000)
-                |> Animator.go (Animator.seconds 1000) Three
+                |> Animator.go (Animator.millis 1000) Three
                 |> Timeline.update (Time.millisToPosix 1500)
                 |> Timeline.update (Time.millisToPosix 2501)
         }
@@ -242,199 +242,198 @@ timelines =
 
 
 current =
-    only <|
-        describe "Current"
-            [ test "is current value at resting value" <|
-                \_ ->
-                    let
-                        start =
-                            Animator.init Starting
-                                |> Timeline.update (Time.millisToPosix 0)
-                    in
-                    Expect.equal (Animator.current start)
-                        Starting
-            , test "is current value when arrived" <|
-                \_ ->
-                    let
-                        timeline =
-                            Animator.init Starting
-                                |> Timeline.update (Time.millisToPosix 0)
-                                |> Animator.go (Animator.seconds 1) One
-                                |> Timeline.update (Time.millisToPosix 0)
-                                |> Timeline.update (Time.millisToPosix 1000)
-                    in
-                    Expect.equal (Animator.current timeline)
-                        One
-            , test "when queueing many events, is current value" <|
-                \_ ->
-                    let
-                        timeline =
-                            Animator.init Starting
-                                |> Timeline.update (Time.millisToPosix 0)
-                                |> Animator.queue
-                                    [ Animator.event (Animator.seconds 1) One
-                                    , Animator.event (Animator.seconds 1) Two
-                                    , Animator.event (Animator.seconds 1) Three
-                                    ]
-                                |> Timeline.update (Time.millisToPosix 0)
-                                |> Timeline.update (Time.millisToPosix 2500)
-                    in
-                    Expect.equal (Animator.current timeline)
-                        Three
-            , test "when queueing many events, at event, is current value" <|
-                \_ ->
-                    let
-                        timeline =
-                            Animator.init Starting
-                                |> Timeline.update (Time.millisToPosix 0)
-                                |> Animator.queue
-                                    [ Animator.event (Animator.seconds 1) One
-                                    , Animator.event (Animator.seconds 1) Two
-                                    , Animator.event (Animator.seconds 1) Three
-                                    ]
-                                |> Timeline.update (Time.millisToPosix 0)
-                                |> Timeline.update (Time.millisToPosix 3000)
-                    in
-                    Expect.equal (Animator.current timeline)
-                        Three
-            , test "starting state" <|
+    describe "Current"
+        [ test "is current value at resting value" <|
+            \_ ->
+                let
+                    start =
+                        Animator.init Starting
+                            |> Timeline.update (Time.millisToPosix 0)
+                in
+                Expect.equal (Animator.current start)
+                    Starting
+        , test "is current value when arrived" <|
+            \_ ->
+                let
+                    timeline =
+                        Animator.init Starting
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.go (Animator.seconds 1) One
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Timeline.update (Time.millisToPosix 1000)
+                in
+                Expect.equal (Animator.current timeline)
+                    One
+        , test "when queueing many events, is current value" <|
+            \_ ->
+                let
+                    timeline =
+                        Animator.init Starting
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.queue
+                                [ Animator.event (Animator.seconds 1) One
+                                , Animator.event (Animator.seconds 1) Two
+                                , Animator.event (Animator.seconds 1) Three
+                                ]
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Timeline.update (Time.millisToPosix 2500)
+                in
+                Expect.equal (Animator.current timeline)
+                    Three
+        , test "when queueing many events, at event, is current value" <|
+            \_ ->
+                let
+                    timeline =
+                        Animator.init Starting
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.queue
+                                [ Animator.event (Animator.seconds 1) One
+                                , Animator.event (Animator.seconds 1) Two
+                                , Animator.event (Animator.seconds 1) Three
+                                ]
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Timeline.update (Time.millisToPosix 3000)
+                in
+                Expect.equal (Animator.current timeline)
+                    Three
+        , test "starting state" <|
+            \_ ->
+                Expect.equal
+                    (Animator.current timelines.single)
+                    Starting
+        , describe "double"
+            [ test "begin" <|
                 \_ ->
                     Expect.equal
-                        (Animator.current timelines.single)
-                        Starting
-            , describe "double"
-                [ test "begin" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.double.begin)
-                            One
-                , test "transitioning" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.double.transitioning)
-                            One
-                , test "arrived" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.double.transitioning)
-                            One
-                , test "after" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.double.transitioning)
-                            One
-                ]
-            , describe "queued"
-                -- queued
-                [ test "begin" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.queued.begin)
-                            One
-                , test "transitioningToOne" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.queued.transitioningToOne)
-                            One
-                , test "transitioningToTwo" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.queued.transitioningToTwo)
-                            Two
-                , test "transitioningToThree" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.queued.transitioningToThree)
-                            Three
-                , test "atOne" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.queued.atOne)
-                            One
-                , test "atTwo" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.queued.atTwo)
-                            Two
-                , test "atThree" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.queued.atThree)
-                            Three
-                , test "afterThree" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.queued.afterThree)
-                            Three
-                ]
-            , describe "interruptions"
-                [ -- One
-                  test "One start" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.interruptions.oneStart)
-                            One
-                , test "One during" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.interruptions.oneDuring)
-                            One
-                , test "One finished" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.interruptions.oneFinished)
-                            One
-                , test "One after" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.interruptions.oneAfter)
-                            One
-
-                -- TWO
-                , test "Two start" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.interruptions.twoStart)
-                            Two
-                , test "Two during" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.interruptions.twoDuring)
-                            Two
-                , test "Two finished" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.interruptions.twoFinished)
-                            Two
-                , test "Two after" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.interruptions.twoAfter)
-                            Two
-
-                -- THREE
-                , test "Three start" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.interruptions.threeStart)
-                            Three
-                , test "Three during" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.interruptions.threeDuring)
-                            Three
-                , test "Three finished" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.interruptions.threeFinished)
-                            Three
-                , test "Three after" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.current timelines.interruptions.threeAfter)
-                            Three
-                ]
+                        (Animator.current timelines.double.begin)
+                        One
+            , test "transitioning" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.double.transitioning)
+                        One
+            , test "arrived" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.double.arrived)
+                        One
+            , test "after" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.double.after)
+                        One
             ]
+        , describe "queued"
+            -- queued
+            [ test "begin" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.queued.begin)
+                        One
+            , test "transitioningToOne" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.queued.transitioningToOne)
+                        One
+            , test "transitioningToTwo" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.queued.transitioningToTwo)
+                        Two
+            , test "transitioningToThree" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.queued.transitioningToThree)
+                        Three
+            , test "atOne" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.queued.atOne)
+                        One
+            , test "atTwo" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.queued.atTwo)
+                        Two
+            , test "atThree" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.queued.atThree)
+                        Three
+            , test "afterThree" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.queued.afterThree)
+                        Three
+            ]
+        , describe "interruptions"
+            [ -- One
+              test "One start" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.interruptions.oneStart)
+                        One
+            , test "One during" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.interruptions.oneDuring)
+                        One
+            , test "One finished" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.interruptions.oneFinished)
+                        One
+            , test "One after" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.interruptions.oneAfter)
+                        One
+
+            -- TWO
+            , test "Two start" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.interruptions.twoStart)
+                        Two
+            , test "Two during" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.interruptions.twoDuring)
+                        Two
+            , test "Two finished" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.interruptions.twoFinished)
+                        Two
+            , test "Two after" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.interruptions.twoAfter)
+                        Two
+
+            -- THREE
+            , test "Three start" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.interruptions.threeStart)
+                        Three
+            , test "Three during" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.interruptions.threeDuring)
+                        Three
+            , test "Three finished" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.interruptions.threeFinished)
+                        Three
+            , test "Three after" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.current timelines.interruptions.threeAfter)
+                        Three
+            ]
+        ]
 
 
 arrived =
@@ -492,6 +491,143 @@ arrived =
                 in
                 Expect.equal (Animator.arrived timeline)
                     Three
+        , test "starting state" <|
+            \_ ->
+                Expect.equal
+                    (Animator.arrived timelines.single)
+                    Starting
+        , describe "double"
+            [ test "begin" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.double.begin)
+                        Starting
+            , test "transitioning" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.double.transitioning)
+                        Starting
+            , test "arrived" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.double.arrived)
+                        One
+            , test "after" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.double.after)
+                        One
+            ]
+        , describe "queued"
+            -- queued
+            [ test "begin" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.queued.begin)
+                        Starting
+            , test "transitioningToOne" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.queued.transitioningToOne)
+                        Starting
+            , test "transitioningToTwo" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.queued.transitioningToTwo)
+                        One
+            , test "transitioningToThree" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.queued.transitioningToThree)
+                        Two
+            , test "atOne" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.queued.atOne)
+                        One
+            , test "atTwo" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.queued.atTwo)
+                        Two
+            , test "atThree" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.queued.atThree)
+                        Three
+            , test "afterThree" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.queued.afterThree)
+                        Three
+            ]
+        , describe "interruptions"
+            [ -- One
+              test "One start" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.interruptions.oneStart)
+                        Starting
+            , test "One during" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.interruptions.oneDuring)
+                        Starting
+            , test "One finished" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.interruptions.oneFinished)
+                        One
+            , test "One after" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.interruptions.oneAfter)
+                        One
+
+            -- TWO
+            , test "Two start" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.interruptions.twoStart)
+                        Starting
+            , test "Two during" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.interruptions.twoDuring)
+                        Starting
+            , test "Two finished" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.interruptions.twoFinished)
+                        Two
+            , test "Two after" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.interruptions.twoAfter)
+                        Two
+
+            -- THREE
+            , test "Three start" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.interruptions.threeStart)
+                        Starting
+            , test "Three during" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.interruptions.threeDuring)
+                        Starting
+            , test "Three finished" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.interruptions.threeFinished)
+                        Three
+            , test "Three after" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.arrived timelines.interruptions.threeAfter)
+                        Three
+            ]
         ]
 
 
@@ -559,6 +695,144 @@ previous =
                 in
                 Expect.equal (Animator.previous timeline)
                     Two
+        , test "starting state" <|
+            \_ ->
+                Expect.equal
+                    (Animator.previous timelines.single)
+                    Starting
+        , describe "double"
+            [ test "begin" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.double.begin)
+                        Starting
+            , test "transitioning" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.double.transitioning)
+                        Starting
+            , test "arrived" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.double.arrived)
+                        Starting
+            , test "after" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.double.after)
+                        Starting
+            ]
+        , describe "queued"
+            -- queued
+            [ test "begin" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.queued.begin)
+                        Starting
+            , test "transitioningToOne" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.queued.transitioningToOne)
+                        Starting
+            , test "transitioningToTwo" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.queued.transitioningToTwo)
+                        One
+            , test "transitioningToThree" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.queued.transitioningToThree)
+                        Two
+            , test "atOne" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.queued.atOne)
+                        Starting
+            , test "atTwo" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.queued.atTwo)
+                        One
+            , test "atThree" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.queued.atThree)
+                        Two
+            , only <|
+                test "afterThree" <|
+                    \_ ->
+                        Expect.equal
+                            (Animator.previous timelines.queued.afterThree)
+                            Two
+            ]
+        , describe "interruptions"
+            [ -- One
+              test "One start" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.interruptions.oneStart)
+                        Starting
+            , test "One during" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.interruptions.oneDuring)
+                        Starting
+            , test "One finished" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.interruptions.oneFinished)
+                        Starting
+            , test "One after" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.interruptions.oneAfter)
+                        Starting
+
+            -- TWO
+            , test "Two start" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.interruptions.twoStart)
+                        Starting
+            , test "Two during" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.interruptions.twoDuring)
+                        Starting
+            , test "Two finished" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.interruptions.twoFinished)
+                        Starting
+            , test "Two after" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.interruptions.twoAfter)
+                        Starting
+
+            -- THREE
+            , test "Three start" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.interruptions.threeStart)
+                        Starting
+            , test "Three during" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.interruptions.threeDuring)
+                        Starting
+            , test "Three finished" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.interruptions.threeFinished)
+                        Starting
+            , test "Three after" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.interruptions.threeAfter)
+                        Starting
+            ]
         ]
 
 
