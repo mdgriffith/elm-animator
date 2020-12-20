@@ -888,6 +888,41 @@ cleaning =
                         , running = True
                         }
                     )
+        , test "Don't eliminate previous event until we've passed the current" <|
+            \_ ->
+                -- Note finished!
+                -- This is to ensure the previous event doesn't get dropped
+                -- but this test isnt finished being written.
+                let
+                    newTimeline =
+                        Animator.init Starting
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.queue
+                                [ Animator.wait (Animator.seconds 1.0)
+                                , Animator.event (Animator.seconds 1) One
+                                , Animator.wait (Animator.seconds 1.0)
+                                , Animator.event (Animator.seconds 1) Two
+                                ]
+                            |> Timeline.updateWith False (Time.millisToPosix 1000)
+                            |> Timeline.updateWith False (Time.millisToPosix 5000)
+                            |> Timeline.gc
+                in
+                Expect.equal
+                    newTimeline
+                    (Timeline.Timeline
+                        { events =
+                            Timeline.Timetable
+                                [ Timeline.Line (qty 5000)
+                                    (occur Two (qty 5000) (qty 5000))
+                                    []
+                                ]
+                        , initial = Starting
+                        , interruption = []
+                        , now = qty 5000
+                        , queued = Nothing
+                        , running = True
+                        }
+                    )
         , test "Reduce multiple timelines down if we're dwelling" <|
             \_ ->
                 let
