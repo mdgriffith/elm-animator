@@ -231,7 +231,7 @@ linearly =
         \_ ->
             linearDefault
     , visit =
-        \lookup target targetTime maybeLookAhead state ->
+        \lookup target now maybeLookAhead state ->
             lookup (Timeline.getEvent target)
     , lerp =
         \prevEndTime maybePrev target targetTime now maybeLookAhead state ->
@@ -916,7 +916,7 @@ coloring =
         \_ ->
             linearDefault
     , visit =
-        \lookup target targetTime maybeLookAhead state ->
+        \lookup target now maybeLookAhead state ->
             lookup (Timeline.getEvent target)
     , lerp = lerpColor
     }
