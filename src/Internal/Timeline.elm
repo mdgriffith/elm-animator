@@ -137,7 +137,6 @@ type alias Interp state anchor motion =
 type alias Visit state anchor motion =
     (state -> anchor)
     -> Occurring state
-    -> Occurring state
     -> Time.Absolute
     -> Maybe (LookAhead anchor)
     -> motion
@@ -1175,7 +1174,6 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
 
                 start :: [] ->
                     interp.visit toAnchor
-                        prev
                         start
                         details.now
                         Nothing
@@ -1184,7 +1182,6 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                 start :: next :: remain ->
                     if during details.now start then
                         interp.visit toAnchor
-                            prev
                             start
                             details.now
                             Nothing
@@ -1194,13 +1191,11 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                         state
                             -- visit start
                             |> interp.visit toAnchor
-                                prev
                                 start
                                 details.now
                                 Nothing
                             -- visit next
                             |> interp.visit toAnchor
-                                start
                                 next
                                 details.now
                                 Nothing
@@ -1209,7 +1204,6 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                         let
                             visited =
                                 interp.visit toAnchor
-                                    prev
                                     start
                                     details.now
                                     Nothing
@@ -1231,7 +1225,6 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                         let
                             visited =
                                 interp.visit toAnchor
-                                    prev
                                     start
                                     details.now
                                     Nothing
@@ -1288,7 +1281,6 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
 
                                     else
                                         interp.visit toAnchor
-                                            actualPrevious
                                             start
                                             details.now
                                             Nothing
@@ -1361,7 +1353,6 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                 start :: next :: remain ->
                     if during details.now start then
                         interp.visit toAnchor
-                            prev
                             start
                             details.now
                             Nothing
@@ -1371,7 +1362,6 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                         let
                             visited =
                                 interp.visit toAnchor
-                                    prev
                                     start
                                     details.now
                                     Nothing
@@ -1546,7 +1536,6 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
         -- so it has to be between the start and end
         fn.visit lookup
             lineStartEv
-            lineStartEv
             now
             (createLookAhead fn lookup unadjustedStartEvent lineRemain)
             state
@@ -1558,7 +1547,6 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
             [] ->
                 -- dwell at lineStartEv, there's nothing to transition to
                 fn.visit lookup
-                    lineStartEv
                     lineStartEv
                     now
                     Nothing
@@ -1582,7 +1570,6 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                         (createLookAhead fn lookup unadjustedNext lineRemain2)
                         (fn.visit lookup
                             lineStartEv
-                            lineStartEv
                             now
                             (createLookAhead fn lookup unadjustedStartEvent lineRemain)
                             state
@@ -1594,7 +1581,6 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                     --- Before next.endTime
                     --      -> we're dwelling at `next`
                     fn.visit lookup
-                        next
                         next
                         now
                         (createLookAhead fn lookup unadjustedNext lineRemain2)
@@ -1609,7 +1595,6 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                         [] ->
                             -- Nothing to continue on to,
                             fn.visit lookup
-                                lineStartEv
                                 next
                                 now
                                 Nothing
@@ -1630,7 +1615,6 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                                 let
                                     afterState =
                                         fn.visit lookup
-                                            lineStartEv
                                             next
                                             now
                                             (createLookAhead fn lookup unadjustedNext lineRemain2)
@@ -1650,7 +1634,6 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                             else if Time.thisBeforeThat now (endTime next2) then
                                 -- we're dwelling at `next2`
                                 fn.visit lookup
-                                    next
                                     next2
                                     now
                                     (createLookAhead fn lookup unadjustedNext2 lineRemain3)
@@ -1661,7 +1644,6 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                                 let
                                     afterState =
                                         fn.visit lookup
-                                            next
                                             next2
                                             now
                                             (createLookAhead fn lookup unadjustedNext2 lineRemain3)
@@ -1813,7 +1795,6 @@ capture fps lookup fn (Timeline timelineDetails) =
                                             }
                                             (\currentTime ->
                                                 fn.visit lookup
-                                                    lastEvent
                                                     lastEvent
                                                     currentTime
                                                     Nothing
@@ -2072,7 +2053,7 @@ arrived ((Timeline details) as timeline) =
             \_ ->
                 linearDefault
         , visit =
-            \lookup prev target targetTime maybeLookAhead state ->
+            \lookup target targetTime maybeLookAhead state ->
                 getEvent target
         , lerp =
             \prevEndTime prev target targetTime now maybeLookAhead state ->
@@ -2093,7 +2074,7 @@ current ((Timeline details) as timeline) =
             \_ ->
                 linearDefault
         , visit =
-            \lookup prev target now maybeLookAhead state ->
+            \lookup target now maybeLookAhead state ->
                 getEvent target
         , lerp =
             \_ maybePrevious target _ _ _ state ->
@@ -2117,7 +2098,7 @@ previous ((Timeline details) as timeline) =
             \_ ->
                 linearDefault
         , visit =
-            \lookup prev target now maybeLookAhead state ->
+            \lookup target now maybeLookAhead state ->
                 { current = lookup (getEvent target)
                 , prev = state.current
                 , transitioning = False
@@ -2154,7 +2135,7 @@ arrivedAt matches newTime (Timeline details) =
             \_ ->
                 linearDefault
         , visit =
-            \lookup prev target _ maybeLookAhead state ->
+            \lookup target _ maybeLookAhead state ->
                 matches (getEvent target)
                     && Time.thisBeforeThat details.now (startTime target)
         , lerp =
@@ -2213,7 +2194,7 @@ upcoming matches (Timeline details) =
                 \_ ->
                     linearDefault
             , visit =
-                \lookup prev target _ maybeLookAhead state ->
+                \lookup target _ maybeLookAhead state ->
                     matches (getEvent target)
                         && Time.thisBeforeThat details.now (startTime target)
             , lerp =
@@ -2238,7 +2219,7 @@ status ((Timeline details) as timeline) =
             \_ ->
                 linearDefault
         , visit =
-            \lookup prev (Occurring event start eventEnd) now maybeLookAhead state ->
+            \lookup (Occurring event start eventEnd) now maybeLookAhead state ->
                 let
                     dwellTime =
                         case maybeLookAhead of

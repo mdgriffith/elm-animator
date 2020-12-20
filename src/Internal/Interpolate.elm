@@ -232,7 +232,7 @@ linearly =
         \_ ->
             linearDefault
     , visit =
-        \lookup prev target now maybeLookAhead state ->
+        \lookup target now maybeLookAhead state ->
             lookup (Timeline.getEvent target)
     , lerp =
         \prevEndTime maybePrev target targetTime now maybeLookAhead state ->
@@ -340,12 +340,11 @@ then we can estimate what our velocity would be by looking ino the future.
 visit :
     (event -> Movement)
     -> Timeline.Occurring event
-    -> Timeline.Occurring event
     -> Time.Absolute
     -> Maybe (Timeline.LookAhead Movement)
     -> State
     -> State
-visit lookup prev ((Timeline.Occurring event start eventEnd) as occurring) now maybeLookAhead state =
+visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeLookAhead state =
     let
         dwellTime =
             case maybeLookAhead of
@@ -915,7 +914,7 @@ coloring =
         \_ ->
             linearDefault
     , visit =
-        \lookup prev target now maybeLookAhead state ->
+        \lookup target now maybeLookAhead state ->
             lookup (Timeline.getEvent target)
     , lerp = lerpColor
     }
