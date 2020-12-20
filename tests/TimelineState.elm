@@ -678,23 +678,6 @@ previous =
                 in
                 Expect.equal (Animator.previous timeline)
                     Starting
-        , test "is the previous value after progressing to second state" <|
-            \_ ->
-                let
-                    timeline =
-                        Animator.init Starting
-                            |> Timeline.update (Time.millisToPosix 0)
-                            |> Animator.go (Animator.seconds 1) One
-                            |> Timeline.update (Time.millisToPosix 0)
-                            |> Timeline.update (Time.millisToPosix 1500)
-                            |> Animator.go (Animator.seconds 1) Two
-                            |> Timeline.update (Time.millisToPosix 2000)
-                            |> Animator.go (Animator.seconds 1) Three
-                            |> Timeline.update (Time.millisToPosix 2100)
-                            |> Timeline.update (Time.millisToPosix 2200)
-                in
-                Expect.equal (Animator.previous timeline)
-                    Two
         , test "starting state" <|
             \_ ->
                 Expect.equal
@@ -759,12 +742,11 @@ previous =
                     Expect.equal
                         (Animator.previous timelines.queued.atThree)
                         Two
-            , only <|
-                test "afterThree" <|
-                    \_ ->
-                        Expect.equal
-                            (Animator.previous timelines.queued.afterThree)
-                            Two
+            , test "afterThree" <|
+                \_ ->
+                    Expect.equal
+                        (Animator.previous timelines.queued.afterThree)
+                        Two
             ]
         , describe "interruptions"
             [ -- One

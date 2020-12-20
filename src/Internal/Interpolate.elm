@@ -22,6 +22,7 @@ module Internal.Interpolate exposing
 
 import Color
 import Duration
+import Html.Events exposing (preventDefaultOn)
 import Internal.Spring as Spring
 import Internal.Time as Time
 import Internal.Timeline as Timeline exposing (Period(..))
@@ -231,7 +232,7 @@ linearly =
         \_ ->
             linearDefault
     , visit =
-        \lookup target now maybeLookAhead state ->
+        \lookup prev target now maybeLookAhead state ->
             lookup (Timeline.getEvent target)
     , lerp =
         \prevEndTime maybePrev target targetTime now maybeLookAhead state ->
@@ -339,11 +340,12 @@ then we can estimate what our velocity would be by looking ino the future.
 visit :
     (event -> Movement)
     -> Timeline.Occurring event
+    -> Timeline.Occurring event
     -> Time.Absolute
     -> Maybe (Timeline.LookAhead Movement)
     -> State
     -> State
-visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeLookAhead state =
+visit lookup prev ((Timeline.Occurring event start eventEnd) as occurring) now maybeLookAhead state =
     let
         dwellTime =
             case maybeLookAhead of
@@ -415,8 +417,8 @@ type alias Milliseconds =
     Float
 
 
-lerp : Milliseconds -> Maybe Movement -> Movement -> Milliseconds -> Milliseconds -> Maybe (Timeline.LookAhead Movement) -> State -> State
-lerp prevEndTime maybePrev target targetTime now maybeLookAhead state =
+lerp : Milliseconds -> Movement -> Movement -> Milliseconds -> Milliseconds -> Maybe (Timeline.LookAhead Movement) -> State -> State
+lerp prevEndTime prev target targetTime now maybeLookAhead state =
     let
         wobble =
             case target of
@@ -442,19 +444,19 @@ lerp prevEndTime maybePrev target targetTime now maybeLookAhead state =
         case maybeLookAhead of
             Nothing ->
                 if wobble /= 0 then
-                    springInterpolation prevEndTime maybePrev target targetTime now maybeLookAhead state
+                    springInterpolation prevEndTime prev target targetTime now maybeLookAhead state
 
                 else
-                    interpolateBetween prevEndTime maybePrev target targetTime now maybeLookAhead state
+                    interpolateBetween prevEndTime prev target targetTime now maybeLookAhead state
 
             _ ->
-                interpolateBetween prevEndTime maybePrev target targetTime now maybeLookAhead state
+                interpolateBetween prevEndTime prev target targetTime now maybeLookAhead state
 
 
 {-| -}
 springInterpolation :
     Milliseconds
-    -> Maybe Movement
+    -> Movement
     -> Movement
     -> Milliseconds
     -> Milliseconds
@@ -498,8 +500,8 @@ springInterpolation prevEndTime _ target targetTime now _ state =
     }
 
 
-interpolateBetween : Milliseconds -> Maybe Movement -> Movement -> Milliseconds -> Milliseconds -> Maybe (Timeline.LookAhead Movement) -> State -> State
-interpolateBetween startTimeInMs maybePrevious target targetTimeInMs now maybeLookAhead state =
+interpolateBetween : Milliseconds -> Movement -> Movement -> Milliseconds -> Milliseconds -> Maybe (Timeline.LookAhead Movement) -> State -> State
+interpolateBetween startTimeInMs previous target targetTimeInMs now maybeLookAhead state =
     let
         targetPosition =
             case target of
@@ -524,14 +526,11 @@ interpolateBetween startTimeInMs maybePrevious target targetTimeInMs now maybeLo
                     , y = Pixels.inPixelsPerSecond state.velocity
                     }
                 , departure =
-                    case maybePrevious of
-                        Nothing ->
-                            linearDefault
-
-                        Just (Pos personality _) ->
+                    case previous of
+                        Pos personality _ ->
                             personality
 
-                        Just (Osc personality _ _) ->
+                        Osc personality _ _ ->
                             personality
                 , end =
                     { x = targetTimeInMs
@@ -916,7 +915,7 @@ coloring =
         \_ ->
             linearDefault
     , visit =
-        \lookup target now maybeLookAhead state ->
+        \lookup prev target now maybeLookAhead state ->
             lookup (Timeline.getEvent target)
     , lerp = lerpColor
     }
