@@ -441,7 +441,7 @@ clean runGC details =
         | running = running
         , events =
             if runGC then
-                Timetable (garbageCollectOldEvents details.now [] events)
+                Timetable (garbageCollectOldEvents False details.now [] events)
 
             else
                 details.events
@@ -456,7 +456,39 @@ gc (Timeline details) =
                 Timetable evs ->
                     evs
     in
-    Timeline { details | events = Timetable (garbageCollectOldEvents details.now [] events) }
+    Timeline { details | events = Timetable (garbageCollectOldEvents True details.now [] events) }
+
+
+logIf condition x y =
+    if condition then
+        log x y
+
+    else
+        y
+
+
+{-| We need two ways to clean up the history.
+
+    1. Drop `Line`s that are no longer relevant
+
+    2. Drop events within a Line if they aren't relevant.
+
+The tricky part is that we need to preserve both the current event and the previous event.
+
+For 1.)
+
+    Lines can be dropped if
+        we have already finished transitioning to the next line
+        &&
+
+For 2.)
+
+    Events can be dropped
+
+-}
+dropLines : Bool -> Time.Absolute -> List (Line event) -> List (Line event) -> List (Line event)
+dropLines logEvents now droppable lines =
+    lines
 
 
 {-| If we're dwelling at an event, we can reset the event we're dwelling on to the base of the timeline.
@@ -468,19 +500,23 @@ However, if we're not dwelling, we want to keep the previous lines.
 So we track "droppable" lines until we meet a dwell.
 
 -}
-garbageCollectOldEvents : Time.Absolute -> List (Line event) -> List (Line event) -> List (Line event)
-garbageCollectOldEvents now droppable lines =
-    case lines of
+garbageCollectOldEvents : Bool -> Time.Absolute -> List (Line event) -> List (Line event) -> List (Line event)
+garbageCollectOldEvents logEvents now droppable lines =
+    case logIf logEvents "gc lines" lines of
         [] ->
             List.reverse droppable
 
         (Line startAt startingEvent events) :: remaining ->
-            if Time.thisAfterOrEqualThat startAt now then
+            if Time.thisAfterThat startAt now then
                 -- this line hasn't happened yet
                 List.reverse droppable ++ lines
 
-            else if dwellingAt now startingEvent then
+            else if logIf logEvents "Dwelling" <| dwellingAt now startingEvent then
                 -- we can safetly drop the droppables
+                let
+                    _ =
+                        logIf logEvents "droppables" droppable
+                in
                 lines
 
             else
@@ -496,13 +532,13 @@ garbageCollectOldEvents now droppable lines =
                                 False
 
                             Just interruptionTime ->
-                                Time.thisAfterOrEqualThat now interruptionTime
+                                Time.thisAfterThat now interruptionTime
                 in
-                if interrupted then
-                    garbageCollectOldEvents now (Line startAt startingEvent events :: droppable) remaining
+                if logIf logEvents "Interrupted" interrupted then
+                    garbageCollectOldEvents logEvents now (Line startAt startingEvent events :: droppable) remaining
 
                 else
-                    case hewLine now events of
+                    case logIf logEvents "Hewed" <| hewLine logEvents now (startingEvent :: events) of
                         NothingCaptured ->
                             List.reverse droppable ++ lines
 
@@ -519,52 +555,29 @@ type HewStatus event
     | NothingCaptured
 
 
-hewLine now events =
-    case events of
+hewLine logEvents now events =
+    hewlineHelper logEvents now Nothing events
+
+
+hewlineHelper logEvents now maybePrevious events =
+    case logIf logEvents "hewline" <| events of
         [] ->
             NothingCaptured
 
         top :: remaining ->
-            if dwellingAt now top then
-                Captured (Line (startTime top) top remaining)
+            if logIf logEvents "Hew - Dwelling at" <| dwellingAt now top then
+                case maybePrevious of
+                    Nothing ->
+                        Captured (Line (startTime top) top remaining)
 
-            else if Time.thisAfterThat now (endTime top) then
-                hewLine now remaining
+                    Just prev ->
+                        Captured (Line (startTime prev) prev (top :: remaining))
+
+            else if logIf logEvents "NEXT" <| Time.thisAfterThat now (endTime top) then
+                hewlineHelper logEvents now (Just top) remaining
 
             else
                 NothingCaptured
-
-
-type LineStatus event
-    = NotFinished
-    | DwellingAt (Line event)
-    | AfterLine
-
-
-shortenLine now event dwellingAtEvent =
-    case dwellingAtEvent of
-        NotFinished ->
-            if Time.thisAfterOrEqualThat now (endTime event) then
-                AfterLine
-
-            else if dwellingAt now event then
-                DwellingAt (Line (startTime event) event [])
-
-            else
-                NotFinished
-
-        DwellingAt (Line time start remaining) ->
-            DwellingAt (Line time start (event :: remaining))
-
-        AfterLine ->
-            if dwellingAt now event then
-                DwellingAt (Line (startTime event) event [])
-
-            else if Time.thisAfterOrEqualThat now (startTime event) then
-                AfterLine
-
-            else
-                NotFinished
 
 
 lineStartTime (Line start _ _) =
@@ -1123,13 +1136,17 @@ foldp lookup fn (Timeline timelineDetails) =
             let
                 start =
                     fn.start (lookup timelineDetails.initial)
+
+                _ =
+                    log "details" timelineDetails
             in
-            case timetable of
+            case log "Timetable" timetable of
                 [] ->
                     start
 
                 (Line lineStart firstEvent remain) :: remainingLines ->
                     throughLines
+                        False
                         lookup
                         fn
                         timelineDetails
@@ -1137,6 +1154,10 @@ foldp lookup fn (Timeline timelineDetails) =
                         (firstEvent :: remain)
                         remainingLines
                         start
+
+
+log x y =
+    Debug.log x y
 
 
 {-|
@@ -1162,7 +1183,8 @@ This needs to be guaranteed by the caller of this function.
 
 -}
 throughLines :
-    (state -> anchor)
+    Bool
+    -> (state -> anchor)
     -> Interp state anchor motion
     -> TimelineDetails state
     -> Occurring state
@@ -1170,14 +1192,22 @@ throughLines :
     -> List (Line state)
     -> motion
     -> motion
-throughLines toAnchor interp details prev states future state =
-    case future of
+throughLines transitionOngoing toAnchor interp details prev states future state =
+    case log "FUTURE" future of
         [] ->
-            case states of
+            case log "STATES" states of
                 [] ->
                     state
 
                 start :: [] ->
+                    let
+                        _ =
+                            log "DURING"
+                                { during = during details.now start
+                                , event = start
+                                , now = details.now
+                                }
+                    in
                     interp.visit toAnchor
                         start
                         details.now
@@ -1185,14 +1215,14 @@ throughLines toAnchor interp details prev states future state =
                         state
 
                 start :: next :: remain ->
-                    if during details.now start then
+                    if log "DURING" <| during details.now start then
                         interp.visit toAnchor
                             start
                             details.now
                             Nothing
                             state
 
-                    else if transitioning details.now start next then
+                    else if log "TRANSITIONING" <| transitioning details.now start next then
                         let
                             visited =
                                 interp.visit toAnchor
@@ -1214,7 +1244,16 @@ throughLines toAnchor interp details prev states future state =
                         lerped
 
                     else
-                        throughLines toAnchor
+                        -- let
+                        --     visited =
+                        --         interp.visit toAnchor
+                        --             start
+                        --             details.now
+                        --             Nothing
+                        --             state
+                        -- in
+                        throughLines False
+                            toAnchor
                             interp
                             details
                             start
@@ -1223,11 +1262,12 @@ throughLines toAnchor interp details prev states future state =
                             state
 
         (Line futureStart futureEvent futureRemain) :: restOfFuture ->
-            case states of
+            case log "CURRENT STATES (WITH FUTURE)" states of
                 [] ->
                     if Time.thisAfterOrEqualThat details.now futureStart then
                         if interruptedByFuture details.now restOfFuture then
                             throughLines
+                                True
                                 toAnchor
                                 interp
                                 details
@@ -1237,7 +1277,9 @@ throughLines toAnchor interp details prev states future state =
                                 state
 
                         else
+                            --- WHats going on here??
                             throughLines
+                                True
                                 toAnchor
                                 interp
                                 details
@@ -1251,33 +1293,76 @@ throughLines toAnchor interp details prev states future state =
 
                 start :: [] ->
                     if Time.thisAfterOrEqualThat details.now futureStart then
-                        if before details.now futureEvent then
+                        if log "Before" <| before details.now futureEvent then
                             -- we're transitioning from start to futureEvent
                             -- we also need to check that another line in restOfFuture isn't happening sooner
                             let
+                                _ =
+                                    log "STATE"
+                                        { state = state
+                                        , visited = visited
+                                        , now = details.now
+                                        , during = during details.now start
+                                        , futureEvent = futureEvent
+                                        , neverHappened =
+                                            -- futureStart is before starting time of start
+                                            before futureStart start
+                                        }
+
                                 visited =
-                                    interp.visit toAnchor
-                                        start
-                                        details.now
-                                        Nothing
+                                    if log "ongoing transition" (transitionOngoing || before futureStart start) then
                                         state
 
+                                    else
+                                        interp.visit toAnchor
+                                            start
+                                            details.now
+                                            Nothing
+                                            state
+
+                                actualPrevious =
+                                    if transitionOngoing || before futureStart start then
+                                        prev
+
+                                    else
+                                        start
+
                                 lerped =
-                                    interp.lerp
-                                        (Time.inMilliseconds futureStart)
-                                        (Just (toAnchor (getEvent start)))
-                                        (toAnchor (getEvent futureEvent))
-                                        (Time.inMilliseconds (startTime futureEvent))
-                                        (Time.inMilliseconds details.now)
-                                        (createLookAhead interp toAnchor futureEvent futureRemain)
-                                        state
+                                    if before futureStart start then
+                                        -- we were transitioning to start, but never made it
+                                        -- so we need to transition to start, then begin transitioning to futureEvent
+                                        visited
+                                            |> interp.lerp
+                                                (Time.inMilliseconds (endTime actualPrevious))
+                                                (Just (toAnchor (getEvent actualPrevious)))
+                                                (toAnchor (getEvent start))
+                                                (Time.inMilliseconds (startTime start))
+                                                (Time.inMilliseconds futureStart)
+                                                (createLookAhead interp toAnchor start (futureEvent :: futureRemain))
+                                            |> interp.lerp
+                                                (Time.inMilliseconds futureStart)
+                                                (Just (toAnchor (getEvent actualPrevious)))
+                                                (toAnchor (getEvent futureEvent))
+                                                (Time.inMilliseconds (startTime futureEvent))
+                                                (Time.inMilliseconds details.now)
+                                                (createLookAhead interp toAnchor futureEvent futureRemain)
+
+                                    else
+                                        interp.lerp
+                                            (Time.inMilliseconds futureStart)
+                                            (Just (toAnchor (getEvent actualPrevious)))
+                                            (toAnchor (getEvent futureEvent))
+                                            (Time.inMilliseconds (startTime futureEvent))
+                                            (Time.inMilliseconds details.now)
+                                            (createLookAhead interp toAnchor futureEvent futureRemain)
+                                            visited
                             in
-                            if interruptedByFuture details.now restOfFuture then
-                                throughLines
+                            if log "Interrupted by future" <| interruptedByFuture details.now restOfFuture then
+                                throughLines True
                                     toAnchor
                                     interp
                                     details
-                                    start
+                                    actualPrevious
                                     (futureEvent :: futureRemain)
                                     restOfFuture
                                     lerped
@@ -1287,7 +1372,11 @@ throughLines toAnchor interp details prev states future state =
 
                         else
                             -- we've transitioned to futureEvent already or are even farther along
-                            throughLines
+                            let
+                                _ =
+                                    Debug.log "FF" ( start, futureEvent )
+                            in
+                            throughLines False
                                 toAnchor
                                 interp
                                 details
@@ -1324,10 +1413,10 @@ throughLines toAnchor interp details prev states future state =
                                     (Time.inMilliseconds (startTime next))
                                     (Time.inMilliseconds details.now)
                                     (createLookAhead interp toAnchor next remain)
-                                    state
+                                    visited
                         in
                         if interruptedByFuture details.now restOfFuture then
-                            throughLines
+                            throughLines True
                                 toAnchor
                                 interp
                                 details
@@ -1340,7 +1429,9 @@ throughLines toAnchor interp details prev states future state =
                             lerped
 
                     else
-                        throughLines toAnchor
+                        throughLines
+                            False
+                            toAnchor
                             interp
                             details
                             start
@@ -1994,10 +2085,26 @@ arrived ((Timeline details) as timeline) =
                 linearDefault
         , visit =
             \lookup target targetTime maybeLookAhead state ->
-                getEvent target
+                log "VISIT" <| getEvent target
         , lerp =
-            \_ _ _ _ _ _ state ->
-                state
+            \prevEndTime maybePrev target targetTime now maybeLookAhead state ->
+                let
+                    _ =
+                        log "LERP"
+                            { prev = maybePrev
+                            , target = target
+                            , lookahead = maybeLookAhead
+                            , state = state
+                            , targetTime = targetTime
+                            , now = now
+                            }
+                in
+                case maybePrev of
+                    Nothing ->
+                        state
+
+                    Just prev ->
+                        prev
         }
         timeline
 
@@ -2014,7 +2121,7 @@ current ((Timeline details) as timeline) =
             \_ ->
                 linearDefault
         , visit =
-            \lookup target targetTime maybeLookAhead state ->
+            \lookup target now maybeLookAhead state ->
                 getEvent target
         , lerp =
             \_ maybePrevious target _ _ _ state ->
@@ -2024,7 +2131,7 @@ current ((Timeline details) as timeline) =
 
 
 getPrev _ maybePrevious target _ _ _ previouslyRecorded =
-    case maybePrevious of
+    case Debug.log "LERP - MAYBE PREV" maybePrevious of
         Just p ->
             p
 
@@ -2044,7 +2151,22 @@ previous ((Timeline details) as timeline) =
             \_ ->
                 linearDefault
         , visit =
-            \lookup target targetTime maybeLookAhead state ->
+            \lookup target now maybeLookAhead state ->
+                let
+                    _ =
+                        log "V"
+                            { target = target
+                            , now = now
+                            , look = maybeLookAhead
+                            , state = state
+                            }
+                in
+                -- log "VISIT" state
+                -- if log "VISIT" <| after now target then
+                --     -- target
+                --     --state
+                --     lookup (getEvent target)
+                -- else
                 state
 
         -- state
