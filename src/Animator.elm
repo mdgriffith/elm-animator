@@ -15,9 +15,8 @@ module Animator exposing
     , leaveLate, arriveEarly
     , leaveSmoothly, arriveSmoothly
     , withWobble
-    , Oscillator, wave, wrap, zigzag, interpolate
+    , Oscillator, wave, wrap, zigzag
     , loop, once, repeat
-    , shift
     , step
     , Frames, frame, hold, walk, framesWith
     , Resting, FramesPerSecond, fps, cycle, cycleN
@@ -164,13 +163,11 @@ Well, in that case you can use an `Oscillator`.
                 -- loop every 700ms
                 |> Animator.loop (Animator.millis 700)
 
-@docs Oscillator, wave, wrap, zigzag, interpolate
+@docs Oscillator, wave, wrap, zigzag
 
 Once we've created an oscillator, we need to specify how long it should take and how many times it should repeat.
 
 @docs loop, once, repeat
-
-@docs shift
 
 
 # Sprites
@@ -735,14 +732,15 @@ applyOption toOption movement =
                 )
                 pos
 
-        Interpolate.Oscillate personality dur fn ->
+        Interpolate.Oscillate personality pos period points ->
             Interpolate.Oscillate
                 (withDefault
                     toOption
                     personality
                 )
-                dur
-                fn
+                pos
+                period
+                points
 
 
 
@@ -835,12 +833,7 @@ arriveSmoothly s movement =
 
 {-| -}
 type alias Oscillator =
-    Timeline.Oscillator
-
-
-{-| -}
-type alias Pause =
-    Timeline.Pause
+    Interpolate.Oscillator
 
 
 within : Float -> Float -> Float -> Bool
@@ -859,71 +852,60 @@ within tolerance anchor val =
 once : Duration -> Oscillator -> Movement
 once activeDuration osc =
     case osc of
-        Timeline.Resting i ->
+        Interpolate.Resting i ->
             at i
 
-        Timeline.Oscillator pauses fn ->
-            let
-                ( preparedFn, totalDuration ) =
-                    Timeline.prepareOscillator activeDuration pauses fn
-            in
+        Interpolate.Oscillator start points ->
             Interpolate.Oscillate
                 Interpolate.FullDefault
-                (Timeline.Repeat 1 totalDuration)
-                preparedFn
+                start
+                (Timeline.Repeat 1 activeDuration)
+                points
 
 
 {-| -}
 loop : Duration -> Oscillator -> Movement
 loop activeDuration osc =
     case osc of
-        Timeline.Resting i ->
+        Interpolate.Resting i ->
             at i
 
-        Timeline.Oscillator pauses fn ->
-            let
-                ( preparedFn, totalDuration ) =
-                    Timeline.prepareOscillator activeDuration pauses fn
-            in
+        Interpolate.Oscillator start points ->
             Interpolate.Oscillate
                 Interpolate.FullDefault
-                (Timeline.Loop totalDuration)
-                preparedFn
+                start
+                (Timeline.Loop activeDuration)
+                points
 
 
 {-| -}
 repeat : Int -> Duration -> Oscillator -> Movement
 repeat n activeDuration osc =
     case osc of
-        Timeline.Resting i ->
+        Interpolate.Resting i ->
             at i
 
-        Timeline.Oscillator pauses fn ->
-            let
-                ( preparedFn, totalDuration ) =
-                    Timeline.prepareOscillator activeDuration pauses fn
-            in
+        Interpolate.Oscillator start points ->
             Interpolate.Oscillate
                 Interpolate.FullDefault
-                (Timeline.Repeat n totalDuration)
-                preparedFn
+                start
+                (Timeline.Repeat n activeDuration)
+                points
 
 
-{-| Shift an oscillator over by a certain amount.
 
-It's expecting a number between 0 and 1.
-
--}
-shift : Float -> Oscillator -> Oscillator
-shift x osc =
-    case osc of
-        Timeline.Oscillator pauses fn ->
-            Timeline.Oscillator
-                pauses
-                (\u -> fn (wrapToUnit (u + x)))
-
-        Timeline.Resting _ ->
-            osc
+-- {-| Shift an oscillator over by a certain amount.
+-- It's expecting a number between 0 and 1.
+-- -}
+-- shift : Float -> Oscillator -> Oscillator
+-- shift x osc =
+--     case osc of
+--         Interpolate.Oscillator pauses fn ->
+--             Interpolate.Oscillator
+--                 pauses
+--                 (\u -> fn (wrapToUnit (u + x)))
+--         Interpolate.Resting _ ->
+--             osc
 
 
 wrapToUnit : Float -> Float
@@ -931,21 +913,19 @@ wrapToUnit x =
     x - toFloat (floor x)
 
 
-{-| Pause the the oscillator is at a certain point.
 
-This pause time will be added to the time you specify using `loop`, so that you can adjust the pause without disturbing the original duration of the oscillator.
-
--}
-pause : Duration -> Float -> Oscillator -> Oscillator
-pause forDuration val osc =
-    case osc of
-        Timeline.Oscillator pauses fn ->
-            Timeline.Oscillator
-                (Timeline.Pause forDuration val :: pauses)
-                fn
-
-        Timeline.Resting _ ->
-            osc
+-- {-| Pause the the oscillator is at a certain point.
+-- This pause time will be added to the time you specify using `loop`, so that you can adjust the pause without disturbing the original duration of the oscillator.
+-- -}
+-- pause : Duration -> Float -> Oscillator -> Oscillator
+-- pause forDuration val osc =
+--     case osc of
+--         Timeline.Oscillator pauses fn ->
+--             Timeline.Oscillator
+--                 (Timeline.Pause forDuration val :: pauses)
+--                 fn
+--         Timeline.Resting _ ->
+--             osc
 
 
 {-| Start at one number and move linearly to another, then immediately start again at the first.
@@ -959,14 +939,12 @@ wrap start end =
         total =
             end - start
     in
-    Timeline.Oscillator []
-        (\u ->
-            if u == 1 then
-                start
-
-            else
-                start + (total * u)
-        )
+    Interpolate.Oscillator start
+        [ { value = end
+          , timing = Interpolate.Linear
+          , time = 1
+          }
+        ]
 
 
 {-| This is basically a sine wave! It will "wave" between the two numbers you give it.
@@ -983,14 +961,24 @@ wave start end =
         total =
             top - bottom
     in
-    Timeline.Oscillator []
-        (\u ->
-            let
-                normalized =
-                    (cos (turns (0.5 + u)) + 1) / 2
-            in
-            start + total * normalized
-        )
+    Interpolate.Oscillator start
+        -- TODO! What are the bezier control points for a sin wave?
+        -- (\u ->
+        --     let
+        --         normalized =
+        --             (cos (turns (0.5 + u)) + 1) / 2
+        --     in
+        --     start + total * normalized
+        -- )
+        [ { value = end
+          , timing = Interpolate.Linear
+          , time = 0.5
+          }
+        , { value = start
+          , timing = Interpolate.Linear
+          , time = 1
+          }
+        ]
 
 
 {-| Start at one number, move linearly to another, and then linearly back.
@@ -1001,20 +989,16 @@ zigzag start end =
         total =
             end - start
     in
-    Timeline.Oscillator []
-        (\u ->
-            start + total * (1 - abs (2 * u - 1))
-        )
-
-
-{-| Or make whatever kind of oscillator you need!
-
-This takes a function which is given the progress of this oscillation as a `Float` between 0 and 1.
-
--}
-interpolate : (Float -> Float) -> Oscillator
-interpolate interp =
-    Timeline.Oscillator [] interp
+    Interpolate.Oscillator start
+        [ { value = end
+          , timing = Interpolate.Linear
+          , time = 0.5
+          }
+        , { value = start
+          , timing = Interpolate.Linear
+          , time = 1
+          }
+        ]
 
 
 

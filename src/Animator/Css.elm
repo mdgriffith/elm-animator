@@ -106,6 +106,7 @@ import Duration
 import Html exposing (Html)
 import Html.Attributes as Attr
 import Html.Keyed
+import Internal.Css
 import Internal.Interpolate as Interpolate
 import Internal.Time as Time
 import Internal.Timeline as Timeline
@@ -1472,33 +1473,32 @@ lookAt coords (Transform trans) =
 
 
 {-| -}
-type Period
-    = Loop Duration
-    | Repeat Int Duration
+type alias Period =
+    Timeline.Period
 
 
 {-| -}
 once : Duration -> Period
 once =
-    Repeat 1
+    Timeline.Repeat 1
 
 
 {-| -}
 loop : Duration -> Period
 loop =
-    Loop
+    Timeline.Loop
 
 
 {-| -}
 repeat : Int -> Duration -> Period
 repeat =
-    Repeat
+    Timeline.Repeat
 
 
 {-| -}
 resting : Float -> Oscillator
 resting fl =
-    Timeline.Resting fl
+    Interpolate.Resting fl
 
 
 {-| -}
@@ -1559,31 +1559,14 @@ in3d period config =
         }
 
 
-renderOsc per oscillator =
+renderOsc period oscillator =
     case oscillator of
-        Timeline.Resting f ->
+        Interpolate.Resting f ->
             at f
 
-        Timeline.Oscillator pauses fn ->
-            let
-                activeDuration =
-                    case per of
-                        Repeat _ dur ->
-                            dur
-
-                        Loop dur ->
-                            dur
-
-                ( preparedFn, totalDuration ) =
-                    Timeline.prepareOscillator activeDuration pauses fn
-            in
+        Interpolate.Oscillator x checkpoints ->
             Interpolate.Oscillate
                 Interpolate.FullDefault
-                (case per of
-                    Repeat i _ ->
-                        Timeline.Repeat i totalDuration
-
-                    Loop _ ->
-                        Timeline.Loop totalDuration
-                )
-                preparedFn
+                x
+                period
+                checkpoints

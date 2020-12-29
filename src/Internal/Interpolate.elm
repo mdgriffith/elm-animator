@@ -3,7 +3,7 @@ module Internal.Interpolate exposing
     , dwellPeriod
     , coloring, linearly, moving
     , fillDefaults, DefaultablePersonality(..), DefaultOr(..)
-    , DefaultableMovement(..), Spline(..), createSpline, details, emptyDefaults, findAtXOnSpline, linearDefault, standardDefault, withLinearDefault, withStandardDefault
+    , Checkpoint, DefaultableMovement(..), Motion, Oscillator(..), Personality, Spline(..), Timing(..), createSpline, details, emptyDefaults, findAtXOnSpline, linearDefault, standardDefault, visit, withLinearDefault, withStandardDefault
     )
 
 {-|
@@ -32,14 +32,20 @@ import Quantity
 
 {-| -}
 type DefaultableMovement
-    = Oscillate DefaultablePersonality Period (Float -> Float)
+    = Oscillate DefaultablePersonality Float Period (List Checkpoint)
     | Position DefaultablePersonality Float
 
 
 {-| -}
 type Movement
-    = Osc Personality Period (Float -> Float)
+    = Osc Personality Float Period (List Checkpoint)
     | Pos Personality Float
+
+
+{-| -}
+type Motion value
+    = Osc2 Personality value (List ( Spline, value )) Period
+    | Pos2 Personality value
 
 
 type DefaultablePersonality
@@ -51,6 +57,28 @@ type DefaultablePersonality
         , departLate : DefaultOr Proportion
         , departSlowly : DefaultOr Proportion
         }
+
+
+type alias Checkpoint =
+    { value : Float
+
+    -- timing function to get to the above value
+    , timing : Timing
+
+    -- percentage time when we've arrived at `value`
+    , time : Float
+    }
+
+
+type Timing
+    = Linear
+    | Bezier Spline
+
+
+{-| -}
+type Oscillator
+    = Oscillator Float (List Checkpoint)
+    | Resting Float
 
 
 type DefaultOr thing
@@ -125,15 +153,16 @@ fillDefaults builtInDefault specified =
 withStandardDefault : DefaultableMovement -> Movement
 withStandardDefault defMovement =
     case defMovement of
-        Oscillate specifiedPersonality period fn ->
+        Oscillate specifiedPersonality target period decoration ->
             let
                 personality =
                     fillDefaults standardDefault specifiedPersonality
             in
             Osc
                 personality
+                target
                 period
-                fn
+                decoration
 
         Position specifiedPersonality p ->
             let
@@ -146,15 +175,16 @@ withStandardDefault defMovement =
 withLinearDefault : DefaultableMovement -> Movement
 withLinearDefault defMovement =
     case defMovement of
-        Oscillate specifiedPersonality period fn ->
+        Oscillate specifiedPersonality target period decoration ->
             let
                 personality =
                     fillDefaults linearDefault specifiedPersonality
             in
             Osc
                 personality
+                target
                 period
-                fn
+                decoration
 
         Position specifiedPersonality p ->
             let
@@ -253,8 +283,8 @@ startMoving : Movement -> State
 startMoving movement =
     { position =
         case movement of
-            Osc _ _ toX ->
-                Pixels.pixels (toX 0)
+            Osc _ target period decoration ->
+                Pixels.pixels target
 
             Pos _ x ->
                 Pixels.pixels x
@@ -265,7 +295,7 @@ startMoving movement =
 getPersonality : Movement -> Personality
 getPersonality m =
     case m of
-        Osc personality _ _ ->
+        Osc personality _ _ _ ->
             personality
 
         Pos personality _ ->
@@ -316,7 +346,7 @@ dwellPeriod movement =
         Pos _ _ ->
             Nothing
 
-        Osc _ period _ ->
+        Osc _ _ period _ ->
             Just period
 
 
@@ -357,8 +387,8 @@ visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeL
     if Time.zeroDuration dwellTime then
         { position =
             case lookup event of
-                Osc _ period toX ->
-                    Pixels.pixels (toX 0)
+                Osc _ target period decoration ->
+                    Pixels.pixels target
 
                 Pos _ x ->
                     Pixels.pixels x
@@ -375,41 +405,8 @@ visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeL
                 , velocity = Pixels.pixelsPerSecond 0
                 }
 
-            Osc _ period toX ->
-                case period of
-                    Loop periodDuration ->
-                        let
-                            progress =
-                                wrapUnitAfter periodDuration dwellTime
-                        in
-                        { position = Pixels.pixels (toX progress)
-                        , velocity = derivativeOfEasing toX periodDuration progress
-                        }
-
-                    Repeat n periodDuration ->
-                        let
-                            iterationTimeMS =
-                                Duration.inMilliseconds periodDuration
-
-                            totalMS =
-                                Duration.inMilliseconds dwellTime
-
-                            iteration =
-                                floor (totalMS / iterationTimeMS)
-                        in
-                        if iteration >= n then
-                            { position = Pixels.pixels (toX 1)
-                            , velocity = Pixels.pixelsPerSecond 0
-                            }
-
-                        else
-                            let
-                                progress =
-                                    wrapUnitAfter periodDuration dwellTime
-                            in
-                            { position = Pixels.pixels (toX progress)
-                            , velocity = derivativeOfEasing toX periodDuration progress
-                            }
+            Osc _ target period points ->
+                oscillate target period points dwellTime
 
 
 type alias Milliseconds =
@@ -421,7 +418,7 @@ lerp prevEndTime prev target targetTime now maybeLookAhead state =
     let
         wobble =
             case target of
-                Osc personality _ _ ->
+                Osc personality _ _ _ ->
                     personality.wobbliness
 
                 Pos personality _ ->
@@ -429,7 +426,7 @@ lerp prevEndTime prev target targetTime now maybeLookAhead state =
 
         nothingHappened =
             case target of
-                Osc _ _ _ ->
+                Osc _ _ _ _ ->
                     False
 
                 Pos _ x ->
@@ -466,7 +463,7 @@ springInterpolation prevEndTime _ target targetTime now _ state =
     let
         wobble =
             case target of
-                Osc personality _ _ ->
+                Osc personality _ _ _ ->
                     personality.wobbliness
 
                 Pos personality _ ->
@@ -474,8 +471,8 @@ springInterpolation prevEndTime _ target targetTime now _ state =
 
         targetPos =
             case target of
-                Osc _ _ toX ->
-                    toX 0
+                Osc _ x period decoration ->
+                    x
 
                 Pos _ x ->
                     x
@@ -504,8 +501,8 @@ interpolateBetween startTimeInMs previous target targetTimeInMs now maybeLookAhe
     let
         targetPosition =
             case target of
-                Osc _ _ toX ->
-                    Pixels.pixels (toX 0)
+                Osc _ x period decoration ->
+                    Pixels.pixels x
 
                 Pos _ x ->
                     Pixels.pixels x
@@ -529,7 +526,7 @@ interpolateBetween startTimeInMs previous target targetTimeInMs now maybeLookAhe
                         Pos personality _ ->
                             personality
 
-                        Osc personality _ _ ->
+                        Osc personality _ _ _ ->
                             personality
                 , end =
                     { x = targetTimeInMs
@@ -544,7 +541,7 @@ interpolateBetween startTimeInMs previous target targetTimeInMs now maybeLookAhe
                         Pos personality _ ->
                             personality
 
-                        Osc personality _ _ ->
+                        Osc personality _ _ _ ->
                             personality
                 }
 
@@ -640,6 +637,105 @@ interpolateBetween startTimeInMs previous target targetTimeInMs now maybeLookAhe
     }
 
 
+
+{- OSCILLATOR INTERPOLATION -}
+
+
+oscillate : Float -> Period -> List Checkpoint -> Duration.Duration -> State
+oscillate start period points dwellTime =
+    case points of
+        [] ->
+            { position = Pixels.pixels start
+            , velocity = Pixels.pixelsPerSecond 0
+            }
+
+        _ ->
+            let
+                percentage =
+                    case period of
+                        Loop periodDuration ->
+                            wrapUnitAfter periodDuration dwellTime
+
+                        Repeat n periodDuration ->
+                            let
+                                iterationTimeMS =
+                                    Duration.inMilliseconds periodDuration
+
+                                totalMS =
+                                    Duration.inMilliseconds dwellTime
+
+                                iteration =
+                                    floor (totalMS / iterationTimeMS)
+                            in
+                            if iteration >= n then
+                                1
+
+                            else
+                                wrapUnitAfter periodDuration dwellTime
+            in
+            oscillateHelper start points percentage 0
+
+
+oscillateHelper previous points currentTime previousTime =
+    case points of
+        [] ->
+            { position = Pixels.pixels previous
+            , velocity = Pixels.pixelsPerSecond 0
+            }
+
+        checkpoint :: remaining ->
+            if currentTime > checkpoint.time then
+                oscillateHelper checkpoint.value points currentTime checkpoint.time
+
+            else
+                let
+                    progress =
+                        (currentTime - previousTime)
+                            / (checkpoint.time - previousTime)
+                in
+                atTiming checkpoint.timing progress previous checkpoint.value
+
+
+atTiming timing percent start target =
+    case timing of
+        Linear ->
+            { position = Pixels.pixels (linear start target percent)
+            , velocity =
+                Pixels.pixelsPerSecond
+                    ((target - start)
+                        / percent
+                    )
+            }
+
+        Bezier spline ->
+            let
+                current =
+                    findAtXOnSpline spline
+                        percent
+                        -- tolerance
+                        1
+                        -- jumpSize
+                        0.25
+                        -- starting t
+                        (guessTime percent spline)
+                        -- depth
+                        0
+
+                firstDerivative =
+                    firstDerivativeOnSpline spline current.t
+            in
+            { position =
+                current.point.y
+                    |> Pixels.pixels
+            , velocity =
+                -- rescale velocity so that it's pixels/second
+                -- `createSpline` scales this vector sometimes, we need to ensure it's the right size.
+                (firstDerivative.y / firstDerivative.x)
+                    |> (*) 1000
+                    |> Pixels.pixelsPerSecond
+            }
+
+
 guessTime : Float -> Spline -> Float
 guessTime now (Spline one two three four) =
     if (four.x - one.x) == 0 then
@@ -662,20 +758,16 @@ newVelocityAtTarget target targetTime maybeLookAhead =
                 Pos _ _ ->
                     Pixels.pixelsPerSecond 0
 
-                Osc _ period toX ->
-                    case period of
-                        Loop periodDuration ->
-                            derivativeOfEasing toX periodDuration 0
-
-                        Repeat n periodDuration ->
-                            derivativeOfEasing toX periodDuration 0
+                Osc _ x period points ->
+                    oscillate x period points (Duration.milliseconds 0)
+                        |> .velocity
 
         Just lookAhead ->
             let
                 targetPosition =
                     case target of
-                        Osc _ _ toX ->
-                            Pixels.pixels (toX 0)
+                        Osc _ x period movement ->
+                            Pixels.pixels x
 
                         Pos _ x ->
                             Pixels.pixels x
@@ -689,17 +781,17 @@ newVelocityAtTarget target targetTime maybeLookAhead =
                         (Pixels.pixels aheadPosition)
                         (Time.millis lookAhead.time)
 
-                Osc _ period toX ->
+                Osc _ x period points ->
                     if lookAhead.resting then
-                        case period of
-                            Loop periodDuration ->
-                                derivativeOfEasing toX periodDuration 0
-
-                            Repeat n periodDuration ->
-                                derivativeOfEasing toX periodDuration 0
+                        oscillate x period points (Duration.milliseconds 0)
+                            |> .velocity
 
                     else
-                        velocityBetween targetPosition (Time.millis targetTime) (Pixels.pixels (toX 0)) (Time.millis lookAhead.time)
+                        velocityBetween
+                            targetPosition
+                            (Time.millis targetTime)
+                            (Pixels.pixels x)
+                            (Time.millis lookAhead.time)
 
 
 createSpline :

@@ -8,7 +8,7 @@ module Internal.Timeline exposing
     , current, arrivedAt, arrived, previous, upcoming
     , Line(..), Timetable(..)
     , foldp, capture, captureTimeline
-    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Oscillator(..), Pause(..), Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), atTime, foldpOld, gc, hasChanged, justInitialized, linearDefault, linesAreActive, prepareOscillator, previousEndTime, previousStartTime, updateWith
+    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), atTime, foldpOld, gc, hasChanged, justInitialized, linearDefault, linesAreActive, previousEndTime, previousStartTime, updateWith
     )
 
 {-|
@@ -147,8 +147,8 @@ type alias Milliseconds =
     Float
 
 
-type alias LookAhead movement =
-    { anchor : movement
+type alias LookAhead anchor =
+    { anchor : anchor
     , time : Milliseconds
     , resting : Bool
     }
@@ -175,15 +175,10 @@ type Previous event
     | PreviouslyInterrupted Time.Absolute
 
 
-{-| -}
-type Oscillator
-    = Oscillator (List Pause) (Float -> Float)
-    | Resting Float
 
-
-{-| -}
-type Pause
-    = Pause Time.Duration Float
+-- {-| -}
+-- type Pause
+--     = Pause Time.Duration Float
 
 
 type alias GetPersonality anchor =
@@ -1133,6 +1128,14 @@ foldp lookup fn (Timeline timelineDetails) =
                         start
 
 
+lookAhead lookup (Occurring ahead (Quantity.Quantity start) (Quantity.Quantity end)) =
+    { anchor = lookup ahead
+    , time = start
+    , resting =
+        (start - end) /= 0
+    }
+
+
 {-|
 
     At event A -> visit A
@@ -1184,7 +1187,7 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                         interp.visit toAnchor
                             start
                             details.now
-                            Nothing
+                            (Just (lookAhead toAnchor next))
                             state
 
                     else if during details.now next then
@@ -1193,12 +1196,18 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                             |> interp.visit toAnchor
                                 start
                                 details.now
-                                Nothing
+                                (Just (lookAhead toAnchor next))
                             -- visit next
                             |> interp.visit toAnchor
                                 next
                                 details.now
-                                Nothing
+                                (case remain of
+                                    [] ->
+                                        Nothing
+
+                                    upcomingEvent :: _ ->
+                                        Just (lookAhead toAnchor upcomingEvent)
+                                )
 
                     else if transitioning details.now start next then
                         let
@@ -1206,7 +1215,7 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                                 interp.visit toAnchor
                                     start
                                     details.now
-                                    Nothing
+                                    (Just (lookAhead toAnchor next))
                                     state
 
                             lerped =
@@ -1216,7 +1225,13 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                                     (toAnchor (getEvent next))
                                     (Time.inMilliseconds (startTime next))
                                     (Time.inMilliseconds details.now)
-                                    (createLookAhead interp toAnchor next remain)
+                                    (case remain of
+                                        [] ->
+                                            Nothing
+
+                                        upcomingEvent :: _ ->
+                                            Just (lookAhead toAnchor upcomingEvent)
+                                    )
                                     visited
                         in
                         lerped
@@ -1227,7 +1242,7 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                                 interp.visit toAnchor
                                     start
                                     details.now
-                                    Nothing
+                                    (Just (lookAhead toAnchor next))
                                     state
                         in
                         throughLines False
@@ -1244,8 +1259,7 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                 [] ->
                     if Time.thisAfterOrEqualThat details.now futureStart then
                         if interruptedByFuture details.now restOfFuture then
-                            throughLines
-                                True
+                            throughLines True
                                 toAnchor
                                 interp
                                 details
@@ -1256,8 +1270,7 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
 
                         else
                             --- WHats going on here??
-                            throughLines
-                                True
+                            throughLines True
                                 toAnchor
                                 interp
                                 details
@@ -1304,14 +1317,20 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                                                 (toAnchor (getEvent start))
                                                 (Time.inMilliseconds (startTime start))
                                                 (Time.inMilliseconds futureStart)
-                                                (createLookAhead interp toAnchor start (futureEvent :: futureRemain))
+                                                (Just (lookAhead toAnchor futureEvent))
                                             |> interp.lerp
                                                 (Time.inMilliseconds futureStart)
                                                 (toAnchor (getEvent actualPrevious))
                                                 (toAnchor (getEvent futureEvent))
                                                 (Time.inMilliseconds (startTime futureEvent))
                                                 (Time.inMilliseconds details.now)
-                                                (createLookAhead interp toAnchor futureEvent futureRemain)
+                                                (case futureRemain of
+                                                    [] ->
+                                                        Nothing
+
+                                                    upcomingEvent :: _ ->
+                                                        Just (lookAhead toAnchor upcomingEvent)
+                                                )
 
                                     else
                                         interp.lerp
@@ -1320,7 +1339,7 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                                             (toAnchor (getEvent futureEvent))
                                             (Time.inMilliseconds (startTime futureEvent))
                                             (Time.inMilliseconds details.now)
-                                            (createLookAhead interp toAnchor futureEvent futureRemain)
+                                            (Just (lookAhead toAnchor futureEvent))
                                             visited
                             in
                             if interruptedByFuture details.now restOfFuture then
@@ -1355,7 +1374,7 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                         interp.visit toAnchor
                             start
                             details.now
-                            Nothing
+                            (Just (lookAhead toAnchor next))
                             state
 
                     else if transitioning details.now start next then
@@ -1364,7 +1383,7 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                                 interp.visit toAnchor
                                     start
                                     details.now
-                                    Nothing
+                                    (Just (lookAhead toAnchor next))
                                     state
 
                             lerped =
@@ -1374,7 +1393,13 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                                     (toAnchor (getEvent next))
                                     (Time.inMilliseconds (startTime next))
                                     (Time.inMilliseconds details.now)
-                                    (createLookAhead interp toAnchor next remain)
+                                    (case remain of
+                                        [] ->
+                                            Nothing
+
+                                        upcomingEvent :: _ ->
+                                            Just (lookAhead toAnchor upcomingEvent)
+                                    )
                                     visited
                         in
                         if interruptedByFuture details.now restOfFuture then
@@ -1391,8 +1416,7 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                             lerped
 
                     else
-                        throughLines
-                            False
+                        throughLines False
                             toAnchor
                             interp
                             details
@@ -2344,106 +2368,3 @@ justInitialized (Timeline timeline) =
     case timeline.now of
         Quantity.Quantity qty ->
             qty == 0
-
-
-
-{- Oscillator preprocessing -}
-
-
-pauseToBounds : Pause -> Time.Duration -> Time.Duration -> ( Float, Float )
-pauseToBounds (Pause dur val) activeDuration totalDur =
-    let
-        start =
-            Quantity.multiplyBy val activeDuration
-    in
-    ( Quantity.ratio start totalDur
-    , Quantity.ratio (Quantity.plus start dur) totalDur
-    )
-
-
-pauseValue : Pause -> Float
-pauseValue (Pause _ v) =
-    v
-
-
-prepareOscillator : Time.Duration -> List Pause -> (Float -> Float) -> ( Float -> Float, Time.Duration )
-prepareOscillator activeDuration pauses osc =
-    let
-        -- total duration of the oscillation (active + pauses)
-        totalDuration =
-            List.foldl
-                (\(Pause p _) d ->
-                    Quantity.plus p d
-                )
-                activeDuration
-                pauses
-
-        {- u -> 0-1 of the whole oscillation, including pauses
-           a -> 0-1 of the `active` oscillation, which does not include pausese
-           ^ this is what we use for feeding the osc function.
-
-           ps -> a list of pauses
-
-        -}
-        withPause u a ps =
-            case ps of
-                [] ->
-                    osc a
-
-                p :: [] ->
-                    case pauseToBounds p activeDuration totalDuration of
-                        ( start, end ) ->
-                            if u >= start && u <= end then
-                                -- this pause is currently happening
-                                pauseValue p
-
-                            else if u > end then
-                                -- this pause already happend
-                                -- "shrink" the active duration by the pause's duration
-                                let
-                                    pauseDuration =
-                                        end - start
-                                in
-                                osc (a - pauseDuration)
-
-                            else
-                                -- this pause hasn't happened yet
-                                osc a
-
-                p :: lookahead :: remain ->
-                    case pauseToBounds p activeDuration totalDuration of
-                        ( start, end ) ->
-                            if u >= start && u <= end then
-                                -- this pause is currently happening
-                                pauseValue p
-
-                            else if u > end then
-                                -- this pause already happend
-                                -- "shrink" the active duration by the pause's duration
-                                -- and possibly account for the gap between pauses.
-                                let
-                                    pauseDuration =
-                                        end - start
-
-                                    gap =
-                                        -- this is the gap between pauses
-                                        -- or "active" time
-                                        --
-                                        case pauseToBounds lookahead activeDuration totalDuration of
-                                            ( nextPauseStart, nextPauseEnd ) ->
-                                                if u >= nextPauseStart then
-                                                    nextPauseStart - end
-
-                                                else
-                                                    0
-                                in
-                                withPause u ((a + gap) - pauseDuration) (lookahead :: remain)
-
-                            else
-                                -- this pause hasn't happened yet
-                                osc a
-
-        fn u =
-            withPause u u pauses
-    in
-    ( fn, totalDuration )
