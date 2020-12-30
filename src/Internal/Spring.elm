@@ -2,6 +2,7 @@ module Internal.Spring exposing
     ( SpringParams
     , analytical
     , criticalDamping
+    , peaks
     , select
     , settlesAt
     , step
@@ -11,7 +12,7 @@ module Internal.Spring exposing
 
 import Duration
 import Internal.Time as Time
-
+import Internal.Bezier as Bezier
 
 {-| Calculate the position and velocity analytically instead of iteratively.
 
@@ -86,6 +87,89 @@ analytical spring duration target initial =
     }
 
 
+{-|-}
+segments : SpringParams -> List Bezier.Spline
+segments spring =
+    let
+        pks =
+            peaks spring
+                (toFloat 0)
+                1000
+                { velocity = 0
+                , position = 0
+                }
+
+    in
+    List.map2
+        (\one two -> 
+                let
+                posOne =
+                    analytical spring
+                        (Duration.milliseconds one)
+                        1000
+                        { velocity = 0
+                        , position = 0
+                        }
+                        
+                
+                posTwo =
+                    analytical spring
+                        (Duration.milliseconds two)
+                        1000
+                        { velocity = 0
+                        , position = 0
+                        }
+                        
+
+                -- factor = 0.05
+
+                -- spread = 0.1
+                factor = 0
+
+                spread = 0
+
+                offsetOne =
+                    (two - one) 
+                        -- * 0.257
+                        * ((0.33 - factor) - spread)
+
+                ctrlOne =
+                    -- + 90
+                        Bezier.Point ( ((one) + offsetOne)) ( (1000 - posOne.position))
+
+
+                offsetTwo =
+                    (two - one) 
+                        -- * 0.55182845698119
+                        * ((0.55 + factor) - spread)
+                
+                ctrlTwo =
+                    -- - 197
+                    Bezier.Point ( ((two) - offsetTwo)) ( (1000 - posTwo.position))
+                    
+                    -- 140
+
+                    -- 355
+
+                    -- 140 / 355 -> 0.39
+
+                    -- (355 - 140) / 355 -> 0.605
+
+                
+                
+
+            in
+            Bezier.Spline 
+                ( Bezier.Point ( one) ( (1000 - posOne.position)))
+                ctrlOne
+                ctrlTwo
+                ( Bezier.Point ( two) ( (1000 - posTwo.position)))
+            
+        )
+        pks
+        (List.drop 1 pks)
+
+
 zeroPoints :
     SpringParams
     -> Float
@@ -153,10 +237,12 @@ peaks spring ms target initial =
             dampingRatio * (c1 / inner)
 
         dampingRatio =
-            spring.damping / (2 * Basics.sqrt (spring.mass * spring.stiffness))
+            (spring.damping / (2 * Basics.sqrt (spring.mass * spring.stiffness)))
+                
 
         magicNumber =
             Basics.sqrt (spring.stiffness / spring.mass)
+                
 
         t k =
             (-1 / inner)

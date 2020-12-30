@@ -971,11 +971,15 @@ wave start end =
         --     start + total * normalized
         -- )
         [ { value = end
-          , timing = Interpolate.Linear
+          , timing =
+                -- Interpolate.Bezier (Interpolate.Spline 0 0.2 0.8 1)
+                Interpolate.Linear
           , time = 0.5
           }
         , { value = start
-          , timing = Interpolate.Linear
+          , timing =
+                -- Interpolate.Bezier (Interpolate.Spline 0 0.2 0.8 1)
+                Interpolate.Linear
           , time = 1
           }
         ]

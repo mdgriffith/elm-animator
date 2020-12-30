@@ -6,6 +6,7 @@ import Dict exposing (Dict)
 import Internal.Interpolate as Interpolate
 import Internal.Time as Time
 import Internal.Timeline as Timeline
+import Pixels
 import Set exposing (Set)
 
 
@@ -87,13 +88,45 @@ Example keyframes:
     }
 
 -}
-beziers :
-    (state -> Interpolate.Motion value)
+css :
+    String
+    -> (Float -> String)
+    -> (state -> Interpolate.Movement)
     -> Timeline.Timeline state
-    -> Sequence value
-beziers lookup timeline =
-    Timeline.foldp lookup (toSequence lookup) timeline
-        |> .sequence
+    -> CssAnim
+css name renderValue lookup timeline =
+    case Timeline.foldp lookup (toCss (Timeline.getCurrentTime timeline) name lookup) timeline of
+        result ->
+            result
+                |> finalize name renderValue
+                |> combine result.css
+
+
+type alias Frame =
+    { timestamp : Float
+    , value : Float
+    , timing : String
+    }
+
+
+finalize :
+    String
+    -> (Float -> String)
+    ->
+        { stack
+            | stackDuration : Float
+            , stackStart : Time.Absolute
+            , stack : List Frame
+        }
+    -> CssAnim
+finalize name renderValue stack =
+    { hash = ""
+
+    -- use single prop encoding:
+    -- https://developer.mozilla.org/en-US/docs/Web/CSS/animation
+    , animation = ""
+    , keyframes = ""
+    }
 
 
 {-| Every sequential event is visited.
@@ -103,22 +136,31 @@ If we're interrupted vefore visiting a state, then lerp is called.
 -> lerp always creates a totally new `KeyframeSet`
 
 -}
-toSequence :
-    (state -> Interpolate.Motion value)
+toCss :
+    Time.Absolute
+    -> String
+    -> (state -> Interpolate.Movement)
     ->
         Timeline.Interp state
-            (Interpolate.Motion value)
-            { sequence : Sequence value
+            Interpolate.Movement
+            { css : CssAnim
+            , stackDuration : Float
+            , stackStart : Time.Absolute
+            , stack : List Frame
+            , state : Interpolate.State
             }
-toSequence toMotion =
+toCss now name toMotion =
     { start =
         \motion ->
-            { sequence =
-                Sequence
-                    { duration = 0
-                    , keyframes = []
-                    , dwell = Nothing
-                    }
+            { css =
+                { hash = ""
+                , animation = ""
+                , keyframes = ""
+                }
+            , stackDuration = 0
+            , stackStart = now
+            , stack = []
+            , state = Interpolate.moving.start motion
             }
     , adjustor =
         \_ ->
@@ -128,56 +170,90 @@ toSequence toMotion =
             Nothing
     , visit =
         \lookup target targetTime maybeLookAhead data ->
-            case data.sequence of
-                Sequence seq ->
-                    let
-                        newKeyframe =
-                            Keyframe
-                                { value = target
-                                , timestamp = Time.inMilliseconds targetTime
-                                }
-                    in
-                    { sequence =
-                        Sequence
-                            { duration = seq.duration
-                            , keyframes =
-                                case seq.keyframes of
-                                    [] ->
-                                        seq.keyframes
+            let
+                state =
+                    Interpolate.moving.visit
+                        lookup
+                        target
+                        targetTime
+                        maybeLookAhead
+                        data.state
+            in
+            -- Add keyframe to current stack
+            -- if there is a lookahead, add timing fn for that lookahead
+            -- otherwise render the dwelling behavior as a separate anim
+            case maybeLookAhead of
+                Nothing ->
+                    -- capture
+                    --    - target pos
+                    --    - target time
+                    --    - no timing
+                    --
+                    -- if dwell
+                    --     - finalize stack
+                    --     - render and finalize dwell
+                    { css =
+                        data.css
+                    , stackDuration = data.stackDuration
+                    , stackStart = data.stackStart
+                    , stack =
+                        { timestamp = Time.inMilliseconds targetTime
+                        , value = Pixels.inPixels state.position
+                        , timing = ""
+                        }
+                            :: data.stack
+                    , state = state
+                    }
 
-                                    top :: remain ->
-                                        seq.keyframes
-                            , dwell = Nothing
-
-                            -- Maybe
-                            --     { period : Timeline.Period
-                            --     , keyframes : List (Keyframe value)
-                            --     }
-                            }
+                Just lookAhead ->
+                    -- capture
+                    --    - target pos
+                    --    - target time
+                    --    - capture timing to lookahead
+                    { css =
+                        data.css
+                    , stackDuration = 0
+                    , stackStart = data.stackStart
+                    , stack =
+                        { timestamp = Time.inMilliseconds targetTime
+                        , value = Pixels.inPixels state.position
+                        , timing = ""
+                        }
+                            :: data.stack
+                    , state = state
                     }
     , lerp =
-        \prevEndTime prev target targetTime now maybeLookAhead data ->
-            case data.sequence of
-                Sequence seq ->
-                    { sequence =
-                        Sequence
-                            { duration = seq.duration
-                            , keyframes =
-                                KeyframeSet
-                                    { duration = 0
-                                    , delay = 0
-                                    , repeat = 1
-                                    , keyframes = []
-                                    }
-                                    :: seq.keyframes
-                            , dwell = Nothing
+        \prevEndTime prev target targetTime now_IGNORE maybeLookAhead data ->
+            -- finalize current stack
+            -- create and finalizeTransition stack for the interruption
+            -- (but use the special transition finalizer which embeds timing outside of keyframes)
+            --
+            { css =
+                data.css
+            , stackDuration = 0
+            , stackStart = data.stackStart
+            , stack = []
+            , state =
+                Interpolate.moving.lerp
+                    prevEndTime
+                    prev
+                    target
+                    targetTime
+                    now_IGNORE
+                    maybeLookAhead
+                    data.state
+            }
+    }
 
-                            -- Maybe
-                            --     { period : Timeline.Period
-                            --     , keyframes : List (Keyframe value)
-                            --     }
-                            }
-                    }
+
+{-| -}
+type alias CssAnim =
+    { hash : String
+
+    -- use single prop encoding:
+    -- https://developer.mozilla.org/en-US/docs/Web/CSS/animation
+    , animation : String
+    , keyframes : String
     }
 
 
@@ -186,10 +262,10 @@ type alias Key =
 
 
 compoundSequence :
-    (state -> List ( Key, Interpolate.Motion value ))
+    (state -> List ( Key, Interpolate.Movement ))
     ->
         Timeline.Interp state
-            (Interpolate.Motion value)
+            Interpolate.Movement
             { sequence : Sequence (Dict Key Interpolate.Checkpoint)
             , transformConflict : Bool
             , keys : Set Key
@@ -308,15 +384,4 @@ combine one two =
     { hash = one.hash ++ two.hash
     , animation = one.animation ++ ", " ++ two.animation
     , keyframes = one.keyframes ++ "\n" ++ two.keyframes
-    }
-
-
-{-| -}
-type alias CssAnim =
-    { hash : String
-
-    -- use single prop encoding:
-    -- https://developer.mozilla.org/en-US/docs/Web/CSS/animation
-    , animation : String
-    , keyframes : String
     }

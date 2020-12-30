@@ -8,7 +8,7 @@ module Internal.Timeline exposing
     , current, arrivedAt, arrived, previous, upcoming
     , Line(..), Timetable(..)
     , foldp, capture, captureTimeline
-    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), atTime, foldpOld, gc, hasChanged, justInitialized, linearDefault, linesAreActive, previousEndTime, previousStartTime, updateWith
+    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), atTime, foldpOld, gc, getCurrentTime, hasChanged, justInitialized, linearDefault, linesAreActive, previousEndTime, previousStartTime, updateWith
     )
 
 {-|
@@ -390,6 +390,11 @@ getEvents (Timeline timeline) =
 atTime : Time.Posix -> Timeline event -> Timeline event
 atTime now (Timeline timeline) =
     Timeline { timeline | now = Time.absolute now }
+
+
+getCurrentTime : Timeline event -> Time.Absolute
+getCurrentTime (Timeline timeline) =
+    timeline.now
 
 
 update : Time.Posix -> Timeline event -> Timeline event

@@ -1,9 +1,9 @@
 module Internal.Interpolate exposing
-    ( Movement(..), State, derivativeOfEasing
+    ( Movement(..), State, derivativeOfEasing, Point
     , dwellPeriod
     , coloring, linearly, moving
     , fillDefaults, DefaultablePersonality(..), DefaultOr(..)
-    , Checkpoint, DefaultableMovement(..), Motion, Oscillator(..), Personality, Spline(..), Timing(..), createSpline, details, emptyDefaults, findAtXOnSpline, linearDefault, standardDefault, visit, withLinearDefault, withStandardDefault
+    , Checkpoint, DefaultableMovement(..), Oscillator(..), Personality, Timing(..), createSpline, details, emptyDefaults, linearDefault, standardDefault, visit, withLinearDefault, withStandardDefault
     )
 
 {-|
@@ -28,7 +28,7 @@ import Internal.Time as Time
 import Internal.Timeline as Timeline exposing (Period(..))
 import Pixels
 import Quantity
-
+import Internal.Bezier as Bezier
 
 {-| -}
 type DefaultableMovement
@@ -40,12 +40,6 @@ type DefaultableMovement
 type Movement
     = Osc Personality Float Period (List Checkpoint)
     | Pos Personality Float
-
-
-{-| -}
-type Motion value
-    = Osc2 Personality value (List ( Spline, value )) Period
-    | Pos2 Personality value
 
 
 type DefaultablePersonality
@@ -72,7 +66,7 @@ type alias Checkpoint =
 
 type Timing
     = Linear
-    | Bezier Spline
+    | Bezier Bezier.Spline
 
 
 {-| -}
@@ -330,7 +324,7 @@ unwrapUnits { position, velocity } =
     }
 
 
-moving : Timeline.Interp event Movement State
+moving : Timeline.Interp state Movement State
 moving =
     { start = startMoving
     , dwellPeriod = dwellPeriod
@@ -546,19 +540,11 @@ interpolateBetween startTimeInMs previous target targetTimeInMs now maybeLookAhe
                 }
 
         current =
-            findAtXOnSpline curve
-                now
-                -- tolerance
-                1
-                -- jumpSize
-                0.25
-                -- starting t
-                (guessTime now curve)
-                -- depth
-                0
+            Bezier.atX curve now
+               
 
         firstDerivative =
-            firstDerivativeOnSpline curve current.t
+            Bezier.firstDerivative curve current.t
 
         -- *NOTE* We'll probably want to do oscillation mixing in the future, but it's kinda involved.
         -- This would get you some of the way there (where maybeMixing has a postion/velocity to use instead)
@@ -710,19 +696,10 @@ atTiming timing percent start target =
         Bezier spline ->
             let
                 current =
-                    findAtXOnSpline spline
-                        percent
-                        -- tolerance
-                        1
-                        -- jumpSize
-                        0.25
-                        -- starting t
-                        (guessTime percent spline)
-                        -- depth
-                        0
-
+                    Bezier.atX spline percent
+                       
                 firstDerivative =
-                    firstDerivativeOnSpline spline current.t
+                    Bezier.firstDerivative spline current.t
             in
             { position =
                 current.point.y
@@ -734,15 +711,6 @@ atTiming timing percent start target =
                     |> (*) 1000
                     |> Pixels.pixelsPerSecond
             }
-
-
-guessTime : Float -> Spline -> Float
-guessTime now (Spline one two three four) =
-    if (four.x - one.x) == 0 then
-        0.5
-
-    else
-        (now - one.x) / (four.x - one.x)
 
 
 {-| -}
@@ -794,6 +762,19 @@ newVelocityAtTarget target targetTime maybeLookAhead =
                             (Time.millis lookAhead.time)
 
 
+zeroPoint : Point
+zeroPoint =
+    { x = 0
+    , y = 0
+    }
+
+
+type alias Point =
+    { x : Float
+    , y : Float
+    }
+
+
 createSpline :
     { start : Point
     , startVelocity : Point
@@ -802,7 +783,7 @@ createSpline :
     , endVelocity : Point
     , arrival : Personality
     }
-    -> Spline
+    -> Bezier.Spline
 createSpline config =
     let
         totalX =
@@ -872,7 +853,7 @@ createSpline config =
 
 
     -}
-    Spline
+    Bezier.Spline
         config.start
         { x = config.start.x + ((1 / 3) * startVelocity.x)
         , y = config.start.y + ((1 / 3) * startVelocity.y)
@@ -1062,261 +1043,3 @@ mix fnA fnB weightB percent =
     ((1 - weightB) * a) + (weightB * b)
 
 
-
-{- A mini embedded elm-geometry because I didn't want to impose it as a dependency.
-
-   However!  It's definitely a package worth checking out!
-
-   https://package.elm-lang.org/packages/ianmackenzie/elm-geometry/3.1.0/
-
-   Thanks Ian!
-
--}
-
-
-type Spline
-    = Spline Point Point Point Point
-
-
-zeroPoint : Point
-zeroPoint =
-    { x = 0
-    , y = 0
-    }
-
-
-type alias Point =
-    { x : Float
-    , y : Float
-    }
-
-
-scaleBy : Float -> Point -> Point
-scaleBy n { x, y } =
-    { x = x * n
-    , y = y * n
-    }
-
-
-translateBy : Point -> Point -> Point
-translateBy delta { x, y } =
-    { x = x + delta.x
-    , y = y + delta.y
-    }
-
-
-interpolatePoints : Point -> Point -> Float -> Point
-interpolatePoints p1 p2 t =
-    if t <= 0.5 then
-        { x = p1.x + t * (p2.x - p1.x)
-        , y = p1.y + t * (p2.y - p1.y)
-        }
-
-    else
-        { x = p2.x + (1 - t) * (p1.x - p2.x)
-        , y = p2.y + (1 - t) * (p1.y - p2.y)
-        }
-
-
-interpolateValue : Float -> Float -> Float -> Float
-interpolateValue start end t =
-    if t <= 0.5 then
-        start + t * (end - start)
-
-    else
-        end + (1 - t) * (start - end)
-
-
-{-| Borrowed from: <https://github.com/ianmackenzie/elm-geometry/blob/3.1.0/src/CubicSpline2d.elm#L370>
--}
-pointOn : Spline -> Proportion -> Point
-pointOn ((Spline p1 p2 p3 p4) as s) proportion =
-    let
-        q1 =
-            interpolatePoints p1 p2 proportion
-
-        q2 =
-            interpolatePoints p2 p3 proportion
-
-        q3 =
-            interpolatePoints p3 p4 proportion
-
-        r1 =
-            interpolatePoints q1 q2 proportion
-
-        r2 =
-            interpolatePoints q2 q3 proportion
-    in
-    interpolatePoints r1 r2 proportion
-
-
-{-| Borrowed from: <https://github.com/ianmackenzie/elm-geometry/blob/3.1.0/src/CubicSpline2d.elm#L778>
--}
-firstDerivativeOnSpline : Spline -> Proportion -> Point
-firstDerivativeOnSpline (Spline p1 p2 p3 p4) proportion =
-    let
-        vx1 =
-            p2.x - p1.x
-
-        vy1 =
-            p2.y - p1.y
-
-        vx2 =
-            p3.x - p2.x
-
-        vy2 =
-            p3.y - p2.y
-
-        vx3 =
-            p4.x - p3.x
-
-        vy3 =
-            p4.y - p3.y
-
-        wx1 =
-            interpolateValue vx1 vx2 proportion
-
-        wy1 =
-            interpolateValue vy1 vy2 proportion
-
-        wx2 =
-            interpolateValue vx2 vx3 proportion
-
-        wy2 =
-            interpolateValue vy2 vy3 proportion
-    in
-    { x =
-        3 * interpolateValue wx1 wx2 proportion
-    , y =
-        3 * interpolateValue wy1 wy2 proportion
-    }
-
-
-{-| Borrowed from: <https://github.com/ianmackenzie/elm-geometry/blob/3.1.0/src/CubicSpline2d.elm#L858>
--}
-secondDerivativeOnSpline : Spline -> Proportion -> Point
-secondDerivativeOnSpline (Spline p1 p2 p3 p4) proportion =
-    let
-        u1 =
-            { x = p2.x - p1.x
-            , y = p2.y - p1.y
-            }
-
-        u2 =
-            { x = p3.x - p2.x
-            , y = p3.y - p2.y
-            }
-
-        u3 =
-            { x = p4.x - p3.x
-            , y = p4.y - p3.y
-            }
-
-        v1 =
-            { x = u2.x - u1.x
-            , y = u2.y - u1.y
-            }
-
-        v2 =
-            { x = u3.x - u2.x
-            , y = u3.y - u2.y
-            }
-    in
-    scaleBy 6 (interpolatePoints v1 v2 proportion)
-
-
-{-| Once we have a bezier curve, we need to find the value of y at a given x.
-
-A simple way to do this is just a binary search, which is what this does.
-
-However we could use Newton's Method:
-<https://en.wikipedia.org/wiki/Newton%27s_method>
-<http://greweb.me/2012/02/bezier-curve-based-easing-functions-from-concept-to-implementation/>
-
-OR (and I'm not 100% on this one), we could use Cardano's method:
-
-as explained here:
-<https://stackoverflow.com/questions/51879836/cubic-bezier-curves-get-y-for-given-x-special-case-where-x-of-control-points/51883347#51883347>
-
--}
-findAtXOnSpline : Spline -> Float -> Float -> Float -> Float -> Int -> { point : { x : Float, y : Float }, t : Float }
-findAtXOnSpline ((Spline p1 p2 p3 p4) as spline) desiredX tolerance jumpSize t depth =
-    let
-        point =
-            if t <= 0.5 then
-                let
-                    q1 =
-                        { x = p1.x + t * (p2.x - p1.x)
-                        , y = p1.y + t * (p2.y - p1.y)
-                        }
-
-                    q2 =
-                        { x = p2.x + t * (p3.x - p2.x)
-                        , y = p2.y + t * (p3.y - p2.y)
-                        }
-
-                    q3 =
-                        { x = p3.x + t * (p4.x - p3.x)
-                        , y = p3.y + t * (p4.y - p3.y)
-                        }
-
-                    r1 =
-                        { x = q1.x + t * (q2.x - q1.x)
-                        , y = q1.y + t * (q2.y - q1.y)
-                        }
-
-                    r2 =
-                        { x = q2.x + t * (q3.x - q2.x)
-                        , y = q2.y + t * (q3.y - q2.y)
-                        }
-                in
-                { x = r1.x + t * (r2.x - r1.x)
-                , y = r1.y + t * (r2.y - r1.y)
-                }
-
-            else
-                let
-                    q1 =
-                        { x = p2.x + (1 - t) * (p1.x - p2.x)
-                        , y = p2.y + (1 - t) * (p1.y - p2.y)
-                        }
-
-                    q2 =
-                        { x = p3.x + (1 - t) * (p2.x - p3.x)
-                        , y = p3.y + (1 - t) * (p2.y - p3.y)
-                        }
-
-                    q3 =
-                        { x = p4.x + (1 - t) * (p3.x - p4.x)
-                        , y = p4.y + (1 - t) * (p3.y - p4.y)
-                        }
-
-                    r1 =
-                        { x = q2.x + (1 - t) * (q1.x - q2.x)
-                        , y = q2.y + (1 - t) * (q1.y - q2.y)
-                        }
-
-                    r2 =
-                        { x = q3.x + (1 - t) * (q2.x - q3.x)
-                        , y = q3.y + (1 - t) * (q2.y - q3.y)
-                        }
-                in
-                { x = r2.x + (1 - t) * (r1.x - r2.x)
-                , y = r2.y + (1 - t) * (r1.y - r2.y)
-                }
-    in
-    if depth == 10 then
-        { point = point
-        , t = t
-        }
-
-    else if abs (point.x - desiredX) < 1 && abs (point.x - desiredX) >= 0 then
-        { point = point
-        , t = t
-        }
-
-    else if (point.x - desiredX) > 0 then
-        findAtXOnSpline spline desiredX tolerance (jumpSize / 2) (t - jumpSize) (depth + 1)
-
-    else
-        findAtXOnSpline spline desiredX tolerance (jumpSize / 2) (t + jumpSize) (depth + 1)
