@@ -12,7 +12,7 @@ import Internal.Timeline as Timeline
 import Pixels
 import Random
 import Time
-
+import Internal.Bezier as Bezier
 
 suite =
     Benchmark.describe "Animator benchmarks"
@@ -85,6 +85,16 @@ foldp =
                     }
                     timeline
 
+
+        , benchmark "Visit" <|
+            \_ ->
+                Interpolate.visit identity 
+                    (Timeline.Occurring (Interpolate.Pos Interpolate.standardDefault 20)  (Time.millis 100) (Time.millis 900))
+                    (Time.millis 500)
+                    Nothing
+                    { position = Pixels.pixels 0
+                    , velocity = Pixels.pixelsPerSecond 0
+                    }
 
         ]
 
@@ -302,14 +312,6 @@ interpolationComponents =
                     }
         , benchmark "Find x on spline" <|
             \_ ->
-                Interpolate.findAtXOnSpline baseSpline
-                    625
-                    -- tolerance
-                    1
-                    -- jumpSize
-                    0.25
-                    -- starting t
-                    0.5
-                    -- depth
-                    0
+                Bezier.atX baseSpline 625
+                 
         ]
