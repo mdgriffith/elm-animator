@@ -1,23 +1,17 @@
-module Internal.Bezier exposing (Spline(..),Point,  pointOn, firstDerivative, secondDerivative, atX)
+module Internal.Bezier exposing (Point, Spline(..), atX, firstDerivative, normalize, pointOn, secondDerivative)
 
+{-| This module defines types and functions for cubic bezier splines.
 
+This is a mini embedded elm-geometry because I didn't want to impose it as a dependency.
 
+However! It's definitely a package worth checking out!
 
+<https://package.elm-lang.org/packages/ianmackenzie/elm-geometry/3.1.0/>
 
-{-|
-This module defines types and functions for cubic bezier splines.
-
-
-
-   This is a mini embedded elm-geometry because I didn't want to impose it as a dependency.
-
-   However!  It's definitely a package worth checking out!
-
-   https://package.elm-lang.org/packages/ianmackenzie/elm-geometry/3.1.0/
-
-   Thanks Ian!
+Thanks Ian!
 
 -}
+
 
 {-| Number betwen 0 and 1
 -}
@@ -42,8 +36,6 @@ type alias Point =
     }
 
 
-
-
 scaleBy : Float -> Point -> Point
 scaleBy n { x, y } =
     { x = x * n
@@ -56,8 +48,6 @@ translateBy delta { x, y } =
     { x = x + delta.x
     , y = y + delta.y
     }
-
-
 
 
 interpolatePoints : Point -> Point -> Float -> Point
@@ -180,11 +170,9 @@ secondDerivative (Spline p1 p2 p3 p4) proportion =
     scaleBy 6 (interpolatePoints v1 v2 proportion)
 
 
-
 atX : Spline -> Float -> { point : { x : Float, y : Float }, t : Float }
 atX spline x =
     atXHelper spline x 0.25 (guessTime x spline) 0
-
 
 
 guessTime : Float -> Spline -> Float
@@ -196,11 +184,9 @@ guessTime now (Spline one two three four) =
         (now - one.x) / (four.x - one.x)
 
 
-
 atXTolerance : Float
 atXTolerance =
     1
-
 
 
 {-| Once we have a bezier curve, we need to find the value of y at a given x.
@@ -299,3 +285,31 @@ atXHelper ((Spline p1 p2 p3 p4) as spline) desiredX jumpSize t depth =
     else
         atXHelper spline desiredX (jumpSize / 2) (t + jumpSize) (depth + 1)
 
+
+{-| Takes a bezier and shrinks it so that the domain of c0:c3 is
+
+    0,0:1,1
+
+-}
+normalize : Spline -> Spline
+normalize (Spline c0 c1 c2 c3) =
+    let
+        factorX =
+            c3.x - c0.x
+
+        factorY =
+            c3.y - c0.y
+    in
+    Spline
+        { x = 0
+        , y = 0
+        }
+        { x = (c1.x - c0.x) / factorX
+        , y = (c1.y - c0.y) / factorY
+        }
+        { x = (c2.x - c0.x) / factorX
+        , y = (c2.y - c0.y) / factorY
+        }
+        { x = 1
+        , y = 1
+        }
