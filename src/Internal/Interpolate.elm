@@ -1,9 +1,9 @@
 module Internal.Interpolate exposing
-    ( Movement(..), State, derivativeOfEasing, Point
+    ( Movement(..), State, derivativeOfEasing
     , dwellPeriod
     , coloring, linearly, moving
     , fillDefaults, DefaultablePersonality(..), DefaultOr(..)
-    , Checkpoint, DefaultableMovement(..), Oscillator(..), Personality, Timing(..), createSpline, details, emptyDefaults, linearDefault, standardDefault, visit, withLinearDefault, withStandardDefault
+    , Checkpoint, DefaultableMovement(..), Oscillator(..), Personality, Point, Timing(..), createSpline, details, emptyDefaults, lerpSplines, linearDefault, standardDefault, visit, withLinearDefault, withStandardDefault
     )
 
 {-|
@@ -23,12 +23,13 @@ module Internal.Interpolate exposing
 import Color
 import Duration
 import Html.Events exposing (preventDefaultOn)
+import Internal.Bezier as Bezier
 import Internal.Spring as Spring
 import Internal.Time as Time
 import Internal.Timeline as Timeline exposing (Period(..))
 import Pixels
 import Quantity
-import Internal.Bezier as Bezier
+
 
 {-| -}
 type DefaultableMovement
@@ -407,6 +408,89 @@ type alias Milliseconds =
     Float
 
 
+lerpSplines : Milliseconds -> Movement -> Movement -> Milliseconds -> Maybe (Timeline.LookAhead Movement) -> State -> List Bezier.Spline
+lerpSplines prevEndTime prev target targetTime maybeLookAhead state =
+    let
+        wobble =
+            case target of
+                Osc personality _ _ _ ->
+                    personality.wobbliness
+
+                Pos personality _ ->
+                    personality.wobbliness
+
+        shouldWobble =
+            case maybeLookAhead of
+                Nothing ->
+                    wobble /= 0
+
+                _ ->
+                    False
+
+        targetPos =
+            case target of
+                Osc _ x period decoration ->
+                    x
+
+                Pos _ x ->
+                    x
+    in
+    if shouldWobble then
+        let
+            params =
+                Spring.select wobble
+                    (Time.duration
+                        (Time.millis prevEndTime)
+                        (Time.millis targetTime)
+                    )
+        in
+        Spring.segments params
+            { position = Pixels.inPixels state.position
+            , velocity = Pixels.inPixelsPerSecond state.velocity
+            }
+            targetPos
+
+    else
+        let
+            targetVelocity =
+                newVelocityAtTarget target prevEndTime maybeLookAhead
+                    |> Pixels.inPixelsPerSecond
+        in
+        [ createSpline
+            { start =
+                { x = prevEndTime
+                , y = Pixels.inPixels state.position
+                }
+            , startVelocity =
+                { x = 1000
+                , y = Pixels.inPixelsPerSecond state.velocity
+                }
+            , departure =
+                case prev of
+                    Pos personality _ ->
+                        personality
+
+                    Osc personality _ _ _ ->
+                        personality
+            , end =
+                { x = prevEndTime
+                , y = targetPos
+                }
+            , endVelocity =
+                { x = 1000
+                , y = targetVelocity
+                }
+            , arrival =
+                case target of
+                    Pos personality _ ->
+                        personality
+
+                    Osc personality _ _ _ ->
+                        personality
+            }
+        ]
+
+
 lerp : Milliseconds -> Movement -> Movement -> Milliseconds -> Milliseconds -> Maybe (Timeline.LookAhead Movement) -> State -> State
 lerp prevEndTime prev target targetTime now maybeLookAhead state =
     let
@@ -541,7 +625,6 @@ interpolateBetween startTimeInMs previous target targetTimeInMs now maybeLookAhe
 
         current =
             Bezier.atX curve now
-               
 
         firstDerivative =
             Bezier.firstDerivative curve current.t
@@ -697,7 +780,7 @@ atTiming timing percent start target =
             let
                 current =
                     Bezier.atX spline percent
-                       
+
                 firstDerivative =
                     Bezier.firstDerivative spline current.t
             in
@@ -1041,5 +1124,3 @@ mix fnA fnB weightB percent =
     in
     -- a + weightB * (b - a)
     ((1 - weightB) * a) + (weightB * b)
-
-
