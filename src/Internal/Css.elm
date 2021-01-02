@@ -3,6 +3,8 @@ module Internal.Css exposing (..)
 {-| -}
 
 import Dict exposing (Dict)
+import Duration
+import Internal.Bezier as Bezier
 import Internal.Interpolate as Interpolate
 import Internal.Time as Time
 import Internal.Timeline as Timeline
@@ -52,18 +54,6 @@ emptySequence =
         }
 
 
-type alias Bezier =
-    { one : Point
-    , oneControl : Point
-    , two : Point
-    , twoControl : Point
-    }
-
-
-type alias Point =
-    { x : Float, y : Float }
-
-
 {-| From this we need to render css @keyframes
 
 Example keyframes:
@@ -95,31 +85,79 @@ css :
     -> Timeline.Timeline state
     -> CssAnim
 css name renderValue lookup timeline =
-    case Timeline.foldp lookup (toCss (Timeline.getCurrentTime timeline) name lookup) timeline of
+    let
+        now =
+            Timeline.getCurrentTime timeline
+    in
+    case Timeline.foldp lookup (toCss now name renderValue lookup) timeline of
         result ->
             result
-                |> finalize name renderValue
+                |> finalize name renderValue now
                 |> combine result.css
-
-
-type alias Frame =
-    { timestamp : Float
-    , value : Float
-    , timing : String
-    }
 
 
 finalize :
     String
     -> (Float -> String)
+    -> Time.Absolute
     ->
         { stack
-            | stackDuration : Float
-            , stackStart : Time.Absolute
-            , stack : List Frame
+            | stackStart : Time.Absolute
+            , stackEnd : Time.Absolute
+            , stack : List Interpolate.Checkpoint
         }
     -> CssAnim
-finalize name renderValue stack =
+finalize name renderValue now stack =
+    let
+        animationName =
+            name ++ "-"
+
+        durationStr =
+            String.fromFloat (Duration.inMilliseconds (Time.duration stack.stackStart stack.stackEnd)) ++ "ms"
+
+        delay =
+            Time.duration now stack.stackStart
+                |> Duration.inMilliseconds
+                |> String.fromFloat
+                |> (\s -> s ++ "ms")
+
+        -- @keyframes duration | easing-function | delay |
+        --      iteration-count | direction | fill-mode | play-state | name */
+        -- animation: 3s ease-in 1s 2 reverse both paused slidein;
+        animation =
+            "animation: "
+                ++ (durationStr ++ " ")
+                -- we specify an easing function here because it we have to
+                -- , but it is overridden by the one in keyframes
+                ++ "linear "
+                ++ delay
+                ++ " 1 normal forward running "
+                ++ animationName
+                ++ ";"
+
+        keyframes =
+            "@keyframes {"
+                ++ checkpointKeyframes name
+                    renderValue
+                    stack.stack
+                    ""
+                ++ "}"
+    in
+    { hash = animationName
+    , animation = animation
+    , keyframes = keyframes
+    }
+
+
+finalizeTransition :
+    String
+    -> (Float -> String)
+    -> Time.Absolute
+    -> List Bezier.Spline
+    -> Time.Absolute
+    -> Time.Duration
+    -> CssAnim
+finalizeTransition name renderValue now splines start totalDuration =
     { hash = ""
 
     -- use single prop encoding:
@@ -139,17 +177,18 @@ If we're interrupted vefore visiting a state, then lerp is called.
 toCss :
     Time.Absolute
     -> String
+    -> (Float -> String)
     -> (state -> Interpolate.Movement)
     ->
         Timeline.Interp state
             Interpolate.Movement
             { css : CssAnim
-            , stackDuration : Float
             , stackStart : Time.Absolute
-            , stack : List Frame
+            , stackEnd : Time.Absolute
+            , stack : List Interpolate.Checkpoint
             , state : Interpolate.State
             }
-toCss now name toMotion =
+toCss now name renderValue toMotion =
     { start =
         \motion ->
             { css =
@@ -157,8 +196,8 @@ toCss now name toMotion =
                 , animation = ""
                 , keyframes = ""
                 }
-            , stackDuration = 0
             , stackStart = now
+            , stackEnd = now
             , stack = []
             , state = Interpolate.moving.start motion
             }
@@ -192,18 +231,39 @@ toCss now name toMotion =
                     -- if dwell
                     --     - finalize stack
                     --     - render and finalize dwell
-                    { css =
-                        data.css
-                    , stackDuration = data.stackDuration
-                    , stackStart = data.stackStart
-                    , stack =
-                        { timestamp = Time.inMilliseconds targetTime
-                        , value = Pixels.inPixels state.position
-                        , timing = ""
+                    let
+                        newStack =
+                            { time = Time.inMilliseconds targetTime
+                            , value = Pixels.inPixels state.position
+                            , timing = Interpolate.Linear
+                            }
+                                :: data.stack
+
+                        final =
+                            { css = data.css
+                            , stackStart = data.stackStart
+                            , stackEnd = data.stackEnd
+                            , stack =
+                                newStack
+                            , state = state
+                            }
+                    in
+                    addDwell lookup
+                        name
+                        renderValue
+                        target
+                        targetTime
+                        now
+                        state
+                        { css =
+                            final
+                                |> finalize name renderValue now
+                                |> combine data.css
+                        , stackStart = targetTime
+                        , stackEnd = targetTime
+                        , stack = []
+                        , state = state
                         }
-                            :: data.stack
-                    , state = state
-                    }
 
                 Just lookAhead ->
                     -- capture
@@ -212,12 +272,12 @@ toCss now name toMotion =
                     --    - capture timing to lookahead
                     { css =
                         data.css
-                    , stackDuration = 0
                     , stackStart = data.stackStart
+                    , stackEnd = data.stackEnd
                     , stack =
-                        { timestamp = Time.inMilliseconds targetTime
+                        { time = Time.inMilliseconds targetTime
                         , value = Pixels.inPixels state.position
-                        , timing = ""
+                        , timing = Interpolate.Linear
                         }
                             :: data.stack
                     , state = state
@@ -227,11 +287,36 @@ toCss now name toMotion =
             -- finalize current stack
             -- create and finalizeTransition stack for the interruption
             -- (but use the special transition finalizer which embeds timing outside of keyframes)
-            --
+            let
+                transitionSplines =
+                    Interpolate.lerpSplines
+                        prevEndTime
+                        prev
+                        target
+                        targetTime
+                        maybeLookAhead
+                        data.state
+            in
             { css =
-                data.css
-            , stackDuration = 0
-            , stackStart = data.stackStart
+                finalize name renderValue now data
+                    |> combine data.css
+                    |> combine
+                        (finalize name
+                            renderValue
+                            now
+                            { stackStart = Time.millis prevEndTime
+                            , stackEnd = Time.millis targetTime
+                            , stack =
+                                normalizeToCheckpoints
+                                    (Time.duration
+                                        (Time.millis prevEndTime)
+                                        (Time.millis targetTime)
+                                    )
+                                    transitionSplines
+                            }
+                        )
+            , stackStart = Time.millis targetTime
+            , stackEnd = Time.millis targetTime
             , stack = []
             , state =
                 Interpolate.moving.lerp
@@ -244,6 +329,152 @@ toCss now name toMotion =
                     data.state
             }
     }
+
+
+normalizeToCheckpoints : Time.Duration -> List Bezier.Spline -> List Interpolate.Checkpoint
+normalizeToCheckpoints duration splines =
+    List.map (toCheckpoint duration) splines
+
+
+toCheckpoint : Time.Duration -> Bezier.Spline -> Interpolate.Checkpoint
+toCheckpoint duration ((Bezier.Spline c0 c1 c2 c3) as spline) =
+    { value = c3.y
+    , timing = Interpolate.Bezier (Bezier.normalize spline)
+    , time = c3.x
+    }
+
+
+addDwell :
+    (state -> Interpolate.Movement)
+    -> String
+    -> (Float -> String)
+    -> Timeline.Occurring state
+    -> Time.Absolute
+    -> Time.Absolute
+    -> Interpolate.State
+    ->
+        { css : CssAnim
+        , stackStart : Time.Absolute
+        , stackEnd : Time.Absolute
+        , stack : List Interpolate.Checkpoint
+        , state : Interpolate.State
+        }
+    ->
+        { css : CssAnim
+        , stackStart : Time.Absolute
+        , stackEnd : Time.Absolute
+        , stack : List Interpolate.Checkpoint
+        , state : Interpolate.State
+        }
+addDwell lookup name renderValue target startTime now state details =
+    case lookup (Timeline.getEvent target) of
+        Interpolate.Osc personality startPos period checkpoints ->
+            let
+                animationName =
+                    name ++ "-dwell"
+
+                durationStr =
+                    String.fromFloat (Duration.inMilliseconds duration) ++ "ms"
+
+                duration =
+                    case period of
+                        Timeline.Loop dur ->
+                            dur
+
+                        Timeline.Repeat n dur ->
+                            dur
+
+                delay =
+                    Time.duration now startTime
+                        |> Duration.inMilliseconds
+                        |> String.fromFloat
+                        |> (\s -> s ++ "ms")
+
+                iterationCount =
+                    case period of
+                        Timeline.Loop dur ->
+                            "infinite"
+
+                        Timeline.Repeat n dur ->
+                            String.fromInt n
+
+                -- @keyframes duration | easing-function | delay |
+                --      iteration-count | direction | fill-mode | play-state | name */
+                -- animation: 3s ease-in 1s 2 reverse both paused slidein;
+                animation =
+                    "animation: "
+                        ++ (durationStr ++ " ")
+                        -- we specify an easing function here because it we have to
+                        -- , but it is overridden by the one in keyframes
+                        ++ "linear "
+                        ++ (delay ++ " ")
+                        ++ iterationCount
+                        ++ " normal forward running "
+                        ++ animationName
+                        ++ ";"
+
+                keyframes =
+                    "@keyframes {"
+                        ++ checkpointKeyframes name
+                            renderValue
+                            checkpoints
+                            ""
+                        ++ "}"
+
+                new =
+                    { hash = animationName
+                    , animation = animation
+                    , keyframes = keyframes
+                    }
+            in
+            { details
+                | css =
+                    combine details.css new
+            }
+
+        Interpolate.Pos _ _ ->
+            details
+
+
+checkpointKeyframes : String -> (Float -> String) -> List Interpolate.Checkpoint -> String -> String
+checkpointKeyframes name renderValue checkpoints rendered =
+    case checkpoints of
+        [] ->
+            rendered
+
+        top :: remaining ->
+            let
+                percentage =
+                    String.fromFloat (top.time * 100) ++ "%"
+
+                frame =
+                    percentage
+                        ++ "{"
+                        ++ (name ++ ":" ++ renderValue top.value ++ ";")
+                        ++ ("animation-timing-function:" ++ renderTiming top.timing ++ ";")
+                        ++ "}"
+            in
+            checkpointKeyframes name
+                renderValue
+                remaining
+                (rendered ++ frame)
+
+
+renderTiming : Interpolate.Timing -> String
+renderTiming timing =
+    case timing of
+        Interpolate.Linear ->
+            "linear"
+
+        Interpolate.Bezier (Bezier.Spline c0 c1 c2 c3) ->
+            -- the spline passed here needs to be normalized over 0-1
+            -- and then we only need to pass the two control points to the css animation
+            "cubic-bezier("
+                ++ (String.fromFloat c1.x ++ ", ")
+                ++ (String.fromFloat c1.y ++ ", ")
+                ++ (String.fromFloat c2.x ++ ", ")
+                ++ String.fromFloat c2.y
+                ++ ")"
 
 
 {-| -}
