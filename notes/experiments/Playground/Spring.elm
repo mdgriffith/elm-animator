@@ -1,4 +1,4 @@
-module SpringPlayground exposing (main)
+module Playgroun.Spring exposing (main)
 
 import Browser
 import Html exposing (Html, button, div, h1, text)
@@ -10,6 +10,7 @@ import Internal.Spring as Spring
 import Duration
 import Internal.Interpolate as Interpolate
 import Internal.Bezier as Bezier
+import Internal.Css as Css
 
 
 {- Welcome to the Spring Playground!
@@ -50,6 +51,7 @@ basic =
     -- Spring.select 0.5 (Duration.milliseconds 1000)
     Spring.select 0.5 (Duration.milliseconds 1000)
         |> Debug.log "params"
+        
 
 full : Spring.SpringParams
 full =
@@ -63,6 +65,7 @@ null =
     -- Spring.select 0.5 (Duration.milliseconds 1000)
     Spring.select 0 (Duration.milliseconds 1000)
         |> Debug.log "params"
+       
 
 
 
