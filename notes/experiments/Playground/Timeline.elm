@@ -152,37 +152,39 @@ viewBody model =
             , SvgA.style "border: 4px dashed #eee;"
             ]
             [ viewTimeline model.timeline
-            --     line Faded 
-            --     (onGrid 0 0)
-            --     (onGrid 1 0)
-            -- , line Normal
-            --     { x = 50
-            --     , y = 250
-            --     }
-            --     { x = 200
-            --     , y = 250
-            --     }
-            -- , line Highlight
-            --     { x = 50
-            --     , y = 550
-            --     }
-            --     { x = 200
-            --     , y = 550
-            --     }
+            ]
+        , viewCss model.timeline
+        ]
 
-            -- , dot Faded 
-            --     { x = 50
-            --     , y = 50
-            --     }
-
-            -- , dot Normal
-            --     { x = 50
-            --     , y = 550
-            --     }
-            --  , dot Highlight
-            --     { x = 200
-            --     , y = 250
-            --     }
+viewCss timeline =
+    let
+        css =
+            Css.css "prop" 
+                (\x -> String.fromFloat x ++ "px")
+                (\(State state) ->
+                    Interpolate.Pos Interpolate.standardDefault (toFloat (state * 100))
+                
+                )
+                timeline
+    in
+    div 
+        [Attr.style "position" "fixed"
+        , Attr.style "left" "100px"
+        , Attr.style "bottom" "100px"
+        , Attr.style "white-space" "pre" 
+        , Attr.style "font-family" "monospace" 
+        ] 
+        [ Html.h2 [] [Html.text "HASH"]
+        , div [] 
+            [ Html.text  css.hash
+            ]
+        , Html.h2 [] [Html.text "ANIM"]
+        , div [] 
+            [ Html.text css.animation
+            ]
+        , Html.h2 [] [Html.text "KEYFRAMES"]
+        , div [] 
+            [ Html.text css.keyframes
             ]
         ]
 
@@ -190,7 +192,7 @@ viewTimeline (Timeline.Timeline timeline) =
     Svg.g [] 
         (case timeline.events of
             Timeline.Timetable lines ->
-                case Debug.log "lines" lines of
+                case lines of
                     [] ->
                         [ Svg.text "whoops, nothing here" ]
                     (top :: remaining) ->
@@ -201,8 +203,14 @@ viewTimeline (Timeline.Timeline timeline) =
                                     , row = 0
                                     , rendered = []
                                     }
+
+                            (new, point) =
+                                position timeline.now {rendered | row = 0}
+
+                            cursor =
+                                dot Highlight point
                         in
-                        List.reverse rendered.rendered
+                        List.reverse (cursor :: rendered.rendered)
         )
 
 
@@ -215,29 +223,23 @@ type Timemap =
 -}
 lookup : Time.Absolute -> Timemap -> (Timemap, Float)
 lookup time (Timemap timemap) =
-    
-    -- Debug.log "map" <|
-        case timemap of
-            [] ->
-                (Timemap [(time, 0)], 0)
-            (lastTime, lastVal) :: remain ->
-                if Time.thisAfterThat time lastTime then
-                    ( Timemap ((time, lastVal + 1):: timemap)
-                    , lastVal + 1
-                    )
-                else if lastTime == time then
-                    ( Timemap timemap
-                    , lastVal
-                    )
+    case timemap of
+        [] ->
+            (Timemap [(time, 0)], 0)
+        (lastTime, lastVal) :: remain ->
+            if Time.thisAfterThat time lastTime then
+                ( Timemap ((time, lastVal + 1):: timemap)
+                , lastVal + 1
+                )
+            else if lastTime == time then
+                ( Timemap timemap
+                , lastVal
+                )
 
-                else
-                    let
-                        _ = Debug.log "lookup" (time, timemap)
-
-                    in
-                    ( Timemap timemap
-                    , lookupHelper time timemap
-                    )
+            else
+                ( Timemap timemap
+                , lookupHelper time timemap
+                )
 
 
 lookupHelper time timemap =
@@ -245,7 +247,7 @@ lookupHelper time timemap =
         [] ->
             0
         (lastTime, lastVal) :: remain ->
-            if Debug.log "eq" <| Time.equal lastTime time then
+            if Time.equal lastTime time then
                 lastVal
             else 
                 case remain of
