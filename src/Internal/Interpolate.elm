@@ -1,7 +1,7 @@
 module Internal.Interpolate exposing
     ( Movement(..), State, derivativeOfEasing
     , dwellPeriod
-    , coloring, linearly, moving
+    , coloring, linearly, moving, takeBefore
     , fillDefaults, DefaultablePersonality(..), DefaultOr(..)
     , Checkpoint, DefaultableMovement(..), Oscillator(..), Personality, Point, Timing(..), createSpline, details, emptyDefaults, lerpSplines, linearDefault, standardDefault, visit, withLinearDefault, withStandardDefault
     )
@@ -371,6 +371,15 @@ visit :
     -> State
 visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeLookAhead state =
     let
+        _ = Debug.log "    visit" event
+
+        _ = Debug.log "    details"
+            { event = event
+            , move = lookup event
+            , now = now
+            , state = state
+            }
+        
         dwellTime =
             case maybeLookAhead of
                 Nothing ->
@@ -473,7 +482,7 @@ lerpSplines prevEndTime prev target targetTime maybeLookAhead state =
                     Osc personality _ _ _ ->
                         personality
             , end =
-                { x = prevEndTime
+                { x = targetTime
                 , y = targetPos
                 }
             , endVelocity =
@@ -490,10 +499,46 @@ lerpSplines prevEndTime prev target targetTime maybeLookAhead state =
             }
         ]
 
+takeBefore : Milliseconds -> List Bezier.Spline -> List Bezier.Spline
+takeBefore cutoff splines =
+    (takeBeforeHelper cutoff splines [])
+
+
+takeBeforeHelper cutoff splines captured =
+    case splines of
+        [] ->
+            List.reverse captured
+
+        spline :: upcoming ->
+            if Bezier.withinX cutoff spline then
+                let
+                    parameter = 0.5
+
+                    (before, _) =
+                        Bezier.splitAtX cutoff spline
+
+                in
+                List.reverse (before :: captured)
+
+            else
+                takeBeforeHelper cutoff upcoming (spline :: captured)
+
+
 
 lerp : Milliseconds -> Movement -> Movement -> Milliseconds -> Milliseconds -> Maybe (Timeline.LookAhead Movement) -> State -> State
 lerp prevEndTime prev target targetTime now maybeLookAhead state =
     let
+        _ = Debug.log "    lerp"
+            { prevEndTime = prevEndTime
+            , prev = prev
+            , target = target
+            , targetTime = targetTime
+            , now = now
+            , maybeLookAhead = maybeLookAhead
+            , state = state
+            } 
+
+
         wobble =
             case target of
                 Osc personality _ _ _ ->
