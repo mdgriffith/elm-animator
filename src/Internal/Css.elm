@@ -12,46 +12,242 @@ import Pixels
 import Set exposing (Set)
 
 
--- type Keyframe value
---     = Keyframe
---         { value : value
---         , timestamp : Float
---         }
 
 
--- type KeyframeSet value
---     = KeyframeSet
---         { duration : Int
---         , delay : Int
---         , repeat : Float
---         , keyframes : List (Keyframe value)
---         }
---     | Transition
---         { duration : Int
---         , delay : Int
---         , target : Keyframe value
---         }
+curves : (state -> Interpolate.Movement)
+    -> Timeline.Timeline state
+    -> List (List Bezier.Spline)
+curves lookup timeline =
+    let
+        now =
+            Timeline.getCurrentTime timeline
+
+    in
+    case Timeline.foldpAll lookup (toCurves now lookup) timeline of
+        result ->
+            result
+                |> finalizeCurves
+                |> combineCurves result.curves
+                
+
+{-| 
+-}
+toCurves :
+    Time.Absolute
+    
+    -> (state -> Interpolate.Movement)
+    ->
+        Timeline.Interp state
+            Interpolate.Movement
+            { curves : List (List Bezier.Spline)
+            , previous : Maybe (Timeline.Occurring state)
+            , stackStart : Time.Absolute
+            , stackEnd : Time.Absolute
+            , stack : List Bezier.Spline
+            , state : Interpolate.State
+            }
+toCurves now toMotion =
+    { start =
+        \motion ->
+            { curves = []
+            , previous = Nothing
+            , stackStart = now
+            , stackEnd = now
+            , stack = []
+            , state = Interpolate.moving.start motion
+            }
+    , adjustor =
+        \_ ->
+            Timeline.linearDefault
+    , dwellPeriod =
+        \_ ->
+            Nothing
+    , visit =
+        \lookup target targetTime maybeLookAhead data ->
+            let
+                state =
+                    Interpolate.moving.visit
+                        lookup
+                        target
+                        targetTime
+                        maybeLookAhead
+                        data.state
 
 
--- type Sequence value
---     = Sequence
---         { duration : Int
---         , keyframes : List (KeyframeSet value)
---         , dwell :
---             Maybe
---                 { period : Timeline.Period
---                 , keyframes : List (Keyframe value)
---                 }
---         }
+                
+                visitSplines =
+                    case data.previous of
+                        Nothing ->
+                            []
+                        Just prev ->
+                            Interpolate.lerpSplines
+                                (Time.inMilliseconds (Timeline.endTime prev))
+                                (lookup (Timeline.getEvent prev))
+                                (lookup (Timeline.getEvent target))
+                                (Time.inMilliseconds targetTime)
+                                maybeLookAhead
+                                data.state
+                                -- |> Debug.log "visit splines"
+            
+            
+                -- _ = Debug.log "visit" (target, data.previous, targetTime)
+
+                -- _ = Debug.log "     ->" data.curves
+            in
+            -- Add keyframe to current stack
+            -- if there is a lookahead, add timing fn for that lookahead
+            -- otherwise render the dwelling behavior as a separate anim
+            case maybeLookAhead of
+                Nothing ->
+                    -- capture
+                    --    - target pos
+                    --    - target time
+                    --    - no timing
+                    --
+                    -- if dwell
+                    --     - finalize stack
+                    --     - render and finalize dwell
+                    let
+                        newStack =
+                           visitSplines ++ data.stack
+
+                        final =
+                            { curves = data.curves
+                            , stackStart = data.stackStart
+                            , stackEnd = data.stackEnd
+                            , stack =
+                                newStack
+                            , state = state
+                            }
+                    in
+                    addDwellCurves lookup
+                        target
+                        targetTime
+                        now
+                        state
+                        { curves =
+                            final
+                                |> finalizeCurves
+                                |> combineCurves data.curves
+                        , previous = Just target
+                        , stackStart = targetTime
+                        , stackEnd = targetTime
+                        , stack = 
+                            [ 
+                            ]
+                        , state = state
+                        }
+
+                Just lookAhead ->
+                    -- capture
+                    --    - target pos
+                    --    - target time
+                    --    - capture timing to lookahead
+                    { curves =
+                        data.curves
+                    , previous = Just target
+                    , stackStart = data.stackStart
+                    , stackEnd = data.stackEnd
+                    , stack =
+                        visitSplines ++ data.stack
+                    , state = state
+                    }
+    , lerp =
+        \prevEndTime prev target targetTime interruptedAt maybeLookAhead data ->
+            -- finalize current stack
+            -- create and finalizeTransition stack for the interruption
+            -- (but use the special transition finalizer which embeds timing outside of keyframes)
+            let
+                transitionSplines =
+                    Interpolate.lerpSplines
+                        prevEndTime
+                        prev
+                        target
+                        targetTime
+                        maybeLookAhead
+                        data.state
+                        -- |> Debug.log "transition splines"
+
+                sliced =
+                    if interruptedAt == targetTime then
+                        transitionSplines
+                    else
+                        Interpolate.takeBefore interruptedAt transitionSplines
+            in
+            { curves =
+                finalizeCurves data
+                    |> combineCurves data.curves
+                    |> combineCurves
+                        (finalizeCurves 
+                            { stackStart = Time.millis prevEndTime
+                            , stackEnd = Time.millis targetTime
+                            , stack =
+                                sliced
+                            }
+                        )
+            , previous = Nothing
+            , stackStart = Time.millis targetTime
+            , stackEnd = Time.millis targetTime
+            , stack = []
+            , state =
+                Interpolate.moving.lerp
+                    prevEndTime
+                    prev
+                    target
+                    targetTime
+                    interruptedAt
+                    maybeLookAhead
+                    data.state
+            }
+    }
+    
+
+finalizeCurves :
+     { stack
+            | stackStart : Time.Absolute
+            , stackEnd : Time.Absolute
+            , stack : List Bezier.Spline
+        }
+    -> List (List Bezier.Spline)
+finalizeCurves stack =
+    [stack.stack]
 
 
--- emptySequence : Sequence value
--- emptySequence =
---     Sequence
---         { duration = 0
---         , keyframes = []
---         , dwell = Nothing
---         }
+combineCurves : List (List Bezier.Spline) -> List (List Bezier.Spline) -> List (List Bezier.Spline)
+combineCurves one two =
+    one ++ two
+   
+
+
+addDwellCurves :
+    (state -> Interpolate.Movement)
+    -> Timeline.Occurring state
+    -> Time.Absolute
+    -> Time.Absolute
+    -> Interpolate.State
+    ->
+        { curves : List (List Bezier.Spline)
+        , previous : Maybe (Timeline.Occurring state)
+        , stackStart : Time.Absolute
+        , stackEnd : Time.Absolute
+        , stack : (List Bezier.Spline)
+        , state : Interpolate.State
+        }
+    ->
+        { curves : List (List Bezier.Spline)
+        , previous : Maybe (Timeline.Occurring state)
+        , stackStart : Time.Absolute
+        , stackEnd : Time.Absolute
+        , stack : (List Bezier.Spline)
+        , state : Interpolate.State
+        }
+addDwellCurves lookup target startTime now state details =
+    case lookup (Timeline.getEvent target) of
+        Interpolate.Osc personality startPos period checkpoints ->
+            details
+
+        Interpolate.Pos _ _ ->
+            details
 
 
 {-| From this we need to render css @keyframes
@@ -88,8 +284,9 @@ css name renderValue lookup timeline =
     let
         now =
             Timeline.getCurrentTime timeline
+
     in
-    case Timeline.foldp lookup (toCss now name renderValue lookup) timeline of
+    case Timeline.foldpAll lookup (toCss now name renderValue lookup) timeline of
         result ->
             result
                 |> finalize name renderValue now
@@ -108,49 +305,56 @@ finalize :
         }
     -> CssAnim
 finalize name renderValue now stack =
-    let
-        animationName =
-            name ++ "-" 
-                ++ 
-                checkpointHash
-                    renderValue
-                    stack.stack
-                    ""
+    case stack.stack of
+        [] ->
+            { hash = ""
+            , animation = ""
+            , keyframes = ""
+            }
+        
+        _ ->
+            let
+                animationName =
+                    name ++ "-" ++ 
+                        checkpointHash
+                            renderValue
+                            stack.stack
+                            ""
 
-        durationStr =
-            String.fromFloat (Duration.inMilliseconds (Time.duration stack.stackStart stack.stackEnd)) ++ "ms"
+                durationStr =
+                    String.fromFloat (Duration.inMilliseconds (Time.duration stack.stackStart stack.stackEnd)) ++ "ms"
 
-        delay =
-            Time.duration now stack.stackStart
-                |> Duration.inMilliseconds
-                |> String.fromFloat
-                |> (\s -> s ++ "ms")
+                delay =
+                    Time.duration now stack.stackStart
+                        |> Duration.inMilliseconds
+                        |> String.fromFloat
+                        |> (\s -> s ++ "ms")
 
-        -- @keyframes duration | easing-function | delay |
-        --      iteration-count | direction | fill-mode | play-state | name */
-        -- animation: 3s ease-in 1s 2 reverse both paused slidein;
-        animation =
-            (durationStr ++ " ")
-                -- we specify an easing function here because it we have to
-                -- , but it is overridden by the one in keyframes
-                ++ "linear "
-                ++ delay
-                ++ " 1 normal forward running "
-                ++ animationName
-                
+                -- @keyframes duration | easing-function | delay |
+                --      iteration-count | direction | fill-mode | play-state | name */
+                -- animation: 3s ease-in 1s 2 reverse both paused slidein;
+                animation =
+                    (durationStr ++ " ")
+                        -- we specify an easing function here because it we have to
+                        -- , but it is overridden by the one in keyframes
+                        ++ "linear "
+                        ++ delay
+                        ++ " 1 normal forward running "
+                        ++ animationName
+                        
 
-        keyframes =
-            ("@keyframes " ++ animationName ++ " {\n")
-                ++ checkpointKeyframes name
-                    renderValue
-                    stack.stack
-                    ""
-                ++ "\n}"
-    in
-    { hash = animationName
-    , animation = animation
-    , keyframes = keyframes
-    }
+                keyframes =
+                    ("@keyframes " ++ animationName ++ " {\n")
+                        ++ checkpointKeyframes name
+                            renderValue
+                            stack.stack
+                            ""
+                        ++ "\n}"
+            in
+            { hash = animationName
+            , animation = animation
+            , keyframes = keyframes
+            }
 
 
 finalizeTransition :
@@ -221,6 +425,7 @@ toCss now name renderValue toMotion =
                         targetTime
                         maybeLookAhead
                         data.state
+
             in
             -- Add keyframe to current stack
             -- if there is a lookahead, add timing fn for that lookahead
@@ -430,6 +635,7 @@ addDwell lookup name renderValue target startTime now state details =
                     , keyframes = keyframes
                     }
             in
+            
             { details
                 | css =
                     combine details.css new
@@ -472,10 +678,10 @@ checkpointKeyframes name renderValue checkpoints rendered =
 
                 frame =
                     percentage
-                        ++ "{\n"
+                        ++ "{\n    "
                         ++ (name ++ ":" ++ renderValue top.value ++ ";\n")
-                        ++ ("animation-timing-function:" ++ renderTiming top.timing ++ ";\n")
-                        ++ "\n}"
+                        ++ ("    animation-timing-function:" ++ renderTiming top.timing ++ ";")
+                        ++ "\n}\n"
             in
             checkpointKeyframes name
                 renderValue
@@ -487,7 +693,7 @@ renderTimingHash : Interpolate.Timing -> String
 renderTimingHash timing =
     case timing of
         Interpolate.Linear ->
-            "linear"
+            "l"
 
         Interpolate.Bezier (Bezier.Spline c0 c1 c2 c3) ->
             -- the spline passed here needs to be normalized over 0-1
@@ -653,7 +859,12 @@ type alias Key =
 
 combine : CssAnim -> CssAnim -> CssAnim
 combine one two =
-    { hash = one.hash ++ two.hash
-    , animation = one.animation ++ ", " ++ two.animation
-    , keyframes = one.keyframes ++ "\n" ++ two.keyframes
-    }
+    if String.isEmpty one.hash then
+        two
+    else if String.isEmpty two.hash then
+        one
+    else
+        { hash = one.hash ++ two.hash
+        , animation = one.animation ++ ", " ++ two.animation
+        , keyframes = one.keyframes ++ "\n" ++ two.keyframes
+        }
