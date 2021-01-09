@@ -62,7 +62,26 @@ foldp =
                         \_ maybePrevious target _ _ _ state ->
                             target
                     }
+                    timeline
 
+        , benchmark "new all foldp" <| 
+            \_ -> 
+                Timeline.foldpAll
+                    identity 
+                    { start =
+                        \_ ->
+                            Hufflepuff
+                    , dwellPeriod = \_ -> Nothing
+                    , adjustor =
+                        \_ ->
+                            Timeline.linearDefault
+                    , visit =
+                        \lookup target targetTime maybeLookAhead state ->
+                            Timeline.getEvent target
+                    , lerp =
+                        \_ maybePrevious target _ _ _ state ->
+                            target
+                    }
                     timeline
 
         , benchmark "old foldp" <| 
