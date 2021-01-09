@@ -44,6 +44,7 @@ import Internal.Css as Css
 import Animator
 import Time
 import Internal.Time as Time
+import Pixels
 
 main =
     Browser.document
@@ -52,17 +53,18 @@ main =
                 ( { timeline = 
                     Animator.init (State 0)
                         |> Animator.queue
-                            [ Animator.event (Animator.seconds 1) (State 1)
-                            , Animator.event (Animator.seconds 1) (State 2)
-                            , Animator.event (Animator.seconds 1) (State 3)
+                            [ Animator.event (Animator.millis 100) (State 1)
+                            , Animator.event (Animator.millis 100) (State 2)
+                            , Animator.event (Animator.millis 100) (State 3)
                             ]
                         |> Timeline.update (Time.millisToPosix 0)
                         |> Animator.interrupt 
-                            [ Animator.event (Animator.seconds 1) (State 4)
-                            , Animator.event (Animator.seconds 1) (State 5)
-                            , Animator.event (Animator.seconds 1) (State 6)
+                            [ Animator.event (Animator.millis 100) (State 4)
+                            , Animator.event (Animator.millis 100) (State 5)
+                            , Animator.event (Animator.millis 100) (State 6)
                             ]
-                        |> Timeline.update (Time.millisToPosix 1500)
+                        |> Timeline.update (Time.millisToPosix 150)
+                        
                   , lastUpdated = Time.millisToPosix 0
                   , tooltip = Nothing
                   }
@@ -108,7 +110,7 @@ update msg model =
 
 
 
-type Style = Highlight | Normal | Faded
+type Style = Highlight | Normal | Faded | Mini
 
 
 view model =
@@ -147,14 +149,145 @@ viewBody model =
                     )
         , Svg.svg
             [ SvgA.width "97%"
-            , SvgA.height "850px"
+            , SvgA.height "1000px"
             , SvgA.viewBox "0 0 1000 1000"
-            , SvgA.style "border: 4px dashed #eee;"
+            -- , SvgA.style "border: 4px dashed #eee;"
             ]
-            [ viewTimeline model.timeline
+            [ viewValues model.timeline
+            , viewTimeline model.timeline
+            , viewSplines model.timeline
+            
             ]
-        , viewCss model.timeline
+        -- , viewCss model.timeline
         ]
+
+type alias LayoutCache =
+    { x : List (Int, Float)
+    , y : List (Int, Float)
+    }
+
+
+
+viewValues timeline =
+    let
+        frames =
+           capture Highlight (Debug.log "START OLD" 0) 500
+                (\(State state) ->
+                    Interpolate.Pos Interpolate.standardDefault (toFloat (state * 100))
+                )
+                Interpolate.moving
+                timeline
+                []
+
+        newFrames =
+           captureNew Faded (Debug.log "START NEW" 0) 500
+                (\(State state) ->
+                    Interpolate.Pos Interpolate.standardDefault (toFloat (state * 100))
+                )
+                Interpolate.moving
+                timeline
+                []
+            
+            
+    in
+    Svg.g 
+        [ SvgA.id "values"
+        , SvgA.style "transform: translate(500px, 30px);"
+        ]
+        ( newFrames ++ frames
+        )
+
+capture style start finish toMotion interp timeline rendered =
+    if start >= finish then
+        rendered
+    else
+        let
+            at = 
+                timeline
+                    |> Timeline.atTime (Time.millisToPosix start)
+                    |> Timeline.foldpOld toMotion interp
+        in
+        capture style
+            (start + 10) 
+            finish 
+            toMotion
+            interp
+            timeline
+            (dot style 
+                { x = toFloat start
+                , y = Pixels.inPixels at.position
+                }
+                :: rendered
+            )
+
+captureNew style start finish toMotion interp timeline rendered =
+    if start >= finish then
+        rendered
+    else
+        let
+            at = 
+                timeline
+                    |> Timeline.atTime (Time.millisToPosix start)
+                    |> Timeline.foldp toMotion interp
+        in
+        captureNew style
+            (start + 10) 
+            finish 
+            toMotion
+            interp
+            timeline
+            (dot style 
+                { x = toFloat start
+                , y = Pixels.inPixels at.position
+                }
+                :: rendered
+            )
+
+
+
+
+viewSplines timeline =
+    let
+        splines =
+            Css.curves
+                (\(State state) ->
+                    Interpolate.Pos Interpolate.standardDefault (toFloat (state * 100))
+                )
+                timeline
+                |> List.filter (List.isEmpty >> not)
+    in
+    Svg.g [ SvgA.id "values"
+          , SvgA.style "transform: translate(500px, 30px);"
+          ]
+            (renderSplines 
+                { x = []
+                , y = []
+                }
+                splines
+            )
+
+renderSplines cache groups =
+    case groups of
+        [] ->
+            []
+        
+        splines :: remain ->
+            renderSplines cache remain ++
+                renderSplineGroup splines 
+         
+
+renderSplineGroup group =
+    case group of
+        [] ->
+            []
+
+        mySpline :: rest ->
+            (spline Normal mySpline :: renderSplineGroup rest)
+
+
+endPoint (Bezier.Spline _ _ _ end) =
+    end
+
 
 viewCss timeline =
     let
@@ -168,11 +301,12 @@ viewCss timeline =
                 timeline
     in
     div 
-        [Attr.style "position" "fixed"
+        [ Attr.style "position" "fixed"
         , Attr.style "left" "100px"
         , Attr.style "bottom" "100px"
-        , Attr.style "white-space" "pre" 
+        , Attr.style "white-space" "pre-line" 
         , Attr.style "font-family" "monospace" 
+        , Attr.style "font-size" "10px"
         ] 
         [ Html.h2 [] [Html.text "HASH"]
         , div [] 
@@ -414,7 +548,12 @@ dot style point =
     Svg.circle
         [ SvgA.cx (String.fromFloat point.x)
         , SvgA.cy (String.fromFloat point.y)
-        , SvgA.r "8"
+        , SvgA.r 
+            (if style == Mini then
+                "3"
+            else
+                "8"
+            )
         , SvgA.fill 
             (case style of
                 Normal ->
@@ -423,6 +562,8 @@ dot style point =
                     "red"
                 Faded ->
                     "white"
+                Mini ->
+                    "black"
             )
      , SvgA.stroke 
         (case style of
@@ -431,6 +572,8 @@ dot style point =
             Highlight ->
                 "black"
             Faded ->
+                "black"
+            Mini ->
                 "black"
 
         )
@@ -443,6 +586,8 @@ dot style point =
                 "none"
             
             Faded ->
+                "none"
+            Mini ->
                 "none"
 
         )
@@ -465,6 +610,8 @@ line style one two =
                     "red"
                 Faded ->
                     "black"
+                Mini ->
+                    "black"
 
             )
         , SvgA.strokeDasharray 
@@ -477,6 +624,9 @@ line style one two =
                 
                 Faded ->
                     "5,5"
+
+                Mini ->
+                    "none"
             )
         , SvgA.strokeWidth "3"
         ]
@@ -484,6 +634,19 @@ line style one two =
 
 
 
+
+spline : Style -> Bezier.Spline -> Svg.Svg Msg
+spline style (Bezier.Spline c0 c1 c2 c3) =
+    Svg.g [] 
+        [ curve style c0 c1 c2 c3
+        , line Faded c0 c1
+        , line Faded c1 c2
+        , line Faded c2 c3
+        , dot Normal c0
+        , dot Faded c1
+        , dot Faded c2
+        , dot Normal c3
+        ]
 
 curve : Style -> Interpolate.Point -> Interpolate.Point -> Interpolate.Point -> Interpolate.Point -> Svg.Svg Msg
 curve style c0 c1 c2 c3 =
@@ -510,6 +673,8 @@ curve style c0 c1 c2 c3 =
                     "red"
                 Faded ->
                     "black"
+                Mini ->
+                    "black"
 
             )
         , SvgA.strokeDasharray 
@@ -522,6 +687,9 @@ curve style c0 c1 c2 c3 =
                 
                 Faded ->
                     "5,5"
+
+                Mini ->
+                    "none"
             )
         , SvgA.fill "rgba(0,0,0,0)"
         ]
