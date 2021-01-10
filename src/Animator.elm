@@ -1308,7 +1308,6 @@ Notice you could add any number of timelines to this animator:
                     { model | anotherChecked = anotherCheckboxState }
                 )
 
-
 **Note** — You likely only need one animator for a given project.
 
 **Note 2** — Once we have an `Animator Model`, we have two more steps in order to set things up:

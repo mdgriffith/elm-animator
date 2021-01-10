@@ -31,6 +31,7 @@ cosInterpolation x =
 
 easingDerivatives : Test
 easingDerivatives =
+     
     describe "Calc Derivative of Easing Fn"
         [ test "deriv of a linear fn is constant" <|
             \_ ->
@@ -178,7 +179,8 @@ timeline =
                             (Timeline.update (Time.millisToPosix 2000) newTimeline)
                             toPos
                 in
-                -- we were half the way to griffyndor (200)
+                -- we were half the way to griffyndor 
+                --     (huff @ 100,gryff @ 300, we're at 200)
                 -- and then halfway between that and Ravenclaw (1000)
                 --  400 + 200 = 600
                 Expect.within

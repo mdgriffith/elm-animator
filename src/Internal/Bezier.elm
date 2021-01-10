@@ -1,4 +1,4 @@
-module Internal.Bezier exposing (Point, Spline(..), atX, firstDerivative, normalize, pointOn, secondDerivative, splitAt,splitAtX,  withinX)
+module Internal.Bezier exposing (Point, Spline(..), atX, firstDerivative, normalize, pointOn, secondDerivative, splitAt, splitAtX, withinX)
 
 {-| This module defines types and functions for cubic bezier splines.
 
@@ -320,12 +320,14 @@ withinX x (Spline p1 p2 p3 p4) =
     x >= p1.x && x <= p4.x
 
 
-splitAtX :  Float -> Spline -> ( Spline, Spline )
+splitAtX : Float -> Spline -> ( Spline, Spline )
 splitAtX x spline =
     let
-        {t } = atX spline x
+        { t } =
+            atX spline x
     in
     splitAt t spline
+
 
 {-| Split a spline at a particular parameter value, resulting in two smaller
 splines.
