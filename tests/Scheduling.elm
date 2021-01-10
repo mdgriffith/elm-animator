@@ -106,6 +106,7 @@ valueOscAtEquals time val tl =
         new =
             -- we can't call update because updates have to be monotonic
             Timeline.atTime (Time.millisToPosix time) tl
+
     in
     Expect.within
         (Absolute 0.001)
@@ -133,9 +134,11 @@ queueing =
                     ]
                 |> Timeline.update (Time.millisToPosix 0)
     in
+    
     describe "Queueing"
         [ describe "Simple"
-            [ test "Simple queue" <|
+            [ 
+                test "Simple queue" <|
                 \_ ->
                     Expect.equal
                         newTimeline
@@ -1049,12 +1052,38 @@ tailRecursion =
 
 
 ordering =
+    
     describe "Preserve Ordering"
         [ fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ]) "Line order is always preserved" <|
             \timelineInstruction ->
                 let
                     actualTimeline =
                         Fuzz.Timeline.toTimeline { gc = True } timelineInstruction
+                in
+                case actualTimeline of
+                    Timeline.Timeline details ->
+                        case details.events of
+                            Timeline.Timetable lines ->
+                                let
+                                    (lastTime, orderPreserved) =
+                                        List.foldl isOrderPreserved ( 0, True ) lines
+                                in
+                                Expect.true "Line order is not preserved"
+                                    orderPreserved
+
+         , test "Line order test case253" <|
+            \_ ->
+                let
+                    instructions =
+                        Fuzz.Timeline.InstructionTimeline 0 Five 
+                                [ Fuzz.Timeline.Interruption 0 [(2,Two)]
+                                , Fuzz.Timeline.Interruption 1 [(0,One)]
+                                , Fuzz.Timeline.Queue 0 [(0,Three)]
+                                ]
+                                
+
+                    actualTimeline =
+                        Fuzz.Timeline.toTimeline { gc = False } instructions
                 in
                 case actualTimeline of
                     Timeline.Timeline details ->
@@ -1301,7 +1330,7 @@ ordering =
                 -- but it should be ~500 in this case.
                 Expect.equal
                     eventCount
-                    9506
+                    9507
         ]
 
 
@@ -1338,6 +1367,12 @@ isOrderPreserved (Timeline.Line start _ _) (( previous, preserved ) as existing)
         let
             newPrevious =
                 Time.posixToMillis (Time.toPosix start)
+
+            -- _ = 
+            --     if newPrevious >= previous then
+            --         (newPrevious, previous)
+            --     else
+            --         Debug.log "NOT PRESERVED" (newPrevious, previous)
         in
         ( newPrevious
         , newPrevious >= previous
