@@ -11,9 +11,10 @@ import Pixels
 import Quantity
 import Test exposing (..)
 import Time
-
+import Internal.Bezier as Bezier
 
 suite =
+   
     describe "Spline config"
         [ test "Standard 1 second case" <|
             \_ ->
@@ -31,7 +32,7 @@ suite =
                             }
                 in
                 Expect.equal spline
-                    (Interpolate.Spline
+                    (Bezier.Spline
                         { x = 1000, y = 100 }
                         { x = 1400, y = 100 }
                         { x = 1200, y = 400 }
@@ -56,7 +57,7 @@ suite =
                             }
                 in
                 Expect.equal spline
-                    (Interpolate.Spline
+                    (Bezier.Spline
                         { x = 1000, y = 100 }
                         { x = 1100, y = 100 }
                         { x = 1050, y = 400 }
