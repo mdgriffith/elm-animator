@@ -1,4 +1,4 @@
-module Internal.Bezier exposing (Point, Spline(..), atX, firstDerivative, normalize, pointOn, secondDerivative, splitAt, splitAtX, withinX)
+module Internal.Bezier exposing (Point, Spline(..), atX, firstDerivative, normalize, pointOn, secondDerivative, splitAt, splitAtX, withinX, addX)
 
 {-| This module defines types and functions for cubic bezier splines.
 
@@ -21,6 +21,9 @@ type alias Proportion =
 
 type Spline
     = Spline Point Point Point Point
+
+
+
 
 
 zeroPoint : Point
@@ -285,6 +288,30 @@ atXHelper ((Spline p1 p2 p3 p4) as spline) desiredX jumpSize t depth =
     else
         atXHelper spline desiredX (jumpSize / 2) (t + jumpSize) (depth + 1)
 
+
+
+
+addX : Float -> Spline -> Spline
+addX x (Spline c0 c1 c2 c3) =
+    let
+        sc0 = 
+                { x = c0.x + x
+                , y = c0.y
+                }
+        sc1 = 
+                { x = c1.x + x
+                , y = c1.y
+                }
+        sc2 = 
+                { x = c2.x + x
+                , y = c2.y
+                }
+        sc3 = 
+                { x = c3.x + x
+                , y = c3.y
+                }
+    in
+    (Spline sc0 sc1 sc2 sc3)
 
 {-| Takes a bezier and shrinks it so that the domain of c0:c3 is
 
