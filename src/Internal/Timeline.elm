@@ -1113,6 +1113,7 @@ foldp :
     -> Timeline state
     -> motion
 foldp lookup fn (Timeline timelineDetails) =
+    log "NEW DONE" <|
     case timelineDetails.events of
         Timetable timetable ->
             let
@@ -1125,14 +1126,12 @@ foldp lookup fn (Timeline timelineDetails) =
 
                 (Line lineStart firstEvent remain) :: remainingLines ->
                     throughLines
-                        False
+                        True
                         lookup
                         fn
                         timelineDetails
                         (Occurring timelineDetails.initial lineStart lineStart)
-                        -- (firstEvent :: remain)
                         []
-                        -- remainingLines
                         timetable
                         start
 
@@ -1156,21 +1155,25 @@ foldpAll lookup fn (Timeline timelineDetails) =
             let
                 start =
                     fn.start (lookup timelineDetails.initial)
-            in
-            case timetable of
-                [] ->
-                    start
 
-                (Line lineStart firstEvent remain) :: remainingLines ->
-                    visitAll
-                        False
-                        lookup
-                        fn
-                        timelineDetails
-                        (Occurring timelineDetails.initial lineStart lineStart)
-                        (firstEvent :: remain)
-                        remainingLines
-                        start
+                beginning = 
+                    case timetable of
+                        [] ->
+                            (Occurring timelineDetails.initial timelineDetails.now timelineDetails.now)
+                        
+                        (Line lineStart firstEvent remain :: _) ->
+                            (Occurring timelineDetails.initial lineStart lineStart)
+
+            in
+            visitAll
+                False
+                lookup
+                fn
+                timelineDetails
+                beginning
+                []
+                timetable
+                start
 
 
 {-| -}
@@ -1189,7 +1192,7 @@ visitAll transitionOngoing toAnchor interp details prev states future state =
         _ =
             log "------NEW - ALL" ""
     in
-    case states of
+    case Debug.log "    STATES" states of
         [] ->
             case future of
                 [] ->
@@ -1235,10 +1238,11 @@ visitAll transitionOngoing toAnchor interp details prev states future state =
                         lerped
 
         top :: remain ->
-            case future of
+            case Debug.log "   One -> FUTURE" future of
                 [] ->
                     -- visit top and continue
                     let
+
                         visited =
                             interp.visit toAnchor
                                 top
@@ -1318,6 +1322,7 @@ visitAll transitionOngoing toAnchor interp details prev states future state =
 
                                         next :: _ ->
                                             Just (lookAhead toAnchor next)
+                                           
                                     )
                                     state
                         in
@@ -1332,8 +1337,8 @@ visitAll transitionOngoing toAnchor interp details prev states future state =
 
 
 log x y =
-    -- Debug.log x y
-    y
+    Debug.log x y
+    -- y
 
 
 {-|
@@ -1369,7 +1374,7 @@ throughLines :
     -> motion
     -> motion
 throughLines transitionOngoing toAnchor interp details prev states future state =
-    case states of
+    case log "NEW STATES" states of
         [] ->
             case interruptedByFuture details.now future of
                 NoInterruption ->
@@ -1662,7 +1667,7 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                                     interp.visit toAnchor
                                         start
                                         details.now
-                                        Nothing
+                                        (Just (lookAhead toAnchor next))
                                         state
 
                             actualPrevious =
@@ -1688,13 +1693,16 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                                     )
                                     visited
                         in
-                        throughLines True
-                            toAnchor
-                            interp
-                            details
-                            actualPrevious
-                            (futureEvent :: futureRemain)
-                            (List.drop 1 future)
+                        if continuing then
+                            throughLines True
+                                toAnchor
+                                interp
+                                details
+                                actualPrevious
+                                (futureEvent :: futureRemain)
+                                (List.drop 1 future)
+                                lerped
+                        else
                             lerped
 
                     else if transitioning interruptionTime start next then
@@ -1707,7 +1715,7 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                                     interp.visit toAnchor
                                         start
                                         details.now
-                                        Nothing
+                                        (Just (lookAhead toAnchor next))
                                         state
 
                             actualPrevious =
@@ -1781,6 +1789,7 @@ type Interruption event
 
 interruptedByFuture : Time.Absolute -> List (Line event) -> Interruption event
 interruptedByFuture now future =
+    log "INTERR" <|
     case future of
         [] ->
             NoInterruption
