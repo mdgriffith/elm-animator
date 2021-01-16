@@ -1,9 +1,9 @@
 module Internal.Interpolate exposing
     ( Movement(..), State, derivativeOfEasing
     , dwellPeriod
-    , coloring, linearly, moving, takeBefore
+    , coloring, linearly, moving
     , fillDefaults, DefaultablePersonality(..), DefaultOr(..)
-    , Checkpoint, DefaultableMovement(..), Oscillator(..), Personality, Point, Timing(..), createSpline, details, emptyDefaults, lerpSplines, linearDefault, standardDefault, visit, withLinearDefault, withStandardDefault
+    , Checkpoint, DefaultableMovement(..), Oscillator(..), Personality, Point, Timing(..), createSpline, details, emptyDefaults, lerpSplines, linearDefault, standardDefault, takeBefore, visit, withLinearDefault, withStandardDefault
     )
 
 {-|
@@ -371,23 +371,23 @@ visit :
     -> State
 visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeLookAhead state =
     let
-        _ = Debug.log "    visit" event
-
-        _ = Debug.log "    details"
+        _ = Debug.log "    VISIT" 
             { event = event
-            , move = lookup event
-            , now = now
             , state = state
+            , now = now
+            , lookAhead = maybeLookAhead
             }
-        
         dwellTime =
             case maybeLookAhead of
                 Nothing ->
-                    Time.duration start now
+                    Time.duration start (Time.earliest now eventEnd)
 
                 _ ->
                     Time.duration start (Time.earliest now eventEnd)
+        
+        _ = Debug.log "DWELL TIME" (now, start, eventEnd)
     in
+    Debug.log "   <-" <|
     if Time.zeroDuration dwellTime then
         { position =
             case lookup event of
@@ -462,7 +462,7 @@ lerpSplines prevEndTime prev target targetTime maybeLookAhead state =
     else
         let
             targetVelocity =
-                newVelocityAtTarget target prevEndTime maybeLookAhead
+                newVelocityAtTarget target targetTime maybeLookAhead
                     |> Pixels.inPixelsPerSecond
         in
         [ createSpline
@@ -499,9 +499,10 @@ lerpSplines prevEndTime prev target targetTime maybeLookAhead state =
             }
         ]
 
+
 takeBefore : Milliseconds -> List Bezier.Spline -> List Bezier.Spline
 takeBefore cutoff splines =
-    (takeBeforeHelper cutoff splines [])
+    takeBeforeHelper cutoff splines []
 
 
 takeBeforeHelper cutoff splines captured =
@@ -512,11 +513,11 @@ takeBeforeHelper cutoff splines captured =
         spline :: upcoming ->
             if Bezier.withinX cutoff spline then
                 let
-                    parameter = 0.5
+                    parameter =
+                        0.5
 
-                    (before, _) =
+                    ( before, _ ) =
                         Bezier.splitAtX cutoff spline
-
                 in
                 List.reverse (before :: captured)
 
@@ -524,11 +525,10 @@ takeBeforeHelper cutoff splines captured =
                 takeBeforeHelper cutoff upcoming (spline :: captured)
 
 
-
 lerp : Milliseconds -> Movement -> Movement -> Milliseconds -> Milliseconds -> Maybe (Timeline.LookAhead Movement) -> State -> State
 lerp prevEndTime prev target targetTime now maybeLookAhead state =
     let
-        _ = Debug.log "    lerp"
+        _ = Debug.log "    LERP"
             { prevEndTime = prevEndTime
             , prev = prev
             , target = target
@@ -536,9 +536,7 @@ lerp prevEndTime prev target targetTime now maybeLookAhead state =
             , now = now
             , maybeLookAhead = maybeLookAhead
             , state = state
-            } 
-
-
+            }
         wobble =
             case target of
                 Osc personality _ _ _ ->
@@ -556,6 +554,7 @@ lerp prevEndTime prev target targetTime now maybeLookAhead state =
                     (x == Pixels.inPixels state.position)
                         && (Pixels.inPixelsPerSecond state.velocity == 0)
     in
+    Debug.log "   <-" <|
     if nothingHappened then
         state
 
@@ -636,7 +635,7 @@ interpolateBetween startTimeInMs previous target targetTimeInMs now maybeLookAhe
 
         curve =
             createSpline
-                { start =
+                ({ start =
                     { x = startTimeInMs
                     , y = Pixels.inPixels state.position
                     }
@@ -666,7 +665,7 @@ interpolateBetween startTimeInMs previous target targetTimeInMs now maybeLookAhe
 
                         Osc personality _ _ _ ->
                             personality
-                }
+                })
 
         current =
             Bezier.atX curve now
@@ -765,6 +764,12 @@ oscillate start period points dwellTime =
 
         _ ->
             let
+                totalPeriodDuration =
+                    case period of
+                        Loop periodDuration ->
+                            periodDuration
+                        Repeat _ periodDuration ->
+                            periodDuration
                 percentage =
                     case period of
                         Loop periodDuration ->
@@ -787,10 +792,10 @@ oscillate start period points dwellTime =
                             else
                                 wrapUnitAfter periodDuration dwellTime
             in
-            oscillateHelper start points percentage 0
+            oscillateHelper totalPeriodDuration start points percentage 0
 
 
-oscillateHelper previous points currentTime previousTime =
+oscillateHelper periodDuration previous points currentTime previousTime =
     case points of
         [] ->
             { position = Pixels.pixels previous
@@ -799,45 +804,83 @@ oscillateHelper previous points currentTime previousTime =
 
         checkpoint :: remaining ->
             if currentTime > checkpoint.time then
-                oscillateHelper checkpoint.value points currentTime checkpoint.time
+                oscillateHelper periodDuration checkpoint.value remaining currentTime checkpoint.time
 
             else
                 let
                     progress =
                         (currentTime - previousTime)
                             / (checkpoint.time - previousTime)
+
+
+                    end =
+                        case remaining of
+                            [] -> 1
+                            (next:: _) ->
+                                next.time
+
+                    -- This is the duration of the current section we're on
+                    -- which is only a piece of the total repeating pattern
+                    subPeriodDuration =
+                        Quantity.multiplyBy (end - checkpoint.time) periodDuration
+
                 in
-                atTiming checkpoint.timing progress previous checkpoint.value
+                atTiming subPeriodDuration checkpoint.timing progress previous checkpoint.value
 
 
-atTiming timing percent start target =
+atTiming subPeriodDuration timing percent start target =
     case timing of
         Linear ->
             { position = Pixels.pixels (linear start target percent)
             , velocity =
                 Pixels.pixelsPerSecond
                     ((target - start)
-                        / percent
+                       / Duration.inSeconds subPeriodDuration
                     )
             }
 
         Bezier spline ->
             let
+                -- _ = Debug.log "AT TIMEING" 
+                --     { period = subPeriodDuration
+                --     , percent = percent
+                --     , timing = spline
+                --     , start = start
+                --     , target = target
+                --     , current = current
+                --     }
                 current =
                     Bezier.atX spline percent
 
                 firstDerivative =
-                    Bezier.firstDerivative spline current.t
+                    let
+                        t =
+                            -- at t == 0, the first derivative vector will always be 0,0
+                            -- so we cheat in slightly.
+                            if current.t == 0 then
+                                0.01
+                            else
+                                current.t
+                    in
+                    Bezier.firstDerivative spline t
+
             in
             { position =
-                current.point.y
-                    |> Pixels.pixels
+                Pixels.pixels
+                    current.point.y
+                    
             , velocity =
                 -- rescale velocity so that it's pixels/second
                 -- `createSpline` scales this vector sometimes, we need to ensure it's the right size.
-                (firstDerivative.y / firstDerivative.x)
-                    |> (*) 1000
-                    |> Pixels.pixelsPerSecond
+                if firstDerivative.x == 0  then
+                    Pixels.pixelsPerSecond 0
+                
+                else
+                    (firstDerivative.y / firstDerivative.x)
+                        |> (*) 1000
+
+                        |> Pixels.pixelsPerSecond
+                
             }
 
 
@@ -857,6 +900,8 @@ newVelocityAtTarget target targetTime maybeLookAhead =
                 Osc _ x period points ->
                     oscillate x period points (Duration.milliseconds 0)
                         |> .velocity
+                    
+
 
         Just lookAhead ->
             let
@@ -902,6 +947,80 @@ type alias Point =
     , y : Float
     }
 
+scaleAbout : Point -> Float -> Point -> Point
+scaleAbout ( p0) k ( p) =
+    { x = p0.x + k * (p.x - p0.x)
+    , y = p0.y + k * (p.y - p0.y)
+    }
+
+scaleTo : Float -> Point -> Point
+scaleTo (q) (v) =
+    let
+        largestComponent =
+            max (abs v.x) (abs v.y)
+    in
+    if largestComponent == 0 then
+        zeroPoint
+
+    else
+        let
+            scaledX =
+                v.x / largestComponent
+
+            scaledY =
+                v.y / largestComponent
+
+            scaledLength =
+                sqrt (scaledX * scaledX + scaledY * scaledY)
+        in
+        { x = q * scaledX / scaledLength
+        , y = q * scaledY / scaledLength
+        }
+
+scaleBy : Float -> Point -> Point
+scaleBy k (v) =
+    { x = k * v.x
+    , y = k * v.y
+    }
+
+
+
+distanceFrom (p1) (p2) =
+    let
+        deltaX =
+            p2.x - p1.x
+
+        deltaY =
+            p2.y - p1.y
+
+        largestComponent =
+            max (abs deltaX) (abs deltaY)
+    in
+    if largestComponent == 0 then
+        0
+
+    else
+        let
+            scaledX =
+                deltaX / largestComponent
+
+            scaledY =
+                deltaY / largestComponent
+
+            scaledLength =
+                sqrt (scaledX * scaledX + scaledY * scaledY)
+        in
+        (scaledLength * largestComponent)
+
+
+
+{-|
+We are vector v and want the component in the direction d.
+
+-}
+componentIn : Point -> Point -> Float
+componentIn (d) (v) =
+    (v.x * d.x + v.y * d.y)
 
 createSpline :
     { start : Point
@@ -941,11 +1060,26 @@ createSpline config =
                 }
 
             else
-                -- config.startVelocity
-                --     |> scaleBy (config.departure.slowly * 3)
-                { x = startVelScale * config.startVelocity.x * (config.departure.departSlowly * 3)
-                , y = startVelScale * config.startVelocity.y * (config.departure.departSlowly * 3)
-                }
+                let
+                    direction =
+                        { x = 
+                            startVelScale 
+                                * config.startVelocity.x
+                        , y = 
+                            startVelScale 
+                                * config.startVelocity.y
+                        }
+
+                    directedDistance =
+                        componentIn (scaleTo 1 direction)
+                            { x = config.end.x - config.start.x 
+                            , y = config.end.y - config.start.y 
+                            }
+                    
+                in
+                direction
+                    |> scaleTo (config.departure.departSlowly * directedDistance * 3)
+                
 
         endVelocity =
             if config.arrival.arriveSlowly == 0 then
@@ -964,11 +1098,41 @@ createSpline config =
                 }
 
             else
-                -- config.endVelocity
-                --     |> scaleBy (config.arrival.arriveSlowly * 3)
-                { x = endVelScale * config.endVelocity.x * (config.arrival.arriveSlowly * 3)
-                , y = endVelScale * config.endVelocity.y * (config.arrival.arriveSlowly * 3)
-                }
+                let
+                    direction =
+                        { x = endVelScale 
+                                * config.endVelocity.x
+                        , y = endVelScale 
+                                * config.endVelocity.y 
+                        }
+
+                    directedDistance =
+                        componentIn (scaleTo 1 direction)
+                            { x = config.end.x - config.start.x 
+                            , y = config.end.y - config.start.y 
+                            }
+                  
+                in
+                direction
+                    |> scaleTo (config.departure.arriveSlowly * directedDistance * 3)
+                
+    
+    
+        maxX =
+            config.end.x - config.start.x
+        
+        
+
+        startControl =
+            { x = config.start.x + ((1 / 3) * startVelocity.x)
+            , y = config.start.y + ((1 / 3) * startVelocity.y)
+            }
+
+        endControl =
+            { x = config.end.x + ((-1 / 3) * endVelocity.x)
+            , y = config.end.y + ((-1 / 3) * endVelocity.y)
+            }
+
     in
     {-
        the `fromEndpoints` definition from elm-geometry
@@ -983,15 +1147,22 @@ createSpline config =
     -}
     Bezier.Spline
         config.start
-        { x = config.start.x + ((1 / 3) * startVelocity.x)
-        , y = config.start.y + ((1 / 3) * startVelocity.y)
-        }
-        { x = config.end.x + ((-1 / 3) * endVelocity.x)
-        , y = config.end.y + ((-1 / 3) * endVelocity.y)
-        }
-        -- (config.start |> translateBy (scaleBy (1 / 3) startVelocity))
-        -- (config.end |> translateBy (scaleBy (-1 / 3) endVelocity))
+        (if config.end.x - startControl.x > maxX then
+            startControl
+                |> scaleAbout config.start (1 / ((config.start.x - startControl.x) / maxX))
+        else
+            startControl
+
+        )
+        (if config.end.x - endControl.x > maxX then
+            endControl
+                |> scaleAbout config.end ( 1 / ((config.end.x - endControl.x) / maxX))
+        else
+            endControl
+
+        )
         config.end
+
 
 
 within : Float -> Float -> Float -> Bool
