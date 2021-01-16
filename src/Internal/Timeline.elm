@@ -1120,7 +1120,7 @@ foldp lookup fn (Timeline timelineDetails) =
                 start =
                     fn.start (lookup timelineDetails.initial)
             in
-            case timetable of
+            case Debug.log "TIMETABLE" timetable of
                 [] ->
                     start
 
@@ -1399,7 +1399,7 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                                 else
                                     interp.visit toAnchor
                                         prev
-                                        details.now
+                                        interruptionTime
                                         Nothing
                                         state
 
@@ -1484,7 +1484,7 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                                 else
                                     interp.visit toAnchor
                                         start
-                                        details.now
+                                        interruptionTime
                                         Nothing
                                         state
 
@@ -1566,7 +1566,7 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                             -- which grabs the exactly previous state
                             |> interp.visit toAnchor
                                 start
-                                details.now
+                                (endTime start)
                                 (Just (lookAhead toAnchor next))
                             -- visit next
                             |> interp.visit toAnchor
@@ -1714,7 +1714,7 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                                 else
                                     interp.visit toAnchor
                                         start
-                                        details.now
+                                        (endTime start)
                                         (Just (lookAhead toAnchor next))
                                         state
 
