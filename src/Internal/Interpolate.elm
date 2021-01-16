@@ -216,6 +216,11 @@ wrapUnitAfter dur total =
 
         totalDuration =
             round (Duration.inMilliseconds total)
+
+        _ = Debug.log "WRAP" 
+            { current = totalDuration
+            , period = periodDuration
+            }
     in
     if periodDuration == 0 || totalDuration == 0 then
         0
@@ -380,7 +385,7 @@ visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeL
         dwellTime =
             case maybeLookAhead of
                 Nothing ->
-                    Time.duration start (Time.earliest now eventEnd)
+                    Time.duration start now
 
                 _ ->
                     Time.duration start (Time.earliest now eventEnd)
@@ -765,11 +770,19 @@ oscillate start period points dwellTime =
         _ ->
             let
                 totalPeriodDuration =
-                    case period of
+                    case Debug.log "PER" period of
                         Loop periodDuration ->
                             periodDuration
                         Repeat _ periodDuration ->
                             periodDuration
+
+
+                -- _ = Debug.log "PERIODS"
+                --     { dur = totalPeriodDuration
+                --     , dwellTime = dwellTime
+                --     , periodPercentage = percentage
+                --     }
+                
                 percentage =
                     case period of
                         Loop periodDuration ->
@@ -790,12 +803,12 @@ oscillate start period points dwellTime =
                                 1
 
                             else
-                                wrapUnitAfter periodDuration dwellTime
+                                wrapUnitAfter periodDuration dwellTime 
             in
-            oscillateHelper totalPeriodDuration start points percentage 0
+            oscillateHelper totalPeriodDuration start points percentage 0 dwellTime
 
 
-oscillateHelper periodDuration previous points currentTime previousTime =
+oscillateHelper periodDuration previous points currentTime previousTime dwellTime=
     case points of
         [] ->
             { position = Pixels.pixels previous
@@ -804,10 +817,20 @@ oscillateHelper periodDuration previous points currentTime previousTime =
 
         checkpoint :: remaining ->
             if currentTime > checkpoint.time then
-                oscillateHelper periodDuration checkpoint.value remaining currentTime checkpoint.time
+                oscillateHelper periodDuration checkpoint.value remaining currentTime checkpoint.time dwellTime
 
             else
                 let
+                    -- _ = Debug.log "OSCILLATION" (progress, end)
+
+                    -- _ = Debug.log "times" 
+                    --     { currentTime = currentTime
+                    --     , previousTime = previousTime
+                    --     , checkpoint = checkpoint.time
+                    --     , subPeriod = subPeriodDuration
+                    --     , progress = progress
+                    --     }
+
                     progress =
                         (currentTime - previousTime)
                             / (checkpoint.time - previousTime)
@@ -825,12 +848,16 @@ oscillateHelper periodDuration previous points currentTime previousTime =
                         Quantity.multiplyBy (end - checkpoint.time) periodDuration
 
                 in
-                atTiming subPeriodDuration checkpoint.timing progress previous checkpoint.value
+                atTiming subPeriodDuration checkpoint.timing dwellTime previous checkpoint.value 
 
 
-atTiming subPeriodDuration timing percent start target =
+atTiming subPeriodDuration timing time start target =
     case timing of
         Linear ->
+            let
+                -- BUGBUG this needs to be calculated from time
+                percent = 0.5
+            in
             { position = Pixels.pixels (linear start target percent)
             , velocity =
                 Pixels.pixelsPerSecond
@@ -841,24 +868,30 @@ atTiming subPeriodDuration timing percent start target =
 
         Bezier spline ->
             let
+                -- totalMs = Duration.inMilliseconds subPeriodDuration
+
+                -- time = totalMs * percent
+
+                -- percent = 25
                 -- _ = Debug.log "AT TIMEING" 
                 --     { period = subPeriodDuration
-                --     , percent = percent
+                --     -- , percent = percent
                 --     , timing = spline
                 --     , start = start
                 --     , target = target
                 --     , current = current
+                --     , time = time
                 --     }
                 current =
-                    Bezier.atX spline percent
+                    Bezier.atX spline (Duration.inMilliseconds time)
 
                 firstDerivative =
                     let
                         t =
                             -- at t == 0, the first derivative vector will always be 0,0
                             -- so we cheat in slightly.
-                            if current.t == 0 then
-                                0.01
+                            if Duration.inMilliseconds time == 0 then
+                                0.001
                             else
                                 current.t
                     in
@@ -878,8 +911,8 @@ atTiming subPeriodDuration timing percent start target =
                 else
                     (firstDerivative.y / firstDerivative.x)
                         |> (*) 1000
-
                         |> Pixels.pixelsPerSecond
+                    --  Pixels.pixelsPerSecond 0
                 
             }
 
