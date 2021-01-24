@@ -264,8 +264,8 @@ A dwell will be a section by itself and can possibly repeat.
 
 -}
 type Section
-    = Repeat
-        { repeat : Int
+    = Section
+        { period : Timeline.Period
         , splines : List Bezier.Spline
         }
 
@@ -273,17 +273,10 @@ type Section
 curves :
     (state -> Interpolate.Movement)
     -> Timeline.Timeline state
-    -> List (List Bezier.Spline)
+    -> List Section
 curves lookup timeline =
-    let
-        now =
-            Timeline.getCurrentTime timeline
-    in
-    case Timeline.foldpAll lookup (toCurves now lookup) timeline of
-        result ->
-            result
-                |> finalizeCurves
-                |> combineCurves result.curves
+    Timeline.foldpAll lookup toCurves timeline
+        |> .curves
 
 
 
@@ -292,19 +285,21 @@ curves lookup timeline =
 
 {-| -}
 toCurves :
-    Time.Absolute
-    -> (state -> Interpolate.Movement)
-    ->
-        Timeline.Interp state
-            Interpolate.Movement
-            { curves : List (List Bezier.Spline)
-            , previous : Maybe (Timeline.Occurring state)
-            , stack : List Bezier.Spline
-            , state : Interpolate.State
-            }
-toCurves now toMotion =
+    Timeline.Interp state
+        Interpolate.Movement
+        { curves : List Section
+        , previous : Maybe (Timeline.Occurring state)
+        , state : Interpolate.State
+        }
+toCurves =
     { start =
-        toCurvesStart now
+        \motion ->
+            { curves = []
+            , previous = Nothing
+            , state =
+                Interpolate.moving.start
+                    motion
+            }
     , adjustor =
         \_ ->
             Timeline.linearDefault
@@ -312,95 +307,122 @@ toCurves now toMotion =
         \_ ->
             Nothing
     , visit =
-        toCurvesVisit now
+        \lookup target targetTime maybeLookAhead data ->
+            { curves =
+                toCurvesVisit
+                    lookup
+                    target
+                    targetTime
+                    data.previous
+                    maybeLookAhead
+                    data.state
+                    data.curves
+            , previous = Just target
+            , state =
+                Interpolate.moving.visit
+                    lookup
+                    target
+                    targetTime
+                    maybeLookAhead
+                    data.state
+            }
     , lerp =
-        toCurvesLerp now
+        \prevEndTime prev target targetTime interruptedAt maybeLookAhead data ->
+            { curves =
+                toCurvesLerp
+                    prevEndTime
+                    prev
+                    target
+                    targetTime
+                    interruptedAt
+                    maybeLookAhead
+                    data.state
+                    data.curves
+            , previous = Nothing
+            , state =
+                Interpolate.moving.lerp
+                    prevEndTime
+                    prev
+                    target
+                    targetTime
+                    interruptedAt
+                    maybeLookAhead
+                    data.state
+            }
     }
 
 
-toCurvesStart now motion =
-    { curves = []
-    , previous = Nothing
-    , stack = []
-    , state =
-        Interpolate.moving.start
-            motion
-    }
+toCurvesVisit :
+    (state -> Interpolate.Movement)
+    -> Timeline.Occurring state
+    -> Time.Absolute
+    -> Maybe (Timeline.Occurring state)
+    -> Maybe (Timeline.LookAhead Interpolate.Movement)
+    -> Interpolate.State
+    -> List Section
+    -> List Section
+toCurvesVisit lookup target targetTime maybePrevious maybeLookAhead state existingSections =
+    case maybePrevious of
+        Nothing ->
+            existingSections
 
-
-toCurvesVisit now lookup target targetTime maybeLookAhead data =
-    let
-        -- _ =
-        --     Debug.log "VISIT" target
-        state =
-            Interpolate.moving.visit
-                lookup
-                target
-                targetTime
-                maybeLookAhead
-                data.state
-
-        visitSplines =
-            case data.previous of
-                Nothing ->
-                    []
-
-                Just prev ->
+        Just prev ->
+            let
+                visitSplines =
                     Interpolate.lerpSplines
                         (Time.inMilliseconds (Timeline.endTime prev))
                         (lookup (Timeline.getEvent prev))
                         (lookup (Timeline.getEvent target))
                         (Time.inMilliseconds targetTime)
                         maybeLookAhead
-                        data.state
-    in
-    -- Add keyframe to current stack
-    -- if there is a lookahead, add timing fn for that lookahead
-    -- otherwise render the dwelling behavior as a separate anim
-    case maybeLookAhead of
-        Nothing ->
-            let
-                newStack =
-                    visitSplines ++ data.stack
+                        state
 
-                final =
-                    { curves = data.curves
-                    , stack =
-                        newStack
-                    , state = state
-                    }
+                sections =
+                    existingSections
+                        |> (::)
+                            (Section
+                                { period = once (Duration.milliseconds 1)
+                                , splines = visitSplines
+                                }
+                            )
             in
-            addDwellCurves lookup
-                target
-                targetTime
-                now
-                state
-                { curves =
-                    final
-                        |> finalizeCurves
-                        |> combineCurves data.curves
-                , previous = Just target
-                , stack = []
-                , state = state
-                }
+            case maybeLookAhead of
+                Nothing ->
+                    dwellSplines lookup
+                        target
+                        targetTime
+                        sections
 
-        Just lookAhead ->
-            { curves = data.curves
-            , previous = Just target
-            , stack =
-                visitSplines ++ data.stack
-            , state = state
-            }
+                Just _ ->
+                    sections
 
 
-toCurvesLerp now prevEndTime prev target targetTime interruptedAt maybeLookAhead data =
+once =
+    Timeline.Repeat 1
+
+
+type alias Milliseconds =
+    Float
+
+
+toCurvesLerp :
+    Milliseconds
+    -> Interpolate.Movement
+    -> Interpolate.Movement
+    -> Milliseconds
+    -> Milliseconds
+    -> Maybe (Timeline.LookAhead Interpolate.Movement)
+    -> Interpolate.State
+    -> List Section
+    -> List Section
+toCurvesLerp prevEndTime prev target targetTime interruptedAt maybeLookAhead state existingSections =
     -- finalize current stack
     -- create and finalizeTransition stack for the interruption
     -- (but use the special transition finalizer which embeds timing outside of keyframes)
     let
         _ =
             Debug.log "LERP DATA"
-                { data = data
+                { data = state
                 , interruptedAt = interruptedAt
                 }
 
@@ -411,91 +433,53 @@ toCurvesLerp now prevEndTime prev target targetTime interruptedAt maybeLookAhead
                 target
                 targetTime
                 maybeLookAhead
-                data.state
+                state
 
         sliced =
-            Debug.log "SLICED" <|
-                if interruptedAt == targetTime then
-                    transitionSplines
+            if interruptedAt == targetTime then
+                transitionSplines
 
-                else
-                    Interpolate.takeBefore interruptedAt transitionSplines
+            else
+                Interpolate.takeBefore interruptedAt transitionSplines
     in
-    { curves =
-        finalizeCurves data
-            |> combineCurves data.curves
-            |> combineCurves
-                (finalizeCurves
-                    { stack =
-                        sliced
-                    }
-                )
-    , previous = Nothing
-    , stack = []
-    , state =
-        Interpolate.moving.lerp
-            prevEndTime
-            prev
-            target
-            targetTime
-            interruptedAt
-            maybeLookAhead
-            data.state
-    }
+    existingSections
+        |> (::)
+            (Section
+                { period = once (Duration.milliseconds (targetTime - prevEndTime))
+                , splines = sliced
+                }
+            )
 
 
-finalizeCurves :
-    { stack
-        | stack : List Bezier.Spline
-    }
-    -> List (List Bezier.Spline)
-finalizeCurves stack =
-    [ stack.stack ]
-
-
-combineCurves : List (List Bezier.Spline) -> List (List Bezier.Spline) -> List (List Bezier.Spline)
-combineCurves one two =
-    one ++ two
-
-
-addDwellCurves :
+dwellSplines :
     (state -> Interpolate.Movement)
     -> Timeline.Occurring state
     -> Time.Absolute
-    -> Time.Absolute
-    -> Interpolate.State
-    ->
-        { curves : List (List Bezier.Spline)
-        , previous : Maybe (Timeline.Occurring state)
-        , stack : List Bezier.Spline
-        , state : Interpolate.State
-        }
-    ->
-        { curves : List (List Bezier.Spline)
-        , previous : Maybe (Timeline.Occurring state)
-        , stack : List Bezier.Spline
-        , state : Interpolate.State
-        }
-addDwellCurves lookup target startTime now state details =
+    -> List Section
+    -> List Section
+dwellSplines lookup target startTime existing =
     case lookup (Timeline.getEvent target) of
         Interpolate.Osc personality startPos period checkpoints ->
-            let
-                dwell =
+            Section
+                { period =
+                    period
+                , splines =
                     List.filterMap
                         (\point ->
                             case point.timing of
                                 Interpolate.Linear ->
+                                    -- TODO: DO THIS ONE!
                                     Nothing
 
                                 Interpolate.Bezier spline ->
                                     Just (Bezier.addX (Time.inMilliseconds startTime) spline)
                         )
                         checkpoints
-            in
-            { details | curves = combineCurves details.curves [ dwell ] }
+                }
+                :: existing
 
         Interpolate.Pos _ _ ->
-            details
+            existing
 
 
 {-| From this we need to render css @keyframes
