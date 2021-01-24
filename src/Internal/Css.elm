@@ -109,26 +109,20 @@ propsToCurves :
     -> Timeline.Timeline state
     -> List RenderedProp
 propsToCurves only lookup timeline =
-    let
-        now =
-            Timeline.getCurrentTime timeline
-    in
-    Timeline.foldpAll lookup (toPropCurves now only lookup) timeline
+    Timeline.foldpAll lookup (toPropCurves only) timeline
         |> .rendered
 
 
 {-| -}
 toPropCurves :
-    Time.Absolute
-    -> List Prop
-    -> (state -> List Prop)
+    List Prop
     ->
         Timeline.Interp state
             (List Prop)
             { rendered : List RenderedProp
             , previous : Maybe (Timeline.Occurring state)
             }
-toPropCurves now only toMotion =
+toPropCurves only =
     { start =
         \props ->
             { rendered =
@@ -138,6 +132,7 @@ toPropCurves now only toMotion =
                             Just (Prop id default move) ->
                                 RenderedProp
                                     { id = id
+                                    , default = Interpolate.Pos Interpolate.standardDefault default
                                     , sections = []
                                     , state = Interpolate.moving.start move
                                     }
@@ -145,6 +140,7 @@ toPropCurves now only toMotion =
                             Nothing ->
                                 RenderedProp
                                     { id = onlyId
+                                    , default = Interpolate.Pos Interpolate.standardDefault onlyDefault
                                     , sections = []
                                     , state =
                                         Interpolate.moving.start
@@ -166,30 +162,87 @@ toPropCurves now only toMotion =
             { rendered =
                 List.map
                     (\(RenderedProp rendered) ->
-                        let
-                            visited =
-                                -- toCurvesVisit now lookup target targetTime maybeLookAhead
-                                Debug.todo ""
-
-                            newSection =
-                                Debug.todo ""
-
-                            newState =
-                                Debug.todo ""
-                        in
                         RenderedProp
                             { id = rendered.id
-                            , sections = newSection :: rendered.sections
-                            , state = newState
+                            , default = rendered.default
+                            , sections =
+                                toCurvesVisit
+                                    (\state ->
+                                        lookup state
+                                            |> stateOrDefault rendered
+                                    )
+                                    target
+                                    targetTime
+                                    data.previous
+                                    -- maybeLookAhead
+                                    (Debug.todo "")
+                                    rendered.state
+                                    rendered.sections
+                            , state =
+                                Interpolate.moving.visit
+                                    (\state ->
+                                        lookup state
+                                            |> stateOrDefault rendered
+                                    )
+                                    target
+                                    targetTime
+                                    -- maybeLookAhead
+                                    (Debug.todo "")
+                                    rendered.state
                             }
                     )
                     data.rendered
-            , previous = Debug.todo ""
+            , previous = Just target
             }
     , lerp =
-        -- toCurvesLerp now
-        Debug.todo "here"
+        \prevEndTime prev target targetTime interruptedAt maybeLookAhead data ->
+            { rendered =
+                List.map
+                    (\(RenderedProp rendered) ->
+                        RenderedProp
+                            { id = rendered.id
+                            , default = rendered.default
+                            , sections =
+                                toCurvesLerp
+                                    prevEndTime
+                                    (stateOrDefault rendered prev)
+                                    (stateOrDefault rendered target)
+                                    targetTime
+                                    interruptedAt
+                                    -- maybeLookAhead
+                                    (Debug.todo "")
+                                    rendered.state
+                                    rendered.sections
+                            , state =
+                                Interpolate.moving.lerp
+                                    prevEndTime
+                                    (stateOrDefault rendered prev)
+                                    (stateOrDefault rendered target)
+                                    targetTime
+                                    interruptedAt
+                                    -- maybeLookAhead
+                                    (Debug.todo "")
+                                    rendered.state
+                            }
+                    )
+                    data.rendered
+            , previous = Nothing
+            }
     }
+
+
+stateOrDefault : RenderedPropDetails -> List Prop -> Interpolate.Movement
+stateOrDefault details props =
+    case props of
+        [] ->
+            details.default
+
+        (Prop id _ move) :: remain ->
+            if id == details.id then
+                move
+
+            else
+                stateOrDefault details remain
 
 
 matchId : Id -> List Prop -> Maybe Prop
@@ -249,11 +302,15 @@ propsToCss only lookup render timeline =
 
 -}
 type RenderedProp
-    = RenderedProp
-        { id : Id
-        , sections : List Section
-        , state : Interpolate.State
-        }
+    = RenderedProp RenderedPropDetails
+
+
+type alias RenderedPropDetails =
+    { id : Id
+    , default : Interpolate.Movement
+    , sections : List Section
+    , state : Interpolate.State
+    }
 
 
 {-| A section is one segment of a scalar's journey that can be repeated.
