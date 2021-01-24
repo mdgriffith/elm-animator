@@ -217,10 +217,11 @@ wrapUnitAfter dur total =
         totalDuration =
             round (Duration.inMilliseconds total)
 
-        _ = Debug.log "WRAP" 
-            { current = totalDuration
-            , period = periodDuration
-            }
+        _ =
+            Debug.log "WRAP"
+                { current = totalDuration
+                , period = periodDuration
+                }
     in
     if periodDuration == 0 || totalDuration == 0 then
         0
@@ -271,9 +272,9 @@ linearly =
             let
                 progress =
                     Time.progress
-                        (Time.millis prevEndTime)
-                        (Time.millis targetTime)
-                        (Time.millis now)
+                        prevEndTime
+                        targetTime
+                        now
             in
             linear state target progress
     }
@@ -376,12 +377,14 @@ visit :
     -> State
 visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeLookAhead state =
     let
-        _ = Debug.log "    VISIT" 
-            { event = event
-            , state = state
-            , now = now
-            , lookAhead = maybeLookAhead
-            }
+        _ =
+            Debug.log "    VISIT"
+                { event = event
+                , state = state
+                , now = now
+                , lookAhead = maybeLookAhead
+                }
+
         dwellTime =
             case maybeLookAhead of
                 Nothing ->
@@ -389,40 +392,41 @@ visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeL
 
                 _ ->
                     Time.duration start (Time.earliest now eventEnd)
-        
-        _ = Debug.log "DWELL TIME" (now, start, eventEnd)
+
+        _ =
+            Debug.log "DWELL TIME" ( now, start, eventEnd )
     in
     Debug.log "   <-" <|
-    if Time.zeroDuration dwellTime then
-        { position =
+        if Time.zeroDuration dwellTime then
+            { position =
+                case lookup event of
+                    Osc _ target period decoration ->
+                        Pixels.pixels target
+
+                    Pos _ x ->
+                        Pixels.pixels x
+            , velocity =
+                newVelocityAtTarget (lookup event)
+                    start
+                    maybeLookAhead
+            }
+
+        else
             case lookup event of
-                Osc _ target period decoration ->
-                    Pixels.pixels target
+                Pos _ pos ->
+                    { position = Pixels.pixels pos
+                    , velocity = Pixels.pixelsPerSecond 0
+                    }
 
-                Pos _ x ->
-                    Pixels.pixels x
-        , velocity =
-            newVelocityAtTarget (lookup event)
-                (Time.inMilliseconds start)
-                maybeLookAhead
-        }
-
-    else
-        case lookup event of
-            Pos _ pos ->
-                { position = Pixels.pixels pos
-                , velocity = Pixels.pixelsPerSecond 0
-                }
-
-            Osc _ target period points ->
-                oscillate target period points dwellTime
+                Osc _ target period points ->
+                    oscillate target period points dwellTime
 
 
 type alias Milliseconds =
     Float
 
 
-lerpSplines : Milliseconds -> Movement -> Movement -> Milliseconds -> Maybe (Timeline.LookAhead Movement) -> State -> List Bezier.Spline
+lerpSplines : Time.Absolute -> Movement -> Movement -> Time.Absolute -> Maybe (Timeline.LookAhead Movement) -> State -> List Bezier.Spline
 lerpSplines prevEndTime prev target targetTime maybeLookAhead state =
     let
         wobble =
@@ -454,8 +458,8 @@ lerpSplines prevEndTime prev target targetTime maybeLookAhead state =
             params =
                 Spring.select wobble
                     (Time.duration
-                        (Time.millis prevEndTime)
-                        (Time.millis targetTime)
+                        prevEndTime
+                        targetTime
                     )
         in
         Spring.segments params
@@ -472,7 +476,7 @@ lerpSplines prevEndTime prev target targetTime maybeLookAhead state =
         in
         [ createSpline
             { start =
-                { x = prevEndTime
+                { x = Time.inMilliseconds prevEndTime
                 , y = Pixels.inPixels state.position
                 }
             , startVelocity =
@@ -487,7 +491,7 @@ lerpSplines prevEndTime prev target targetTime maybeLookAhead state =
                     Osc personality _ _ _ ->
                         personality
             , end =
-                { x = targetTime
+                { x = Time.inMilliseconds targetTime
                 , y = targetPos
                 }
             , endVelocity =
@@ -505,9 +509,9 @@ lerpSplines prevEndTime prev target targetTime maybeLookAhead state =
         ]
 
 
-takeBefore : Milliseconds -> List Bezier.Spline -> List Bezier.Spline
+takeBefore : Time.Absolute -> List Bezier.Spline -> List Bezier.Spline
 takeBefore cutoff splines =
-    takeBeforeHelper cutoff splines []
+    takeBeforeHelper (Time.inMilliseconds cutoff) splines []
 
 
 takeBeforeHelper cutoff splines captured =
@@ -530,18 +534,20 @@ takeBeforeHelper cutoff splines captured =
                 takeBeforeHelper cutoff upcoming (spline :: captured)
 
 
-lerp : Milliseconds -> Movement -> Movement -> Milliseconds -> Milliseconds -> Maybe (Timeline.LookAhead Movement) -> State -> State
+lerp : Time.Absolute -> Movement -> Movement -> Time.Absolute -> Time.Absolute -> Maybe (Timeline.LookAhead Movement) -> State -> State
 lerp prevEndTime prev target targetTime now maybeLookAhead state =
     let
-        _ = Debug.log "    LERP"
-            { prevEndTime = prevEndTime
-            , prev = prev
-            , target = target
-            , targetTime = targetTime
-            , now = now
-            , maybeLookAhead = maybeLookAhead
-            , state = state
-            }
+        _ =
+            Debug.log "    LERP"
+                { prevEndTime = prevEndTime
+                , prev = prev
+                , target = target
+                , targetTime = targetTime
+                , now = now
+                , maybeLookAhead = maybeLookAhead
+                , state = state
+                }
+
         wobble =
             case target of
                 Osc personality _ _ _ ->
@@ -560,29 +566,29 @@ lerp prevEndTime prev target targetTime now maybeLookAhead state =
                         && (Pixels.inPixelsPerSecond state.velocity == 0)
     in
     Debug.log "   <-" <|
-    if nothingHappened then
-        state
+        if nothingHappened then
+            state
 
-    else
-        case maybeLookAhead of
-            Nothing ->
-                if wobble /= 0 then
-                    springInterpolation prevEndTime prev target targetTime now maybeLookAhead state
+        else
+            case maybeLookAhead of
+                Nothing ->
+                    if wobble /= 0 then
+                        springInterpolation prevEndTime prev target targetTime now maybeLookAhead state
 
-                else
+                    else
+                        interpolateBetween prevEndTime prev target targetTime now maybeLookAhead state
+
+                _ ->
                     interpolateBetween prevEndTime prev target targetTime now maybeLookAhead state
-
-            _ ->
-                interpolateBetween prevEndTime prev target targetTime now maybeLookAhead state
 
 
 {-| -}
 springInterpolation :
-    Milliseconds
+    Time.Absolute
     -> Movement
     -> Movement
-    -> Milliseconds
-    -> Milliseconds
+    -> Time.Absolute
+    -> Time.Absolute
     -> Maybe (Timeline.LookAhead Movement)
     -> State
     -> State
@@ -605,14 +611,14 @@ springInterpolation prevEndTime _ target targetTime now _ state =
                     x
 
         duration =
-            Time.duration (Time.millis prevEndTime) (Time.millis targetTime)
+            Time.duration prevEndTime targetTime
 
         params =
             Spring.select wobble duration
 
         new =
             Spring.analytical params
-                (Time.duration (Time.millis prevEndTime) (Time.millis now))
+                (Time.duration prevEndTime now)
                 targetPos
                 { position = Pixels.inPixels state.position
                 , velocity = Pixels.inPixelsPerSecond state.velocity
@@ -623,7 +629,7 @@ springInterpolation prevEndTime _ target targetTime now _ state =
     }
 
 
-interpolateBetween : Milliseconds -> Movement -> Movement -> Milliseconds -> Milliseconds -> Maybe (Timeline.LookAhead Movement) -> State -> State
+interpolateBetween : Time.Absolute -> Movement -> Movement -> Time.Absolute -> Time.Absolute -> Maybe (Timeline.LookAhead Movement) -> State -> State
 interpolateBetween startTimeInMs previous target targetTimeInMs now maybeLookAhead state =
     let
         targetPosition =
@@ -640,8 +646,8 @@ interpolateBetween startTimeInMs previous target targetTimeInMs now maybeLookAhe
 
         curve =
             createSpline
-                ({ start =
-                    { x = startTimeInMs
+                { start =
+                    { x = Time.inMilliseconds startTimeInMs
                     , y = Pixels.inPixels state.position
                     }
                 , startVelocity =
@@ -656,7 +662,7 @@ interpolateBetween startTimeInMs previous target targetTimeInMs now maybeLookAhe
                         Osc personality _ _ _ ->
                             personality
                 , end =
-                    { x = targetTimeInMs
+                    { x = Time.inMilliseconds targetTimeInMs
                     , y = Pixels.inPixels targetPosition
                     }
                 , endVelocity =
@@ -670,10 +676,10 @@ interpolateBetween startTimeInMs previous target targetTimeInMs now maybeLookAhe
 
                         Osc personality _ _ _ ->
                             personality
-                })
+                }
 
         current =
-            Bezier.atX curve now
+            Bezier.atX curve (Time.inMilliseconds now)
 
         firstDerivative =
             Bezier.firstDerivative curve current.t
@@ -773,16 +779,15 @@ oscillate start period points dwellTime =
                     case Debug.log "PER" period of
                         Loop periodDuration ->
                             periodDuration
+
                         Repeat _ periodDuration ->
                             periodDuration
-
 
                 -- _ = Debug.log "PERIODS"
                 --     { dur = totalPeriodDuration
                 --     , dwellTime = dwellTime
                 --     , periodPercentage = percentage
                 --     }
-                
                 percentage =
                     case period of
                         Loop periodDuration ->
@@ -803,12 +808,12 @@ oscillate start period points dwellTime =
                                 1
 
                             else
-                                wrapUnitAfter periodDuration dwellTime 
+                                wrapUnitAfter periodDuration dwellTime
             in
             oscillateHelper totalPeriodDuration start points percentage 0 dwellTime
 
 
-oscillateHelper periodDuration previous points currentTime previousTime dwellTime=
+oscillateHelper periodDuration previous points currentTime previousTime dwellTime =
     case points of
         [] ->
             { position = Pixels.pixels previous
@@ -822,33 +827,31 @@ oscillateHelper periodDuration previous points currentTime previousTime dwellTim
             else
                 let
                     -- _ = Debug.log "OSCILLATION" (progress, end)
-
-                    -- _ = Debug.log "times" 
+                    -- _ = Debug.log "times"
                     --     { currentTime = currentTime
                     --     , previousTime = previousTime
                     --     , checkpoint = checkpoint.time
                     --     , subPeriod = subPeriodDuration
                     --     , progress = progress
                     --     }
-
                     progress =
                         (currentTime - previousTime)
                             / (checkpoint.time - previousTime)
 
-
                     end =
                         case remaining of
-                            [] -> 1
-                            (next:: _) ->
+                            [] ->
+                                1
+
+                            next :: _ ->
                                 next.time
 
                     -- This is the duration of the current section we're on
                     -- which is only a piece of the total repeating pattern
                     subPeriodDuration =
                         Quantity.multiplyBy (end - checkpoint.time) periodDuration
-
                 in
-                atTiming subPeriodDuration checkpoint.timing dwellTime previous checkpoint.value 
+                atTiming subPeriodDuration checkpoint.timing dwellTime previous checkpoint.value
 
 
 atTiming subPeriodDuration timing time start target =
@@ -856,24 +859,23 @@ atTiming subPeriodDuration timing time start target =
         Linear ->
             let
                 -- BUGBUG this needs to be calculated from time
-                percent = 0.5
+                percent =
+                    0.5
             in
             { position = Pixels.pixels (linear start target percent)
             , velocity =
                 Pixels.pixelsPerSecond
                     ((target - start)
-                       / Duration.inSeconds subPeriodDuration
+                        / Duration.inSeconds subPeriodDuration
                     )
             }
 
         Bezier spline ->
             let
                 -- totalMs = Duration.inMilliseconds subPeriodDuration
-
                 -- time = totalMs * percent
-
                 -- percent = 25
-                -- _ = Debug.log "AT TIMEING" 
+                -- _ = Debug.log "AT TIMEING"
                 --     { period = subPeriodDuration
                 --     -- , percent = percent
                 --     , timing = spline
@@ -892,35 +894,34 @@ atTiming subPeriodDuration timing time start target =
                             -- so we cheat in slightly.
                             if Duration.inMilliseconds time == 0 then
                                 0.001
+
                             else
                                 current.t
                     in
                     Bezier.firstDerivative spline t
-
             in
             { position =
                 Pixels.pixels
                     current.point.y
-                    
             , velocity =
                 -- rescale velocity so that it's pixels/second
                 -- `createSpline` scales this vector sometimes, we need to ensure it's the right size.
-                if firstDerivative.x == 0  then
+                if firstDerivative.x == 0 then
                     Pixels.pixelsPerSecond 0
-                
+
                 else
                     (firstDerivative.y / firstDerivative.x)
                         |> (*) 1000
                         |> Pixels.pixelsPerSecond
-                    --  Pixels.pixelsPerSecond 0
-                
+
+            --  Pixels.pixelsPerSecond 0
             }
 
 
 {-| -}
 newVelocityAtTarget :
     Movement
-    -> Milliseconds
+    -> Time.Absolute
     -> Maybe (Timeline.LookAhead Movement)
     -> PixelsPerSecond
 newVelocityAtTarget target targetTime maybeLookAhead =
@@ -933,8 +934,6 @@ newVelocityAtTarget target targetTime maybeLookAhead =
                 Osc _ x period points ->
                     oscillate x period points (Duration.milliseconds 0)
                         |> .velocity
-                    
-
 
         Just lookAhead ->
             let
@@ -951,9 +950,9 @@ newVelocityAtTarget target targetTime maybeLookAhead =
                     -- our target velocity is the linear velocity between target and lookahead
                     velocityBetween
                         targetPosition
-                        (Time.millis targetTime)
+                        targetTime
                         (Pixels.pixels aheadPosition)
-                        (Time.millis lookAhead.time)
+                        lookAhead.time
 
                 Osc _ x period points ->
                     if lookAhead.resting then
@@ -963,9 +962,9 @@ newVelocityAtTarget target targetTime maybeLookAhead =
                     else
                         velocityBetween
                             targetPosition
-                            (Time.millis targetTime)
+                            targetTime
                             (Pixels.pixels x)
-                            (Time.millis lookAhead.time)
+                            lookAhead.time
 
 
 zeroPoint : Point
@@ -980,14 +979,16 @@ type alias Point =
     , y : Float
     }
 
+
 scaleAbout : Point -> Float -> Point -> Point
-scaleAbout ( p0) k ( p) =
+scaleAbout p0 k p =
     { x = p0.x + k * (p.x - p0.x)
     , y = p0.y + k * (p.y - p0.y)
     }
 
+
 scaleTo : Float -> Point -> Point
-scaleTo (q) (v) =
+scaleTo q v =
     let
         largestComponent =
             max (abs v.x) (abs v.y)
@@ -1010,15 +1011,15 @@ scaleTo (q) (v) =
         , y = q * scaledY / scaledLength
         }
 
+
 scaleBy : Float -> Point -> Point
-scaleBy k (v) =
+scaleBy k v =
     { x = k * v.x
     , y = k * v.y
     }
 
 
-
-distanceFrom (p1) (p2) =
+distanceFrom p1 p2 =
     let
         deltaX =
             p2.x - p1.x
@@ -1043,17 +1044,15 @@ distanceFrom (p1) (p2) =
             scaledLength =
                 sqrt (scaledX * scaledX + scaledY * scaledY)
         in
-        (scaledLength * largestComponent)
+        scaledLength * largestComponent
 
 
-
-{-|
-We are vector v and want the component in the direction d.
-
+{-| We are vector v and want the component in the direction d.
 -}
 componentIn : Point -> Point -> Float
-componentIn (d) (v) =
-    (v.x * d.x + v.y * d.y)
+componentIn d v =
+    v.x * d.x + v.y * d.y
+
 
 createSpline :
     { start : Point
@@ -1095,24 +1094,22 @@ createSpline config =
             else
                 let
                     direction =
-                        { x = 
-                            startVelScale 
+                        { x =
+                            startVelScale
                                 * config.startVelocity.x
-                        , y = 
-                            startVelScale 
+                        , y =
+                            startVelScale
                                 * config.startVelocity.y
                         }
 
                     directedDistance =
                         componentIn (scaleTo 1 direction)
-                            { x = config.end.x - config.start.x 
-                            , y = config.end.y - config.start.y 
+                            { x = config.end.x - config.start.x
+                            , y = config.end.y - config.start.y
                             }
-                    
                 in
                 direction
                     |> scaleTo (config.departure.departSlowly * directedDistance * 3)
-                
 
         endVelocity =
             if config.arrival.arriveSlowly == 0 then
@@ -1133,28 +1130,25 @@ createSpline config =
             else
                 let
                     direction =
-                        { x = endVelScale 
+                        { x =
+                            endVelScale
                                 * config.endVelocity.x
-                        , y = endVelScale 
-                                * config.endVelocity.y 
+                        , y =
+                            endVelScale
+                                * config.endVelocity.y
                         }
 
                     directedDistance =
                         componentIn (scaleTo 1 direction)
-                            { x = config.end.x - config.start.x 
-                            , y = config.end.y - config.start.y 
+                            { x = config.end.x - config.start.x
+                            , y = config.end.y - config.start.y
                             }
-                  
                 in
                 direction
                     |> scaleTo (config.departure.arriveSlowly * directedDistance * 3)
-                
-    
-    
+
         maxX =
             config.end.x - config.start.x
-        
-        
 
         startControl =
             { x = config.start.x + ((1 / 3) * startVelocity.x)
@@ -1165,7 +1159,6 @@ createSpline config =
             { x = config.end.x + ((-1 / 3) * endVelocity.x)
             , y = config.end.y + ((-1 / 3) * endVelocity.y)
             }
-
     in
     {-
        the `fromEndpoints` definition from elm-geometry
@@ -1183,19 +1176,18 @@ createSpline config =
         (if config.end.x - startControl.x > maxX then
             startControl
                 |> scaleAbout config.start (1 / ((config.start.x - startControl.x) / maxX))
-        else
-            startControl
 
+         else
+            startControl
         )
         (if config.end.x - endControl.x > maxX then
             endControl
-                |> scaleAbout config.end ( 1 / ((config.end.x - endControl.x) / maxX))
-        else
-            endControl
+                |> scaleAbout config.end (1 / ((config.end.x - endControl.x) / maxX))
 
+         else
+            endControl
         )
         config.end
-
 
 
 within : Float -> Float -> Float -> Bool
@@ -1329,9 +1321,9 @@ lerpColor prevEndTime maybePrev target targetTime now maybeLookAhead state =
     let
         progress =
             Time.progress
-                (Time.millis prevEndTime)
-                (Time.millis targetTime)
-                (Time.millis now)
+                prevEndTime
+                targetTime
+                now
 
         one =
             Color.toRgba state

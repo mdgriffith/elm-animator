@@ -149,17 +149,17 @@ type alias Milliseconds =
 
 type alias LookAhead anchor =
     { anchor : anchor
-    , time : Milliseconds
+    , time : Time.Absolute
     , resting : Bool
     }
 
 
 type alias Lerp anchor motion =
-    Milliseconds
+    Time.Absolute
     -> anchor
     -> anchor
-    -> Milliseconds
-    -> Milliseconds
+    -> Time.Absolute
+    -> Time.Absolute
     -> Maybe (LookAhead anchor)
     -> motion
     -> motion
@@ -1134,9 +1134,17 @@ foldp lookup fn (Timeline timelineDetails) =
                             start
 
 
+lookAhead :
+    (event -> anchor)
+    -> Occurring event
+    ->
+        { anchor : anchor
+        , time : Time.Absolute
+        , resting : Bool
+        }
 lookAhead lookup (Occurring ahead (Quantity.Quantity start) (Quantity.Quantity end)) =
     { anchor = lookup ahead
-    , time = start
+    , time = Quantity.Quantity start
     , resting =
         (start - end) /= 0
     }
@@ -1202,11 +1210,11 @@ visitAll transitionOngoing toAnchor interp details prev states future state =
                         lerped =
                             state
                                 |> interp.lerp
-                                    (Time.inMilliseconds (endTime prev))
+                                    (endTime prev)
                                     (toAnchor (getEvent prev))
                                     (toAnchor (getEvent futureEvent))
-                                    (Time.inMilliseconds (startTime futureEvent))
-                                    (Time.inMilliseconds (startTime futureEvent))
+                                    (startTime futureEvent)
+                                    (startTime futureEvent)
                                     (case futureRemain of
                                         [] ->
                                             Nothing
@@ -1270,11 +1278,11 @@ visitAll transitionOngoing toAnchor interp details prev states future state =
                             lerped =
                                 state
                                     |> interp.lerp
-                                        (Time.inMilliseconds (endTime prev))
+                                        (endTime prev)
                                         (toAnchor (getEvent prev))
                                         (toAnchor (getEvent top))
-                                        (Time.inMilliseconds (startTime top))
-                                        (Time.inMilliseconds futureStart)
+                                        (startTime top)
+                                        futureStart
                                         (case remain of
                                             [] ->
                                                 Nothing
@@ -1283,11 +1291,11 @@ visitAll transitionOngoing toAnchor interp details prev states future state =
                                                 Just (lookAhead toAnchor next)
                                         )
                                     |> interp.lerp
-                                        (Time.inMilliseconds futureStart)
+                                        futureStart
                                         (toAnchor (getEvent prev))
                                         (toAnchor (getEvent futureEvent))
-                                        (Time.inMilliseconds (startTime futureEvent))
-                                        (Time.inMilliseconds (startTime futureEvent))
+                                        (startTime futureEvent)
+                                        (startTime futureEvent)
                                         (case futureRemain of
                                             [] ->
                                                 Nothing
@@ -1403,11 +1411,11 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
 
                         lerped =
                             interp.lerp
-                                (Time.inMilliseconds interruptionTime)
+                                interruptionTime
                                 (toAnchor (getEvent prev))
                                 (toAnchor (getEvent futureEvent))
-                                (Time.inMilliseconds (startTime futureEvent))
-                                (Time.inMilliseconds details.now)
+                                (startTime futureEvent)
+                                details.now
                                 (case futureRemain of
                                     [] ->
                                         Nothing
@@ -1493,11 +1501,11 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
 
                             lerped =
                                 interp.lerp
-                                    (Time.inMilliseconds interruptionTime)
+                                    interruptionTime
                                     (toAnchor (getEvent actualPrevious))
                                     (toAnchor (getEvent futureEvent))
-                                    (Time.inMilliseconds (startTime futureEvent))
-                                    (Time.inMilliseconds details.now)
+                                    (startTime futureEvent)
+                                    details.now
                                     (case futureRemain of
                                         [] ->
                                             Nothing
@@ -1589,11 +1597,11 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                                         state
                         in
                         interp.lerp
-                            (Time.inMilliseconds (endTime start))
+                            (endTime start)
                             (toAnchor (getEvent start))
                             (toAnchor (getEvent next))
-                            (Time.inMilliseconds (startTime next))
-                            (Time.inMilliseconds details.now)
+                            (startTime next)
+                            details.now
                             (case remain of
                                 [] ->
                                     Nothing
@@ -1674,11 +1682,11 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
 
                             lerped =
                                 interp.lerp
-                                    (Time.inMilliseconds interruptionTime)
+                                    interruptionTime
                                     (toAnchor (getEvent actualPrevious))
                                     (toAnchor (getEvent futureEvent))
-                                    (Time.inMilliseconds (startTime futureEvent))
-                                    (Time.inMilliseconds details.now)
+                                    (startTime futureEvent)
+                                    details.now
                                     (case futureRemain of
                                         [] ->
                                             Nothing
@@ -1724,11 +1732,11 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                             lerped =
                                 visited
                                     |> interp.lerp
-                                        (Time.inMilliseconds (endTime actualPrevious))
+                                        (endTime actualPrevious)
                                         (toAnchor (getEvent actualPrevious))
                                         (toAnchor (getEvent next))
-                                        (Time.inMilliseconds (startTime next))
-                                        (Time.inMilliseconds interruptionTime)
+                                        (startTime next)
+                                        interruptionTime
                                         (case remain of
                                             [] ->
                                                 Nothing
@@ -1737,11 +1745,11 @@ throughLines transitionOngoing toAnchor interp details prev states future state 
                                                 Just (lookAhead toAnchor upcomingEvent)
                                         )
                                     |> interp.lerp
-                                        (Time.inMilliseconds interruptionTime)
+                                        interruptionTime
                                         (toAnchor (getEvent actualPrevious))
                                         (toAnchor (getEvent futureEvent))
-                                        (Time.inMilliseconds (startTime futureEvent))
-                                        (Time.inMilliseconds continuationTime)
+                                        (startTime futureEvent)
+                                        continuationTime
                                         (case futureRemain of
                                             [] ->
                                                 Nothing
@@ -1864,7 +1872,7 @@ createLookAhead fn lookup currentEvent upcomingEvents =
             in
             Just
                 { anchor = lookup (getEvent upcomingOccurring)
-                , time = Time.inMilliseconds (startTime upcomingOccurring)
+                , time = startTime upcomingOccurring
 
                 -- (startTimeAdj lookup fn.adjustor currentEvent upcomingOccurring)
                 , resting =
@@ -1939,7 +1947,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
         -- lerp from state to lineStartEv
         -- now is before the first event start time.
         fn.lerp
-            (Time.inMilliseconds lineStart)
+            lineStart
             (case maybePreviousEvent of
                 Nothing ->
                     lookup details.initial
@@ -1948,8 +1956,8 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                     lookup (getEvent p)
             )
             (lookup (getEvent lineStartEv))
-            (Time.inMilliseconds (startTime lineStartEv))
-            (Time.inMilliseconds now)
+            (startTime lineStartEv)
+            now
             (createLookAhead fn lookup unadjustedStartEvent lineRemain)
             state
             |> transition lineStartEv
@@ -1986,11 +1994,11 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                     -- Before next.startTime
                     --     -> lerp start to next
                     fn.lerp
-                        (Time.inMilliseconds (endTime lineStartEv))
+                        (endTime lineStartEv)
                         (lookup (getEvent lineStartEv))
                         (lookup (getEvent next))
-                        (Time.inMilliseconds (startTime next))
-                        (Time.inMilliseconds now)
+                        (startTime next)
+                        now
                         (createLookAhead fn lookup unadjustedNext lineRemain2)
                         (fn.visit lookup
                             lineStartEv
@@ -2046,11 +2054,11 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                                 in
                                 fn.lerp
                                     -- next end time?
-                                    (Time.inMilliseconds (endTime next))
+                                    (endTime next)
                                     (lookup (getEvent next))
                                     (lookup (getEvent next2))
-                                    (Time.inMilliseconds (startTime next2))
-                                    (Time.inMilliseconds now)
+                                    (startTime next2)
+                                    now
                                     (createLookAhead fn lookup unadjustedNext2 lineRemain3)
                                     afterState
                                     |> transition next
@@ -2570,8 +2578,8 @@ arrivedAt matches newTime (Timeline details) =
             \_ _ target targetTime now _ state ->
                 state
                     || (matches target
-                            && Time.thisBeforeOrEqualThat details.now (Time.millis targetTime)
-                            && Time.thisAfterOrEqualThat (Time.absolute newTime) (Time.millis targetTime)
+                            && Time.thisBeforeOrEqualThat details.now targetTime
+                            && Time.thisAfterOrEqualThat (Time.absolute newTime) targetTime
                        )
         }
         (Timeline details)
@@ -2629,7 +2637,7 @@ upcoming matches (Timeline details) =
                 \_ _ target targetTime _ _ state ->
                     state
                         || (matches target
-                                && Time.thisBeforeThat details.now (Time.millis targetTime)
+                                && Time.thisBeforeThat details.now targetTime
                            )
             }
             (Timeline { details | now = Time.millis (1 / 0) })
@@ -2673,11 +2681,11 @@ status ((Timeline details) as timeline) =
                     end =
                         targetTime
                 in
-                if now >= end then
+                if Time.thisAfterOrEqualThat now end then
                     Transitioning 1
 
                 else
-                    Transitioning (Time.progress (Time.millis start) (Time.millis end) (Time.millis now))
+                    Transitioning (Time.progress start end now)
         }
         timeline
 

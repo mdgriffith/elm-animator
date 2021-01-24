@@ -427,10 +427,10 @@ toCurvesVisit lookup target targetTime maybePrevious maybeLookAhead state existi
             let
                 visitSplines =
                     Interpolate.lerpSplines
-                        (Time.inMilliseconds (Timeline.endTime prev))
+                        (Timeline.endTime prev)
                         (lookup (Timeline.getEvent prev))
                         (lookup (Timeline.getEvent target))
-                        (Time.inMilliseconds targetTime)
+                        targetTime
                         maybeLookAhead
                         state
 
@@ -463,11 +463,11 @@ type alias Milliseconds =
 
 
 toCurvesLerp :
-    Milliseconds
+    Time.Absolute
     -> Interpolate.Movement
     -> Interpolate.Movement
-    -> Milliseconds
-    -> Milliseconds
+    -> Time.Absolute
+    -> Time.Absolute
     -> Maybe (Timeline.LookAhead Interpolate.Movement)
     -> Interpolate.State
     -> List Section
@@ -502,7 +502,7 @@ toCurvesLerp prevEndTime prev target targetTime interruptedAt maybeLookAhead sta
     existingSections
         |> (::)
             (Section
-                { period = once (Duration.milliseconds (targetTime - prevEndTime))
+                { period = once (Time.duration prevEndTime targetTime)
                 , splines = sliced
                 }
             )
@@ -800,19 +800,19 @@ toCss now name renderValue toMotion =
                         (finalize name
                             renderValue
                             now
-                            { stackStart = Time.millis prevEndTime
-                            , stackEnd = Time.millis targetTime
+                            { stackStart = prevEndTime
+                            , stackEnd = targetTime
                             , stack =
                                 normalizeToCheckpoints
                                     (Time.duration
-                                        (Time.millis prevEndTime)
-                                        (Time.millis targetTime)
+                                        prevEndTime
+                                        targetTime
                                     )
                                     transitionSplines
                             }
                         )
-            , stackStart = Time.millis targetTime
-            , stackEnd = Time.millis targetTime
+            , stackStart = targetTime
+            , stackEnd = targetTime
             , stack = []
             , state =
                 Interpolate.moving.lerp
