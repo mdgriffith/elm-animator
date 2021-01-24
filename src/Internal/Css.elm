@@ -4,6 +4,7 @@ module Internal.Css exposing (..)
 
 import Dict exposing (Dict)
 import Duration
+import Html.Attributes exposing (id)
 import Internal.Bezier as Bezier
 import Internal.Interpolate as Interpolate
 import Internal.Time as Time
@@ -12,25 +13,24 @@ import Pixels
 import Set exposing (Set)
 
 
-{-| An id representing a prop type.  
+{-| An id representing a prop type.
 
 Like
-    1 ->
-        background-color
+1 ->
+background-color
 
 -}
-type alias Id = Int
+type alias Id =
+    Int
 
 
-{-|
-Generally when doing transitions, we want to define a list of properties instead of a single one.
-
+{-| Generally when doing transitions, we want to define a list of properties instead of a single one.
 
     Open ->
         [ x 200
         , opacity 1
         ]
-    
+
     Closed ->
         [ x 0
         , opacity 0
@@ -44,26 +44,23 @@ Sometimes this batching is present in the elm-animator API (i.e. colors)
 
 Sometimes not (transforms, CSS requires them).
 
-Properties that are not present need an inherent default.
-
+All properties will need an inherent default in case they are missing.
 
 -}
-type Prop =
-    -- binary id for comparisons
-    Prop Id Float Interpolate.Movement
+type Prop
+    = -- binary id for comparisons
+      Prop Id Float Interpolate.Movement
 
 
-
-{-|
-This is mainly to help rendering a transform.
+{-| This is mainly to help rendering a transform.
 
 If more than one of these properties is present for any state,
 then these properties are overlapping.
 
 This is because if there is both
-    rotate and translateX
-    or even
-    translateX and translateY
+rotate and translateX
+or even
+translateX and translateY
 
 Then we can't use a single timing operation to describe them.
 
@@ -71,50 +68,53 @@ So, we'll need to render each frame.
 
 Other properties, like background-color and color can be rendered independently by simply being in separate animations.
 
-
-
 -}
 overlapping :
     List Prop
-    -> (state -> List Prop) 
+    -> (state -> List Prop)
     -> Timeline.Timeline state
     -> Bool
 overlapping only lookup timeline =
     False
 
 
-{-|-}
+{-| -}
 scan :
-    (state -> List Prop) 
+    (state -> List Prop)
     -> Timeline.Timeline state
     -> List Prop
 scan lookup timeline =
-    { props = []
-    }
+    []
 
 
 {-|
 
-- Ids of props to render
-- What props are present at this state
+  - Ids of props to render
+  - What props are present at this state
+
+In some cases like `Color`, multiple props need to be rendered as one prop. Same with `transform`.
+
+Deciding how they should combine can be done after this fist pass.
+
+Properties:
+
+  - List RenderedProp is in the same order as List Prop
+  - Each `RenderedProp` will have the same number of sections
+  - sections are ordered by starting time.
 
 -}
-propsToCurves : 
+propsToCurves :
     List Prop
     -> (state -> List Prop)
     -> Timeline.Timeline state
-    -> List (Group Section)
+    -> List RenderedProp
 propsToCurves only lookup timeline =
     let
         now =
             Timeline.getCurrentTime timeline
     in
-    case Timeline.foldpAll lookup (toPropCurves now lookup) timeline of
-        result ->
-            result
-                |> finalizeCurves
-                |> combineCurves result.curves
-
+    Timeline.foldpAll lookup (toPropCurves now only lookup) timeline
+        |> .rendered
 
 
 {-| -}
@@ -124,79 +124,150 @@ toPropCurves :
     -> (state -> List Prop)
     ->
         Timeline.Interp state
-            Interpolate.Movement
-            { curves : List (List Bezier.Spline)
+            (List Prop)
+            { rendered : List RenderedProp
             , previous : Maybe (Timeline.Occurring state)
-            , stackStart : Time.Absolute
-            , stackEnd : Time.Absolute
-            , stack : List Bezier.Spline
-            , state : Interpolate.State
             }
-toPropCurves now toMotion =
-    -- { start =
-    --     toCurvesStart now
-    -- , adjustor =
-    --     \_ ->
-    --         Timeline.linearDefault
-    -- , dwellPeriod =
-    --     \_ ->
-    --         Nothing
-    -- , visit =
-    --     toCurvesVisit now
-    -- , lerp =
-    --     toCurvesLerp now
-    -- }
-    Debug.todo "Here's where you left off!"
+toPropCurves now only toMotion =
+    { start =
+        \props ->
+            { rendered =
+                List.map
+                    (\(Prop onlyId onlyDefault onlyMove) ->
+                        case matchId onlyId props of
+                            Just (Prop id default move) ->
+                                RenderedProp
+                                    { id = id
+                                    , sections = []
+                                    , state = Interpolate.moving.start move
+                                    }
+
+                            Nothing ->
+                                RenderedProp
+                                    { id = onlyId
+                                    , sections = []
+                                    , state =
+                                        Interpolate.moving.start
+                                            (Interpolate.Pos Interpolate.standardDefault onlyDefault)
+                                    }
+                    )
+                    only
+            , previous = Nothing
+            }
+    , adjustor =
+        \_ ->
+            Timeline.linearDefault
+    , dwellPeriod =
+        \_ ->
+            Nothing
+    , visit =
+        -- toCurvesVisit now
+        \lookup target targetTime maybeLookAhead data ->
+            { rendered =
+                List.map
+                    (\(RenderedProp rendered) ->
+                        let
+                            visited =
+                                -- toCurvesVisit now lookup target targetTime maybeLookAhead
+                                Debug.todo ""
+
+                            newSection =
+                                Debug.todo ""
+
+                            newState =
+                                Debug.todo ""
+                        in
+                        RenderedProp
+                            { id = rendered.id
+                            , sections = newSection :: rendered.sections
+                            , state = newState
+                            }
+                    )
+                    data.rendered
+            , previous = Debug.todo ""
+            }
+    , lerp =
+        -- toCurvesLerp now
+        Debug.todo "here"
+    }
 
 
-{-|
-This is a fully composed css proeprty string, such as:
+matchId : Id -> List Prop -> Maybe Prop
+matchId onlyId props =
+    case props of
+        [] ->
+            Nothing
+
+        ((Prop id _ _) as top) :: remain ->
+            if id == onlyId then
+                Just top
+
+            else
+                matchId onlyId remain
+
+
+
+-- Debug.todo "Here's where you left off!"
+
+
+{-| This is a fully composed css proeprty string, such as:
 
     "background-color: rgb(0,0,0);"
-
 
 You can include multiple properties if necessary
 and we don't have the allocation of an intermediate datastruture like
 
-    [ ("background-color", "rgb(0,0,0)") ]
+    [ ( "background-color", "rgb(0,0,0)" ) ]
 
 -}
 type alias CssPropString =
     String
 
-{-|
-Same as above, but we take it all the way to CSS.
+
+{-| Same as above, but we take it all the way to CSS.
 
 So we need:
-- Props to render
-- What props are present at this state
-- How do we render these props as css?
-    
 
+  - Props to render
+  - What props are present at this state
+  - How do we render these props as css?
 
 -}
-propsToCss : 
+propsToCss :
     List Prop
     -> (state -> List Prop)
-    -> (List (Id, Float) -> CssPropString)
+    -> (List ( Id, Float ) -> CssPropString)
     -> Timeline.Timeline state
     -> CssAnim
 propsToCss only lookup render timeline =
-    []
+    Debug.todo "Maybe this is the way to go :thinking:"
 
 
-{-|
-
-A group of curves represents the trail of one scalar property
+{-| A group of curves represents the trail of one scalar property
 
     (Scalar property meaning something like opacity, or just the `R` channel of rgb.)
 
+-}
+type RenderedProp
+    = RenderedProp
+        { id : Id
+        , sections : List Section
+        , state : Interpolate.State
+        }
+
+
+{-| A section is one segment of a scalar's journey that can be repeated.
+
+Every state transition will be a separate section.
+
+A dwell will be a section by itself and can possibly repeat.
 
 -}
-type alias Group thing =
-    { name : String
-    , values : List thing
-    }
+type Section
+    = Repeat
+        { repeat : Int
+        , splines : List Bezier.Spline
+        }
 
 
 curves :
@@ -216,10 +287,8 @@ curves lookup timeline =
 
 
 
-type Section =
-    Repeat Int (List Bezier.Spline)
-
 {- TO CURVES -}
+
 
 {-| -}
 toCurves :
@@ -230,8 +299,6 @@ toCurves :
             Interpolate.Movement
             { curves : List (List Bezier.Spline)
             , previous : Maybe (Timeline.Occurring state)
-            , stackStart : Time.Absolute
-            , stackEnd : Time.Absolute
             , stack : List Bezier.Spline
             , state : Interpolate.State
             }
@@ -250,21 +317,21 @@ toCurves now toMotion =
         toCurvesLerp now
     }
 
+
 toCurvesStart now motion =
     { curves = []
     , previous = Nothing
-    , stackStart = now
-    , stackEnd = now
     , stack = []
-    , state = Interpolate.moving.start 
-        (motion)
+    , state =
+        Interpolate.moving.start
+            motion
     }
 
 
 toCurvesVisit now lookup target targetTime maybeLookAhead data =
     let
-        _ = Debug.log "VISIT" (target)
-        
+        -- _ =
+        --     Debug.log "VISIT" target
         state =
             Interpolate.moving.visit
                 lookup
@@ -276,31 +343,7 @@ toCurvesVisit now lookup target targetTime maybeLookAhead data =
         visitSplines =
             case data.previous of
                 Nothing ->
-                    -- let
-                    --     _ = Debug.log "::::::STAAAART"
-                    --             { target = target
-                    --             , targetTime = targetTime
-                    --             , new = state
-                    --             }
-                    -- in
-                    -- Debug.log "  SPLOON"
-                    [ -- Not sure if this is correct
-                    --     Bezier.Spline 
-                    --    { x = Time.inMilliseconds targetTime
-                    --     , y = 
-                    --         Pixels.inPixels data.state.position
-                    --     }
-                    --     { x = Time.inMilliseconds targetTime
-                    --     , y = Pixels.inPixels data.state.position
-                    --     }
-                    --     { x = Time.inMilliseconds targetTime
-                    --     , y = Pixels.inPixels state.position
-                    --     }
-                    --     { x = Time.inMilliseconds targetTime
-                    --     , y = Pixels.inPixels state.position
-                    --     }
-
-                    ]
+                    []
 
                 Just prev ->
                     Interpolate.lerpSplines
@@ -310,29 +353,18 @@ toCurvesVisit now lookup target targetTime maybeLookAhead data =
                         (Time.inMilliseconds targetTime)
                         maybeLookAhead
                         data.state
-                        
     in
     -- Add keyframe to current stack
     -- if there is a lookahead, add timing fn for that lookahead
     -- otherwise render the dwelling behavior as a separate anim
     case maybeLookAhead of
         Nothing ->
-            -- capture
-            --    - target pos
-            --    - target time
-            --    - no timing
-            --
-            -- if dwell
-            --     - finalize stack
-            --     - render and finalize dwell
             let
                 newStack =
                     visitSplines ++ data.stack
 
                 final =
                     { curves = data.curves
-                    , stackStart = data.stackStart
-                    , stackEnd = data.stackEnd
                     , stack =
                         newStack
                     , state = state
@@ -348,23 +380,13 @@ toCurvesVisit now lookup target targetTime maybeLookAhead data =
                         |> finalizeCurves
                         |> combineCurves data.curves
                 , previous = Just target
-                , stackStart = targetTime
-                , stackEnd = targetTime
-                , stack =
-                    []
+                , stack = []
                 , state = state
                 }
 
         Just lookAhead ->
-            -- capture
-            --    - target pos
-            --    - target time
-            --    - capture timing to lookahead
-            { curves =
-                data.curves
+            { curves = data.curves
             , previous = Just target
-            , stackStart = data.stackStart
-            , stackEnd = data.stackEnd
             , stack =
                 visitSplines ++ data.stack
             , state = state
@@ -376,11 +398,11 @@ toCurvesLerp now prevEndTime prev target targetTime interruptedAt maybeLookAhead
     -- create and finalizeTransition stack for the interruption
     -- (but use the special transition finalizer which embeds timing outside of keyframes)
     let
-
-        _ = Debug.log "LERP DATA" 
-            { data = data
-            , interruptedAt = interruptedAt
-            }
+        _ =
+            Debug.log "LERP DATA"
+                { data = data
+                , interruptedAt = interruptedAt
+                }
 
         transitionSplines =
             Interpolate.lerpSplines
@@ -393,26 +415,22 @@ toCurvesLerp now prevEndTime prev target targetTime interruptedAt maybeLookAhead
 
         sliced =
             Debug.log "SLICED" <|
-            if interruptedAt == targetTime then
-                transitionSplines
+                if interruptedAt == targetTime then
+                    transitionSplines
 
-            else
-                Interpolate.takeBefore interruptedAt transitionSplines
+                else
+                    Interpolate.takeBefore interruptedAt transitionSplines
     in
     { curves =
         finalizeCurves data
             |> combineCurves data.curves
             |> combineCurves
                 (finalizeCurves
-                    { stackStart = Time.millis prevEndTime
-                    , stackEnd = Time.millis targetTime
-                    , stack =
+                    { stack =
                         sliced
                     }
                 )
     , previous = Nothing
-    , stackStart = Time.millis targetTime
-    , stackEnd = Time.millis targetTime
     , stack = []
     , state =
         Interpolate.moving.lerp
@@ -425,11 +443,10 @@ toCurvesLerp now prevEndTime prev target targetTime interruptedAt maybeLookAhead
             data.state
     }
 
+
 finalizeCurves :
     { stack
-        | stackStart : Time.Absolute
-        , stackEnd : Time.Absolute
-        , stack : List Bezier.Spline
+        | stack : List Bezier.Spline
     }
     -> List (List Bezier.Spline)
 finalizeCurves stack =
@@ -450,16 +467,12 @@ addDwellCurves :
     ->
         { curves : List (List Bezier.Spline)
         , previous : Maybe (Timeline.Occurring state)
-        , stackStart : Time.Absolute
-        , stackEnd : Time.Absolute
         , stack : List Bezier.Spline
         , state : Interpolate.State
         }
     ->
         { curves : List (List Bezier.Spline)
         , previous : Maybe (Timeline.Occurring state)
-        , stackStart : Time.Absolute
-        , stackEnd : Time.Absolute
         , stack : List Bezier.Spline
         , state : Interpolate.State
         }
@@ -467,19 +480,17 @@ addDwellCurves lookup target startTime now state details =
     case lookup (Timeline.getEvent target) of
         Interpolate.Osc personality startPos period checkpoints ->
             let
-                dwell = 
-                    List.filterMap 
+                dwell =
+                    List.filterMap
                         (\point ->
                             case point.timing of
                                 Interpolate.Linear ->
                                     Nothing
-                                
+
                                 Interpolate.Bezier spline ->
                                     Just (Bezier.addX (Time.inMilliseconds startTime) spline)
-
                         )
-                        checkpoints 
-                        |> Debug.log "dwels"
+                        checkpoints
             in
             { details | curves = combineCurves details.curves [ dwell ] }
 
