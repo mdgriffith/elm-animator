@@ -2,15 +2,15 @@ module Internal.Css exposing (..)
 
 {-| -}
 
-import Dict exposing (Dict)
+import Color
 import Duration
 import Html.Attributes exposing (id)
 import Internal.Bezier as Bezier
+import Internal.Css.Props
 import Internal.Interpolate as Interpolate
 import Internal.Time as Time
 import Internal.Timeline as Timeline
 import Pixels
-import Set exposing (Set)
 
 
 {-| An id representing a prop type.
@@ -49,7 +49,7 @@ All properties will need an inherent default in case they are missing.
 -}
 type Prop
     = -- binary id for comparisons
-      Prop Id Float Interpolate.Movement
+      Prop Id Interpolate.Movement
 
 
 {-| This is mainly to help rendering a transform.
@@ -78,13 +78,366 @@ overlapping only lookup timeline =
     False
 
 
+type Property
+    = --     name   suffix
+      Color Id Color.Color
+      -- This can be X, Y, Rotate, or Scale
+    | Transform Id Interpolate.Movement
+
+
 {-| -}
 scan :
     (state -> List Prop)
     -> Timeline.Timeline state
     -> List Prop
 scan lookup timeline =
-    []
+    [ Prop Internal.Css.Props.ids.opacity (Interpolate.Pos Interpolate.standardDefault 0)
+
+    ]
+
+
+cssFromProps : Timeline.Timeline state -> (state -> List Prop) -> CssAnim
+cssFromProps timeline lookup =
+    let
+        present =
+            scan lookup timeline
+
+        renderedProps =
+            propsToCurves present lookup timeline
+    in
+    renderCss (Timeline.getCurrentTime timeline) renderers renderedProps
+
+
+{-| RenderdProp's are required to be ordered!
+-}
+type alias Renderer =
+    Time.Absolute -> List RenderedProp -> Maybe ( CssAnim, List RenderedProp )
+
+
+renderers : List Renderer
+renderers =
+    [ transform
+    , colors
+    , scalars
+    ]
+
+
+colors : Renderer
+colors now renderedProps =
+    -- ()
+    -- Debug.todo ""
+    Nothing
+
+
+transform : Renderer
+transform now renderedProps =
+    case renderedProps of
+        [] ->
+            Nothing
+
+        top :: remain ->
+            let
+                firstTransform =
+                    isTransform top
+
+                manyTransforms =
+                    case remain of
+                        penultimate :: _ ->
+                            isTransform penultimate
+
+                        _ ->
+                            False
+            in
+            if manyTransforms then
+                -- TODO: we can make this more nuanced once we have something working.
+                Just (transformHelperExact renderedProps Internal.Css.Props.firstTransform)
+
+            else if firstTransform then
+                Just (transformHelper renderedProps Internal.Css.Props.firstTransform)
+
+            else
+                Nothing
+
+
+isTransform : RenderedProp -> Bool
+isTransform (RenderedProp prop) =
+    Internal.Css.Props.isTransformId prop.id
+
+
+{-| Render the exact points with a linear timing function. instead of relying on a cubic-bezier.
+-}
+transformHelperExact : List RenderedProp -> Id -> ( CssAnim, List RenderedProp )
+transformHelperExact props expecting =
+    case props of
+        [] ->
+            ( emptyAnim, [] )
+
+        top :: remain ->
+            ( emptyAnim
+            , []
+            )
+
+
+{-| Transforms are weird because we can only render one timing-fn.
+
+However, transforms are only in direct conflict some of the times.
+
+The common behaviors are:
+
+    translate -> 2 properties, each rendered with standardDefault personality
+    scale -> 1 property, as standardDefault
+    rotation -> usually *not* transitioned between concrete values,
+        but could be rotating at a certain speed. when the state is at rest
+
+transformHelper will render
+
+-}
+transformHelper : List RenderedProp -> Id -> ( CssAnim, List RenderedProp )
+transformHelper props expecting =
+    case props of
+        [] ->
+            ( emptyAnim, [] )
+
+        top :: remain ->
+            ( emptyAnim
+            , []
+            )
+
+
+scalars : Renderer
+scalars now renderedProps =
+    case renderedProps of
+        [] ->
+            Nothing
+
+        top :: remain ->
+            Just (scalarHelper now renderedProps emptyAnim)
+
+
+scalarHelper : Time.Absolute -> List RenderedProp -> CssAnim -> ( CssAnim, List RenderedProp )
+scalarHelper now renderedProps anim =
+    case renderedProps of
+        [] ->
+            ( anim, [] )
+
+        top :: remain ->
+            scalarHelper now
+                remain
+                (propToCss now top
+                    |> combine anim
+                )
+
+
+propToCss : Time.Absolute -> RenderedProp -> CssAnim
+propToCss now (RenderedProp details) =
+    propToCssHelper now details.id details.sections emptyAnim
+
+
+propToCssHelper : Time.Absolute -> Internal.Css.Props.Id -> List Section -> CssAnim -> CssAnim
+propToCssHelper now id sections anim =
+    case sections of
+        [] ->
+            anim
+
+        top :: remain ->
+            propToCssHelper now
+                id
+                remain
+                (combine
+                    anim
+                    (sectionCss now id top)
+                )
+
+
+sectionCss : Time.Absolute -> Id -> Section -> CssAnim
+sectionCss now id (Section section) =
+    let
+        name =
+            Internal.Css.Props.name id
+
+        toStr =
+            Internal.Css.Props.toStr id
+
+        animationName =
+            name
+                ++ "-"
+                ++ splineListHash section.splines ""
+
+        duration =
+            case section.period of
+                Timeline.Loop dur ->
+                    dur
+
+                Timeline.Repeat _ dur ->
+                    dur
+
+        durationStr =
+            String.fromFloat
+                (Duration.inMilliseconds duration)
+                ++ "ms"
+
+        delay =
+            Time.duration now section.start
+                |> Duration.inMilliseconds
+                |> String.fromFloat
+                |> (\s -> s ++ "ms")
+
+        n =
+            case section.period of
+                Timeline.Loop _ ->
+                    infinite
+
+                Timeline.Repeat count _ ->
+                    String.fromInt count
+
+        -- @keyframes duration | easing-function | delay |
+        --      iteration-count | direction | fill-mode | play-state | name */
+        -- animation: 3s ease-in 1s 2 reverse both paused slidein;
+        animation =
+            (durationStr ++ " ")
+                -- we specify an easing function here because it we have to
+                -- , but it is overridden by the one in keyframes
+                ++ "linear "
+                ++ delay
+                ++ " "
+                ++ n
+                ++ " normal forward running "
+                ++ animationName
+
+        keyframes =
+            ("@keyframes " ++ animationName ++ " {\n")
+                ++ sectionKeyFrames
+                    section.start
+                    now
+                    (Time.advanceBy duration section.start)
+                    name
+                    toStr
+                    section.splines
+                    ""
+                ++ "\n}"
+    in
+    { hash = animationName
+    , animation = animation
+    , keyframes = keyframes
+    }
+
+
+{-| Reminder that `animation-timing-function` defines the timing function between the keyframe it's attached to and the next one.
+-}
+sectionKeyFrames : Time.Absolute -> Time.Absolute -> Time.Absolute -> String -> (Float -> String) -> List Bezier.Spline -> String -> String
+sectionKeyFrames start now end name toStr splines rendered =
+    case splines of
+        [] ->
+            rendered
+
+        top :: remaining ->
+            if Bezier.afterLastX (Time.inMilliseconds now) top then
+                sectionKeyFrames start
+                    now
+                    end
+                    name
+                    toStr
+                    remaining
+                    rendered
+
+            else
+                let
+                    sectionStart =
+                        Time.millis (Bezier.firstX top)
+
+                    -- percentage is calculated from
+                    -- the later of start time or now
+                    -- and the end time
+                    percentage =
+                        String.fromFloat (Time.progress start end sectionStart * 100) ++ "%"
+
+                    frame =
+                        percentage
+                            ++ "{ "
+                            ++ (name ++ ":" ++ toStr (Bezier.firstY top) ++ ";\n")
+                            ++ (" animation-timing-function:" ++ Bezier.normalizedString top ++ ";")
+                            ++ "\n}\n"
+                in
+                sectionKeyFrames start
+                    now
+                    end
+                    name
+                    toStr
+                    remaining
+                    (rendered ++ frame)
+
+
+infinite : String
+infinite =
+    "infinite"
+
+
+splineListHash : List Bezier.Spline -> String -> String
+splineListHash splines str =
+    case splines of
+        [] ->
+            str
+
+        top :: remain ->
+            splineListHash remain (str ++ Bezier.hash top)
+
+
+{-| Colors ->
+r,g,b,a -> Quad
+
+    We need either rgb, or rgba
+
+Opacity ->
+Single
+
+Transform ->
+Normally:
+x,y,rotation,scale
+
+    Sometimes:
+    x,y,z,rotation,scaleX,scaleY,scaleZ,facingX,facingY,facingZ
+
+-}
+renderCss : Time.Absolute -> List Renderer -> List RenderedProp -> CssAnim
+renderCss now renderFns props =
+    renderCssHelper now
+        renderFns
+        props
+        emptyAnim
+
+
+emptyAnim : CssAnim
+emptyAnim =
+    { hash = ""
+    , animation = ""
+    , keyframes = ""
+    }
+
+
+renderCssHelper : Time.Absolute -> List Renderer -> List RenderedProp -> CssAnim -> CssAnim
+renderCssHelper now renderer props cssAnim =
+    case renderer of
+        [] ->
+            cssAnim
+
+        render :: remain ->
+            case props of
+                [] ->
+                    cssAnim
+
+                _ ->
+                    case render now props of
+                        Nothing ->
+                            renderCssHelper now
+                                remain
+                                props
+                                cssAnim
+
+                        Just ( newCss, newProps ) ->
+                            renderCssHelper now
+                                remain
+                                newProps
+                                (combine newCss cssAnim)
 
 
 {-|
@@ -127,24 +480,27 @@ toPropCurves only =
         \props ->
             { rendered =
                 List.map
-                    (\(Prop onlyId onlyDefault onlyMove) ->
+                    (\(Prop onlyId _) ->
                         case matchId onlyId props of
-                            Just (Prop id default move) ->
+                            Just (Prop id move) ->
                                 RenderedProp
                                     { id = id
-                                    , default = Interpolate.Pos Interpolate.standardDefault default
+                                    , default = Internal.Css.Props.default id
                                     , sections = []
                                     , state = Interpolate.moving.start move
                                     }
 
                             Nothing ->
+                                let
+                                    default = Internal.Css.Props.default onlyId
+                                in
                                 RenderedProp
                                     { id = onlyId
-                                    , default = Interpolate.Pos Interpolate.standardDefault onlyDefault
+                                    , default = default
                                     , sections = []
                                     , state =
                                         Interpolate.moving.start
-                                            (Interpolate.Pos Interpolate.standardDefault onlyDefault)
+                                            default
                                     }
                     )
                     only
@@ -157,7 +513,6 @@ toPropCurves only =
         \_ ->
             Nothing
     , visit =
-        -- toCurvesVisit now
         \lookup target targetTime maybeLookAhead data ->
             { rendered =
                 List.map
@@ -174,8 +529,12 @@ toPropCurves only =
                                     target
                                     targetTime
                                     data.previous
-                                    -- maybeLookAhead
-                                    (Debug.todo "")
+                                    (Maybe.map
+                                        (Timeline.mapLookAhead
+                                            (stateOrDefault rendered)
+                                        )
+                                        maybeLookAhead
+                                    )
                                     rendered.state
                                     rendered.sections
                             , state =
@@ -186,8 +545,12 @@ toPropCurves only =
                                     )
                                     target
                                     targetTime
-                                    -- maybeLookAhead
-                                    (Debug.todo "")
+                                    (Maybe.map
+                                        (Timeline.mapLookAhead
+                                            (stateOrDefault rendered)
+                                        )
+                                        maybeLookAhead
+                                    )
                                     rendered.state
                             }
                     )
@@ -209,8 +572,12 @@ toPropCurves only =
                                     (stateOrDefault rendered target)
                                     targetTime
                                     interruptedAt
-                                    -- maybeLookAhead
-                                    (Debug.todo "")
+                                    (Maybe.map
+                                        (Timeline.mapLookAhead
+                                            (stateOrDefault rendered)
+                                        )
+                                        maybeLookAhead
+                                    )
                                     rendered.state
                                     rendered.sections
                             , state =
@@ -220,8 +587,12 @@ toPropCurves only =
                                     (stateOrDefault rendered target)
                                     targetTime
                                     interruptedAt
-                                    -- maybeLookAhead
-                                    (Debug.todo "")
+                                    (Maybe.map
+                                        (Timeline.mapLookAhead
+                                            (stateOrDefault rendered)
+                                        )
+                                        maybeLookAhead
+                                    )
                                     rendered.state
                             }
                     )
@@ -237,7 +608,7 @@ stateOrDefault details props =
         [] ->
             details.default
 
-        (Prop id _ move) :: remain ->
+        (Prop id move) :: remain ->
             if id == details.id then
                 move
 
@@ -251,16 +622,12 @@ matchId onlyId props =
         [] ->
             Nothing
 
-        ((Prop id _ _) as top) :: remain ->
+        ((Prop id _) as top) :: remain ->
             if id == onlyId then
                 Just top
 
             else
                 matchId onlyId remain
-
-
-
--- Debug.todo "Here's where you left off!"
 
 
 {-| This is a fully composed css proeprty string, such as:
@@ -322,7 +689,8 @@ A dwell will be a section by itself and can possibly repeat.
 -}
 type Section
     = Section
-        { period : Timeline.Period
+        { start : Time.Absolute
+        , period : Timeline.Period
         , splines : List Bezier.Spline
         }
 
@@ -438,7 +806,8 @@ toCurvesVisit lookup target targetTime maybePrevious maybeLookAhead state existi
                     existingSections
                         |> (::)
                             (Section
-                                { period = once (Duration.milliseconds 1)
+                                { start = Timeline.endTime prev
+                                , period = once (Duration.milliseconds 1)
                                 , splines = visitSplines
                                 }
                             )
@@ -458,10 +827,6 @@ once =
     Timeline.Repeat 1
 
 
-type alias Milliseconds =
-    Float
-
-
 toCurvesLerp :
     Time.Absolute
     -> Interpolate.Movement
@@ -477,11 +842,11 @@ toCurvesLerp prevEndTime prev target targetTime interruptedAt maybeLookAhead sta
     -- create and finalizeTransition stack for the interruption
     -- (but use the special transition finalizer which embeds timing outside of keyframes)
     let
-        _ =
-            Debug.log "LERP DATA"
-                { data = state
-                , interruptedAt = interruptedAt
-                }
+        -- _ =
+            -- Debug.log "LERP DATA"
+            --     { data = state
+            --     , interruptedAt = interruptedAt
+            --     }
 
         transitionSplines =
             Interpolate.lerpSplines
@@ -502,7 +867,8 @@ toCurvesLerp prevEndTime prev target targetTime interruptedAt maybeLookAhead sta
     existingSections
         |> (::)
             (Section
-                { period = once (Time.duration prevEndTime targetTime)
+                { start = interruptedAt
+                , period = once (Time.duration prevEndTime targetTime)
                 , splines = sliced
                 }
             )
@@ -518,7 +884,8 @@ dwellSplines lookup target startTime existing =
     case lookup (Timeline.getEvent target) of
         Interpolate.Osc personality startPos period checkpoints ->
             Section
-                { period =
+                { start = startTime
+                , period =
                     period
                 , splines =
                     List.filterMap
@@ -1022,10 +1389,6 @@ type alias CssAnim =
     , animation : String
     , keyframes : String
     }
-
-
-type alias Key =
-    Int
 
 
 

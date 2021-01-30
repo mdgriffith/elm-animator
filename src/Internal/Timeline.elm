@@ -8,7 +8,7 @@ module Internal.Timeline exposing
     , current, arrivedAt, arrived, previous, upcoming
     , Line(..), Timetable(..)
     , foldp, capture, captureTimeline
-    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), atTime, foldpAll, foldpOld, gc, getCurrentTime, hasChanged, justInitialized, linearDefault, linesAreActive, previousEndTime, previousStartTime, updateWith
+    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), atTime, foldpAll, foldpOld, gc, getCurrentTime, hasChanged, justInitialized, linearDefault, linesAreActive, mapLookAhead, previousEndTime, previousStartTime, updateWith
     )
 
 {-|
@@ -143,14 +143,18 @@ type alias Visit state anchor motion =
     -> motion
 
 
-type alias Milliseconds =
-    Float
-
-
-type alias LookAhead anchor =
-    { anchor : anchor
+type alias LookAhead state =
+    { anchor : state
     , time : Time.Absolute
     , resting : Bool
+    }
+
+
+mapLookAhead : (a -> b) -> LookAhead a -> LookAhead b
+mapLookAhead fn look =
+    { anchor = fn look.anchor
+    , time = look.time
+    , resting = look.resting
     }
 
 
@@ -1111,14 +1115,14 @@ foldp :
     -> Timeline state
     -> motion
 foldp lookup fn (Timeline timelineDetails) =
-    log "NEW DONE" <|
+    -- log "NEW DONE" <|
         case timelineDetails.events of
             Timetable timetable ->
                 let
                     start =
                         fn.start (lookup timelineDetails.initial)
                 in
-                case Debug.log "TIMETABLE" timetable of
+                case timetable of
                     [] ->
                         start
 
@@ -1193,11 +1197,11 @@ visitAll :
     -> motion
     -> motion
 visitAll transitionOngoing toAnchor interp details prev states future state =
-    let
-        _ =
-            log "------NEW - ALL" ""
-    in
-    case Debug.log "    STATES" states of
+    -- let
+    --     _ =
+    --         log "------NEW - ALL" ""
+    -- in
+    case  states of
         [] ->
             case future of
                 [] ->
@@ -1243,7 +1247,7 @@ visitAll transitionOngoing toAnchor interp details prev states future state =
                         lerped
 
         top :: remain ->
-            case Debug.log "   One -> FUTURE" future of
+            case future of
                 [] ->
                     -- visit top and continue
                     let
@@ -1903,11 +1907,11 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
     -- if an interruption occurs, we want to interpolate to the point of the interruption
     -- then transition over to the new line.
     let
-        _ =
-            log "------" "OLD"
+        -- _ =
+        --     log "------" "OLD"
 
-        _ =
-            log "    ->" now
+        -- _ =
+        --     log "    ->" now
 
         transition prev newState =
             -- After we interpolate, we check here if we are actually done
@@ -1917,7 +1921,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                     newState
 
                 ((Line futureStart futureStartEv futureRemain) as future) :: restOfFuture ->
-                    if log "CONTINUE" <| Time.thisBeforeOrEqualThat futureStart details.now then
+                    if Time.thisBeforeOrEqualThat futureStart details.now then
                         overLines fn lookup details (Just prev) future restOfFuture newState
 
                     else

@@ -217,11 +217,11 @@ wrapUnitAfter dur total =
         totalDuration =
             round (Duration.inMilliseconds total)
 
-        _ =
-            Debug.log "WRAP"
-                { current = totalDuration
-                , period = periodDuration
-                }
+        -- _ =
+        --     Debug.log "WRAP"
+        --         { current = totalDuration
+        --         , period = periodDuration
+        --         }
     in
     if periodDuration == 0 || totalDuration == 0 then
         0
@@ -377,13 +377,13 @@ visit :
     -> State
 visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeLookAhead state =
     let
-        _ =
-            Debug.log "    VISIT"
-                { event = event
-                , state = state
-                , now = now
-                , lookAhead = maybeLookAhead
-                }
+        -- _ =
+        --     Debug.log "    VISIT"
+        --         { event = event
+        --         , state = state
+        --         , now = now
+        --         , lookAhead = maybeLookAhead
+        --         }
 
         dwellTime =
             case maybeLookAhead of
@@ -393,10 +393,10 @@ visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeL
                 _ ->
                     Time.duration start (Time.earliest now eventEnd)
 
-        _ =
-            Debug.log "DWELL TIME" ( now, start, eventEnd )
+        -- _ =
+        --     Debug.log "DWELL TIME" ( now, start, eventEnd )
     in
-    Debug.log "   <-" <|
+    -- Debug.log "   <-" <|
         if Time.zeroDuration dwellTime then
             { position =
                 case lookup event of
@@ -537,16 +537,16 @@ takeBeforeHelper cutoff splines captured =
 lerp : Time.Absolute -> Movement -> Movement -> Time.Absolute -> Time.Absolute -> Maybe (Timeline.LookAhead Movement) -> State -> State
 lerp prevEndTime prev target targetTime now maybeLookAhead state =
     let
-        _ =
-            Debug.log "    LERP"
-                { prevEndTime = prevEndTime
-                , prev = prev
-                , target = target
-                , targetTime = targetTime
-                , now = now
-                , maybeLookAhead = maybeLookAhead
-                , state = state
-                }
+        -- _ =
+            -- Debug.log "    LERP"
+            --     { prevEndTime = prevEndTime
+            --     , prev = prev
+            --     , target = target
+            --     , targetTime = targetTime
+            --     , now = now
+            --     , maybeLookAhead = maybeLookAhead
+            --     , state = state
+            --     }
 
         wobble =
             case target of
@@ -565,7 +565,7 @@ lerp prevEndTime prev target targetTime now maybeLookAhead state =
                     (x == Pixels.inPixels state.position)
                         && (Pixels.inPixelsPerSecond state.velocity == 0)
     in
-    Debug.log "   <-" <|
+    -- Debug.log "   <-" <|
         if nothingHappened then
             state
 
@@ -776,7 +776,7 @@ oscillate start period points dwellTime =
         _ ->
             let
                 totalPeriodDuration =
-                    case Debug.log "PER" period of
+                    case period of
                         Loop periodDuration ->
                             periodDuration
 

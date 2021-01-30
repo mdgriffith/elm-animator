@@ -1,4 +1,21 @@
-module Internal.Bezier exposing (Point, Spline(..), atX, firstDerivative, normalize, pointOn, secondDerivative, splitAt, splitAtX, withinX, addX)
+module Internal.Bezier exposing
+    ( Point
+    , Spline(..)
+    , addX
+    , afterLastX
+    , atX
+    , firstDerivative
+    , firstX
+    , firstY
+    , hash
+    , normalize
+    , normalizedString
+    , pointOn
+    , secondDerivative
+    , splitAt
+    , splitAtX
+    , withinX
+    )
 
 {-| This module defines types and functions for cubic bezier splines.
 
@@ -23,7 +40,61 @@ type Spline
     = Spline Point Point Point Point
 
 
+hash : Spline -> String
+hash (Spline c0 c1 c2 c3) =
+    pointHash c0
+        ++ "-"
+        ++ pointHash c1
+        ++ "-"
+        ++ pointHash c2
+        ++ "-"
+        ++ pointHash c3
 
+
+floatStr : Float -> String
+floatStr f =
+    String.fromInt (round (f * 1000))
+
+
+pointHash : Point -> String
+pointHash { x, y } =
+    floatStr x ++ ":" ++ floatStr y
+
+{-|
+Normalize the spline from 
+    x : Time.Absolute
+    y : Absolute Position
+
+to
+
+    x : 0-1 based on time domain
+    y : 0-1 based on position domain
+
+-}
+normalizedString : Spline -> String
+normalizedString (Spline c0 c1 c2 c3) =
+     "cubic-bezier("
+                ++ (String.fromFloat c1.x ++ ", ")
+                ++ (String.fromFloat c1.y ++ ", ")
+                ++ (String.fromFloat c2.x ++ ", ")
+                ++ String.fromFloat c2.y
+                ++ ")"
+
+
+
+firstY : Spline -> Float
+firstY (Spline first _ _ _) =
+    first.y
+
+
+firstX : Spline -> Float
+firstX (Spline first _ _ _) =
+    first.x
+
+
+afterLastX : Float -> Spline -> Bool
+afterLastX a (Spline _ _ _ last) =
+    a > last.x
 
 
 zeroPoint : Point
@@ -289,29 +360,31 @@ atXHelper ((Spline p1 p2 p3 p4) as spline) desiredX jumpSize t depth =
         atXHelper spline desiredX (jumpSize / 2) (t + jumpSize) (depth + 1)
 
 
-
-
 addX : Float -> Spline -> Spline
 addX x (Spline c0 c1 c2 c3) =
     let
-        sc0 = 
-                { x = c0.x + x
-                , y = c0.y
-                }
-        sc1 = 
-                { x = c1.x + x
-                , y = c1.y
-                }
-        sc2 = 
-                { x = c2.x + x
-                , y = c2.y
-                }
-        sc3 = 
-                { x = c3.x + x
-                , y = c3.y
-                }
+        sc0 =
+            { x = c0.x + x
+            , y = c0.y
+            }
+
+        sc1 =
+            { x = c1.x + x
+            , y = c1.y
+            }
+
+        sc2 =
+            { x = c2.x + x
+            , y = c2.y
+            }
+
+        sc3 =
+            { x = c3.x + x
+            , y = c3.y
+            }
     in
-    (Spline sc0 sc1 sc2 sc3)
+    Spline sc0 sc1 sc2 sc3
+
 
 {-| Takes a bezier and shrinks it so that the domain of c0:c3 is
 
