@@ -1,4 +1,4 @@
-module Playground.View.Timeline exposing (view, viewCss, viewTimeline)
+module Playground.View.Timeline exposing (view, viewCssProps, viewCss, viewTimeline)
 
 {-|-}
 
@@ -16,25 +16,54 @@ import Pixels
 import Html exposing (div)
 import Html.Attributes as Attr
 
+
+
+-- viewProps : Timeline.Timeline state -> 
+--     { values : Bool
+--     , splines : Bool
+--     , toValues : state -> List Css.Prop
+--     } -> Svg.Svg svg
+-- viewProps timeline details =
+--     Svg.svg
+--         [ SvgA.width "500px"
+--         , SvgA.height "500px"
+--         , SvgA.viewBox "-100 -100 1000 1000"
+--         , SvgA.style "border: 4px dashed #eee;"
+--         ]
+--         (List.filterMap 
+--             (\(allowed, content) ->
+--                 if allowed then
+--                     Just content
+--                 else
+--                     Nothing
+
+--             )
+--             [ (details.values, viewPropValues details.toValues timeline)
+--             , (details.splines, viewPropSplines details.toValues timeline)
+--             ]
+--         )
+
+
+
 view timeline details =
     Svg.svg
-            [ SvgA.width "500px"
-            , SvgA.height "500px"
-            , SvgA.viewBox "0 0 1000 1000"
-            , SvgA.style "border: 4px dashed #eee;"
-            ]
-            (List.filterMap 
-                (\(allowed, content) ->
-                    if allowed then
-                        Just content
-                    else
-                        Nothing
+        [ SvgA.width "500px"
+        , SvgA.height "500px"
+        , SvgA.viewBox "-100 -100 1000 1000"
+        , SvgA.style "border: 4px dashed #eee;"
+        ]
+        (List.filterMap 
+            (\(allowed, content) ->
+                if allowed then
+                    Just content
+                else
+                    Nothing
 
-                )
-                [ (details.values, viewValues details.toValues timeline)
-                , (details.splines, viewSplines details.toValues timeline)
-                ]
             )
+            [ (details.values, viewValues details.toValues timeline)
+            , (details.splines, viewSplines details.toValues timeline)
+            ]
+        )
 
 
 
@@ -49,16 +78,14 @@ type alias LayoutCache =
 viewValues toValues timeline =
     let
         frames =
-           capture Highlight (Debug.log "START OLD" 0) 800
-              
+           capture Faded (Debug.log "START OLD" 200) 1200
                 toValues
                 Interpolate.moving
                 timeline
                 []
 
         newFrames =
-           captureNew Faded (Debug.log "START NEW" 0) 800
-               
+           captureNew Highlight (Debug.log "START NEW" 200) 1200
                 toValues
                 Interpolate.moving
                 timeline
@@ -69,7 +96,7 @@ viewValues toValues timeline =
     Svg.g 
         [ SvgA.id "values"
         ]
-        ( newFrames ++ frames
+        (  frames ++ newFrames
         )
 
 capture style start finish toMotion interp timeline rendered =
@@ -95,6 +122,35 @@ capture style start finish toMotion interp timeline rendered =
                 :: rendered
             )
 
+
+viewCssProps toProps timeline =
+    let
+        css =
+            Css.cssFromProps 
+                timeline
+                toProps
+    in
+    div 
+        [ Attr.style "position" "fixed"
+        , Attr.style "left" "100px"
+        , Attr.style "bottom" "100px"
+        , Attr.style "white-space" "pre-line" 
+        , Attr.style "font-family" "monospace" 
+        , Attr.style "font-size" "10px"
+        ] 
+        [ Html.h2 [] [Html.text "HASH"]
+        , div [] 
+            [ Html.text  css.hash
+            ]
+        , Html.h2 [] [Html.text "ANIM"]
+        , div [] 
+            [ Html.text css.animation
+            ]
+        , Html.h2 [] [Html.text "KEYFRAMES"]
+        , div [] 
+            [ Html.text css.keyframes
+            ]
+        ]
 
 
 viewCss toValues timeline =
@@ -159,23 +215,22 @@ viewSplines toValues timeline =
     let
         splines =
             Css.curves toValues timeline
-                |> List.filter (List.isEmpty >> not)
     in
-    Svg.g [ SvgA.id "values"
+    Svg.g [ SvgA.id "splines"
           ]
-            (renderSplines 
-                { x = []
-                , y = []
-                }
-                splines
-            )
+        (renderSplines 
+            { x = []
+            , y = []
+            }
+            splines
+        )
 
 renderSplines cache groups =
     case groups of
         [] ->
             []
         
-        splines :: remain ->
+        (Css.Section { splines }) :: remain ->
             renderSplines cache remain ++
                 renderSplineGroup splines 
          

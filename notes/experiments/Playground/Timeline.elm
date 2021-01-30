@@ -46,6 +46,7 @@ import Time
 import Internal.Time as Time
 import Pixels
 import Playground.View.Timeline
+import Internal.Css.Props
 
 main =
     Browser.document
@@ -76,6 +77,7 @@ main =
                         { events = 3
                         , depth = 2
                         }
+                        -- |> Debug.log "levels"
                   }
                 , Cmd.none
                 )
@@ -101,7 +103,7 @@ createLevelsHelper index details created =
         createLevelsHelper
             (index - 1)
             details
-            ({ start = index * 150
+            ({ start = (index * 100) + 50
              , events =
                 let
                     base = 
@@ -177,11 +179,14 @@ createTimeline levels tl =
                     |> Timeline.update (Time.millisToPosix top.start)
                 )
 
+startingTimeline =
+    Animator.init (State 0)
+        |> Timeline.update (Time.millisToPosix 0)
 
 viewBody model =
     let
         timeline = 
-            createTimeline model.levels (Animator.init (State 0))
+            createTimeline model.levels (startingTimeline)
     in
     div []
         [ h1 [] [ text "Timeline Playground" ]
@@ -211,9 +216,200 @@ viewBody model =
             , toValues = toValues
             }
         , Playground.View.Timeline.viewTimeline timeline
-        -- , Playground.View.Timeline.viewCss toValues model.timeline
+        , Playground.View.Timeline.viewCss toValues timeline
+        , Playground.View.Timeline.viewCssProps toProps timeline
         ]
 
+toProps (State state) =
+    let
+        base = toFloat state * 100
+    in
+    -- Interpolate.Pos Interpolate.standardDefault (toFloat (state * 100))
+    [ Css.Prop Internal.Css.Props.ids.opacity
+        (wave (Timeline.Repeat 5 (Animator.millis 200)) base (base + 100))
+    ]
+
+
 toValues (State state) =
+    let
+        base = toFloat state * 100
+    in
+    -- Interpolate.Pos Interpolate.standardDefault (toFloat (state * 100))
+    wave (Timeline.Repeat 5 (Animator.millis 200)) base (base + 100)
+
+
+
+
+{- OSCILLATORS -}
+
+
+pos state =
     Interpolate.Pos Interpolate.standardDefault (toFloat (state * 100))
 
+wave : Timeline.Period -> Float -> Float -> Interpolate.Movement
+wave period start end =
+    let
+        top =
+            max start end
+
+        bottom =
+            min start end
+
+        total =
+            top - bottom
+
+        periodDuration =
+            case period of
+                Timeline.Loop dur ->
+                    dur
+                
+                Timeline.Repeat n dur ->
+                    dur
+    in
+    Interpolate.Osc Interpolate.standardDefault
+        start
+        period
+        -- TODO! What are the bezier control points for a sin wave?
+        -- (\u ->
+        --     let
+        --         normalized =
+        --             (cos (turns (0.5 + u)) + 1) / 2
+        --     in
+        --     start + total * normalized
+        -- )
+        (scaleCurveTiming 0 periodDuration []
+            [ { value = end
+            , timing =
+                    Interpolate.Bezier 
+                        (Bezier.Spline
+                        { x = 0
+                        , y = start
+                        }
+                        { x = 0
+                        , y = start
+                        }
+                        { x = 0.5
+                        , y = end
+                        }
+                        { x = 0.5
+                        , y = end
+                        })
+                    -- Interpolate.Linear
+            , time = 0.5
+            }
+            , { value = start
+            , timing =
+                    Interpolate.Bezier 
+                        (Bezier.Spline
+                        { x = 0.5
+                        , y = end
+                        }
+                        { x = 0.5
+                        , y = end
+                        }
+                        { x = 1
+                        , y = start
+                        }
+                        { x = 1
+                        , y = start
+                        })
+                    -- Interpolate.Linear
+            , time = 1
+            }
+            ])
+
+
+scaleCurveTiming last periodDuration rendered sections =
+    case sections of
+        [] ->
+            List.reverse rendered
+                -- |> Debug.log "dwelll curves"
+
+        point :: remain ->
+           scaleCurveTiming
+                point.time
+                periodDuration
+                (scaleTiming last periodDuration point :: rendered)
+                remain
+
+scaleTiming last periodDuration point =
+    case point.timing of
+        Interpolate.Linear ->
+            point
+        Interpolate.Bezier (Bezier.Spline c0 c1 c2 c3) ->
+            let
+                -- _ = Debug.log "SCALING" (duration, point.time, last)
+                duration = 
+                    --  (point.time - last) * 
+                     (Duration.inMilliseconds periodDuration)
+                -- current points take the form of 
+                -- x : 0-1
+                -- y : actual position
+                -- and we want to scale x to be real duration numbers in millis
+
+                sc0 = 
+                    { x = c0.x * duration
+                    , y = c0.y
+                    }
+                sc1 = 
+                    { x = c1.x * duration
+                    , y = c1.y
+                    }
+                sc2 = 
+                    { x = c2.x * duration
+                    , y = c2.y
+                    }
+                sc3 = 
+                    { x = c3.x * duration
+                    , y = c3.y
+                    }
+
+            in
+            { value = point.value
+            , timing = 
+                Interpolate.Bezier 
+                    (Bezier.Spline sc0 sc1 sc2 sc3)
+            , time = point.time
+            }
+
+
+{-| Start at one number, move linearly to another, and then linearly back.
+-}
+zigzag : Timeline.Period ->  Float -> Float -> Interpolate.Movement
+zigzag period start end =
+    let
+        total =
+            end - start
+    in
+    Interpolate.Osc Interpolate.standardDefault 
+        start
+        period
+        [ { value = end
+          , timing = Interpolate.Linear
+          , time = 0.5
+          }
+        , { value = start
+          , timing = Interpolate.Linear
+          , time = 1
+          }
+        ]
+
+{-| Start at one number and move linearly to another, then immediately start again at the first.
+
+This was originally intended for animating rotation where you'd want 360deg to "wrap" to 0deg.
+
+-}
+wrap : Timeline.Period ->  Float -> Float -> Interpolate.Movement
+wrap period start end =
+    let
+        total =
+            end - start
+    in
+    Interpolate.Osc Interpolate.standardDefault 
+        start
+        period
+        [ { value = end
+          , timing = Interpolate.Linear
+          , time = 1
+          }
+        ]
