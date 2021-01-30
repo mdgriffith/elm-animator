@@ -13,6 +13,9 @@ import Pixels
 import Random
 import Time
 import Internal.Bezier as Bezier
+import Internal.Css as Css
+import Internal.Css.Props
+
 
 suite =
     Benchmark.describe "Animator benchmarks"
@@ -23,7 +26,8 @@ suite =
         -- , basicInterpolation
         -- , floatComparison
         -- , interpolationComponents
-        foldp
+        -- foldp
+        cssGeneration
         ]
 
 
@@ -254,6 +258,83 @@ basicInterpolation =
                     Interpolate.moving
                     timeline
         ]
+
+cssGeneration =
+    let
+        timeline =
+            Animator.init Hufflepuff
+                |> Animator.queue
+                    [ Animator.wait (Animator.seconds 1)
+                    , Animator.event (Animator.seconds 1) Griffyndor
+                    , Animator.wait (Animator.seconds 1)
+                    , Animator.event (Animator.seconds 1) Slytherin
+                    , Animator.wait (Animator.seconds 1)
+                    , Animator.event (Animator.seconds 1) Ravenclaw
+                    , Animator.wait (Animator.seconds 1)
+                    ]
+                |> Timeline.update (Time.millisToPosix 0)
+                |> Timeline.update (Time.millisToPosix 1400)
+    in
+    describe "Interpolate to a point on a 4 event timeline"
+        [ benchmark "capture frames, 60fps, (old)" <|
+            \_ ->
+                Timeline.capture 60
+                    (Interpolate.withStandardDefault << toPos)
+                    Interpolate.moving
+                    timeline
+        , benchmark "capture frames, 15fps, (old)" <|
+            \_ ->
+                Timeline.capture 15
+                    (Interpolate.withStandardDefault << toPos)
+                    Interpolate.moving
+                    timeline
+
+        , benchmark "bezier-generation (new)" <|
+            \_ ->
+                -- Timeline.capture 15
+                --     (Interpolate.withStandardDefault << toPos)
+                --     Interpolate.moving
+                --     timeline
+                Css.cssFromProps 
+                    timeline
+                    toProps
+        ]
+
+
+toProps event =
+    -- let
+    --     base = toFloat state * 100
+    -- in
+    -- -- Interpolate.Pos Interpolate.standardDefault (toFloat (state * 100))
+    -- [ Css.Prop Internal.Css.Props.ids.opacity
+    --     (wave (Timeline.Repeat 5 (Animator.millis 200)) base (base + 100))
+    -- ]
+     case event of
+        Hufflepuff ->
+            [ Css.Prop Internal.Css.Props.ids.opacity
+                (pos 100)
+            ]
+
+        Griffyndor ->
+            -- pos 400
+            [ Css.Prop Internal.Css.Props.ids.opacity
+                (pos 400)
+            ]
+
+        Slytherin ->
+            -- pos 700
+            [ Css.Prop Internal.Css.Props.ids.opacity
+                (pos 700)
+            ]
+
+        Ravenclaw ->
+            -- pos 1000
+            [ Css.Prop Internal.Css.Props.ids.opacity
+                (pos 1000)
+            ]
+
+pos state =
+    Interpolate.Pos Interpolate.standardDefault state
 
 
 type House
