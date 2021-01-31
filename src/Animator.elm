@@ -290,7 +290,7 @@ initWith now first =
 delay : Duration -> Timeline state -> Timeline state
 delay dur (Timeline.Timeline details) =
     (Timeline.Timeline 
-        { details | delay = Time.expand details.delay dur }
+        { details | delay = Time.expand details.delay (Time.positiveDuration dur) }
     )
 
 

@@ -2,7 +2,7 @@ module Internal.Time exposing
     ( thisBeforeOrEqualThat, thisAfterOrEqualThat, equal
     , Absolute, AbsoluteTime(..), Duration, absolute, duration, progress
     , inMilliseconds, expand
-    , latest, earliest, toPosix
+    , latest, earliest, toPosix, positiveDuration
     , advanceBy, millis, numberOfFrames, rollbackBy, thisAfterThat, thisBeforeThat, zeroDuration
     )
 
@@ -38,6 +38,10 @@ type alias Duration =
 millis : Float -> Absolute
 millis ms =
     Quantity.Quantity ms
+
+positiveDuration : Duration -> Duration
+positiveDuration (Quantity.Quantity d)=
+    Quantity.Quantity (max 0 d)
 
 
 toPosix : Absolute -> Time.Posix
