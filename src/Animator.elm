@@ -262,6 +262,7 @@ init first =
     Timeline.Timeline
         { initial = first
         , now = Time.absolute (Time.millisToPosix 0)
+        , delay = Duration.milliseconds 0
         , events =
             Timeline.Timetable []
         , queued = Nothing
@@ -276,6 +277,7 @@ initWith now first =
     Timeline.Timeline
         { initial = first
         , now = Time.absolute (Time.millisToPosix 0)
+        , delay = Duration.milliseconds 0
         , events =
             Timeline.Timetable []
         , queued = Nothing
@@ -283,6 +285,13 @@ initWith now first =
         , running = True
         }
         |> Timeline.update now
+
+
+delay : Duration -> Timeline state -> Timeline state
+delay dur (Timeline.Timeline details) =
+    (Timeline.Timeline 
+        { details | delay = Time.expand details.delay dur }
+    )
 
 
 {-| Get the current `state` of the timeline.
@@ -535,19 +544,19 @@ initializeSchedule waiting steps =
 
 
 stepsToEvents : Step state -> Timeline.Schedule state -> Timeline.Schedule state
-stepsToEvents currentStep (Timeline.Schedule delay startEvent events) =
+stepsToEvents currentStep (Timeline.Schedule delayTime startEvent events) =
     case events of
         [] ->
             case currentStep of
                 Wait waiting ->
                     Timeline.Schedule
-                        delay
+                        delayTime
                         (Timeline.extendEventDwell waiting startEvent)
                         events
 
                 TransitionTo dur checkpoint ->
                     Timeline.Schedule
-                        delay
+                        delayTime
                         startEvent
                         [ Timeline.Event dur checkpoint Nothing ]
 
@@ -555,20 +564,20 @@ stepsToEvents currentStep (Timeline.Schedule delay startEvent events) =
             case currentStep of
                 Wait dur ->
                     Timeline.Schedule
-                        delay
+                        delayTime
                         startEvent
                         (Timeline.Event durationTo recentEvent (Timeline.addToDwell dur maybeDwell) :: remaining)
 
                 TransitionTo dur checkpoint ->
                     if checkpoint == recentEvent then
                         Timeline.Schedule
-                            delay
+                            delayTime
                             startEvent
                             (Timeline.Event durationTo recentEvent (Timeline.addToDwell dur maybeDwell) :: remaining)
 
                     else
                         Timeline.Schedule
-                            delay
+                            delayTime
                             startEvent
                             (Timeline.Event dur checkpoint Nothing :: events)
 
