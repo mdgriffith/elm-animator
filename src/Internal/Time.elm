@@ -1,7 +1,7 @@
 module Internal.Time exposing
     ( thisBeforeOrEqualThat, thisAfterOrEqualThat, equal
     , Absolute, AbsoluteTime(..), Duration, absolute, duration, progress
-    , inMilliseconds
+    , inMilliseconds, expand
     , latest, earliest, toPosix
     , advanceBy, millis, numberOfFrames, rollbackBy, thisAfterThat, thisBeforeThat, zeroDuration
     )
@@ -50,6 +50,11 @@ absolute posix =
     Quantity.Quantity (toFloat (Time.posixToMillis posix))
 
 
+expand : Duration -> Duration -> Duration
+expand one two =
+    Quantity.plus one two
+
+
 advanceBy : Duration -> Absolute -> Absolute
 advanceBy dur time =
     Quantity.plus time (Quantity.Quantity (Duration.inMilliseconds dur))
@@ -77,6 +82,7 @@ duration one two =
 progress : Absolute -> Absolute -> Absolute -> Float
 progress (Quantity.Quantity start) (Quantity.Quantity end) (Quantity.Quantity current) =
     let
+        _ = Debug.log "progress" (start, current, end)
         total =
             abs (end - start)
     in

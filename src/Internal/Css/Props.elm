@@ -30,17 +30,37 @@ isTransformId id =
 
 name : Id -> String
 name id =
-    "opacity"
+     case id of
+        13 ->
+            "opacity"
+        _ ->
+            "unknown"
 
 
 toStr : Id -> (Float -> String)
 toStr id =
-    \f ->
-        String.fromFloat f
+    case id of
+        13 ->
+            -- opacity
+            \f ->
+                String.fromFloat (f / 100)
+        _ ->
+            \f ->
+                String.fromFloat f
 
 
 default : Id -> Interpolate.Movement
 default id =
+    case id of
+        13 ->
+            zero
+        
+        _ ->
+            zero
+
+
+
+zero =
     Interpolate.Pos 
-        Interpolate.standardDefault
-        0
+                Interpolate.standardDefault
+                0

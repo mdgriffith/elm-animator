@@ -104,8 +104,9 @@ cssFromProps timeline lookup =
 
         renderedProps =
             propsToCurves present lookup timeline
+                |> Debug.log "rendered"
     in
-    renderCss (Timeline.getCurrentTime timeline) renderers renderedProps
+    renderCss ( (Timeline.getCurrentTime timeline)) renderers renderedProps
 
 
 {-| RenderdProp's are required to be ordered!
@@ -251,75 +252,84 @@ propToCssHelper now id sections anim =
 
 sectionCss : Time.Absolute -> Id -> Section -> CssAnim
 sectionCss now id (Section section) =
-    let
-        name =
-            Internal.Css.Props.name id
+    case section.splines of
+        [] ->
+            emptyAnim
+        
+        top :: remain ->
+            if Bezier.afterLastX (Time.inMilliseconds now) top  then
+                emptyAnim
 
-        toStr =
-            Internal.Css.Props.toStr id
+            else
+                let
+                    name =
+                        Internal.Css.Props.name id
 
-        animationName =
-            name
-                ++ "-"
-                ++ splineListHash section.splines ""
+                    toStr =
+                        Internal.Css.Props.toStr id
 
-        duration =
-            case section.period of
-                Timeline.Loop dur ->
-                    dur
+                    animationName =
+                        name
+                            ++ "-"
+                            ++ splineListHash section.splines ""
 
-                Timeline.Repeat _ dur ->
-                    dur
+                    duration =
+                        case section.period of
+                            Timeline.Loop dur ->
+                                dur
 
-        durationStr =
-            String.fromFloat
-                (Duration.inMilliseconds duration)
-                ++ "ms"
+                            Timeline.Repeat _ dur ->
+                                dur
 
-        delay =
-            Time.duration now section.start
-                |> Duration.inMilliseconds
-                |> String.fromFloat
-                |> (\s -> s ++ "ms")
+                    durationStr =
+                        String.fromFloat
+                            (Duration.inMilliseconds duration)
+                            ++ "ms"
 
-        n =
-            case section.period of
-                Timeline.Loop _ ->
-                    infinite
+                    delay =
+                        Time.duration now section.start
+                            |> Duration.inMilliseconds
+                            |> String.fromFloat
+                            |> (\s -> s ++ "ms")
 
-                Timeline.Repeat count _ ->
-                    String.fromInt count
+                    n =
+                        case section.period of
+                            Timeline.Loop _ ->
+                                infinite
 
-        -- @keyframes duration | easing-function | delay |
-        --      iteration-count | direction | fill-mode | play-state | name */
-        -- animation: 3s ease-in 1s 2 reverse both paused slidein;
-        animation =
-            (durationStr ++ " ")
-                -- we specify an easing function here because it we have to
-                -- , but it is overridden by the one in keyframes
-                ++ "linear "
-                ++ delay
-                ++ " "
-                ++ n
-                ++ " normal forward running "
-                ++ animationName
+                            Timeline.Repeat count _ ->
+                                String.fromInt count
 
-        keyframes =
-            ("@keyframes " ++ animationName ++ " {\n")
-                ++ sectionKeyFrames
-                    section.start
-                    now
-                    (Time.advanceBy duration section.start)
-                    name
-                    toStr
-                    section.splines
-                    ""
-                ++ "\n}"
-    in
-    { hash = animationName
-    , animation = animation
-    , keyframes = keyframes
-    }
+                    -- @keyframes duration | easing-function | delay |
+                    --      iteration-count | direction | fill-mode | play-state | name */
+                    -- animation: 3s ease-in 1s 2 reverse both paused slidein;
+                    animation =
+                        (durationStr ++ " ")
+                            -- we specify an easing function here because it we have to
+                            -- , but it is overridden by the one in keyframes
+                            ++ "linear "
+                            ++ delay
+                            ++ " "
+                            ++ n
+                            ++ " normal forward running "
+                            ++ animationName
+
+                    keyframes =
+                        ("@keyframes " ++ animationName ++ " {\n")
+                            ++ sectionKeyFrames
+                                section.start
+                                now
+                                (Time.advanceBy duration section.start)
+                                name
+                                toStr
+                                section.splines
+                                ""
+                            ++ "\n}"
+                in
+                { hash = animationName
+                , animation = animation
+                , keyframes = keyframes
+                }
 
 
 {-| Reminder that `animation-timing-function` defines the timing function between the keyframe it's attached to and the next one.
@@ -329,6 +339,31 @@ sectionKeyFrames start now end name toStr splines rendered =
     case splines of
         [] ->
             rendered
+
+        top :: [] ->
+            let
+                splineStart =
+                    Time.millis (Bezier.firstX top)
+
+                -- percentage is calculated from
+                -- the later of start time or now
+                -- and the end time
+                percentage =
+                    String.fromFloat (Time.progress start end splineStart * 100) ++ "%"
+                
+
+                frame =
+                    percentage
+                        ++ "{\n    "
+                        ++ (name ++ ":" ++ toStr (Bezier.firstY top) ++ ";\n")
+                        ++ ("    animation-timing-function:" ++ Bezier.cssTimingString top ++ ";")
+                        ++ "\n}\n"
+
+                last =
+                    "100% { " ++ (name ++ ":" ++ toStr (Bezier.lastY top) ++ ";}")
+                    
+            in
+            (rendered ++ frame ++ last)
 
         top :: remaining ->
             if Bezier.afterLastX (Time.inMilliseconds now) top then
@@ -342,20 +377,20 @@ sectionKeyFrames start now end name toStr splines rendered =
 
             else
                 let
-                    sectionStart =
+                    splineStart =
                         Time.millis (Bezier.firstX top)
 
                     -- percentage is calculated from
                     -- the later of start time or now
                     -- and the end time
                     percentage =
-                        String.fromFloat (Time.progress start end sectionStart * 100) ++ "%"
-
+                        String.fromFloat (Time.progress start end splineStart * 100) ++ "%"
+                    
                     frame =
                         percentage
-                            ++ "{ "
+                            ++ "{\n    "
                             ++ (name ++ ":" ++ toStr (Bezier.firstY top) ++ ";\n")
-                            ++ (" animation-timing-function:" ++ Bezier.normalizedString top ++ ";")
+                            ++ ("    animation-timing-function:" ++ Bezier.cssTimingString top ++ ";")
                             ++ "\n}\n"
                 in
                 sectionKeyFrames start
@@ -803,14 +838,37 @@ toCurvesVisit lookup target targetTime maybePrevious maybeLookAhead state existi
                         state
 
                 sections =
-                    existingSections
-                        |> (::)
-                            (Section
-                                { start = Timeline.endTime prev
-                                , period = once (Duration.milliseconds 1)
+                    case existingSections of
+                        [] ->
+                            [(Section
+                                { start = Timeline.endTime (Debug.log "STAAART2" prev)
+                                , period = once (Time.duration (Timeline.endTime prev) targetTime)
                                 , splines = visitSplines
                                 }
-                            )
+                            )]
+                        (Section top) :: remain ->
+                            case top.period of
+                                Timeline.Repeat 1 dur ->
+                                    let
+                                        _ = Debug.log "Combining" (top.start, Timeline.endTime prev)
+                                    in
+                                    (Section 
+                                        { start = top.start
+                                        , period = once (Time.expand dur (Time.duration (Timeline.endTime prev) targetTime))
+                                        , splines = top.splines ++ visitSplines
+                                        }
+                                    )
+                                     :: remain 
+                                        
+                                _ ->
+                                    existingSections
+                                        |> (::)
+                                            (Section
+                                                { start = Timeline.endTime (Debug.log "STAAART" prev)
+                                                , period = once (Time.duration (Timeline.endTime prev) targetTime)
+                                                , splines = visitSplines
+                                                }
+                                            )
             in
             case maybeLookAhead of
                 Nothing ->
@@ -867,7 +925,7 @@ toCurvesLerp prevEndTime prev target targetTime interruptedAt maybeLookAhead sta
     existingSections
         |> (::)
             (Section
-                { start = interruptedAt
+                { start = prevEndTime
                 , period = once (Time.duration prevEndTime targetTime)
                 , splines = sliced
                 }

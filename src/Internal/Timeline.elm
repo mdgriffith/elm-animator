@@ -73,6 +73,7 @@ type Timeline event
 type alias TimelineDetails event =
     { initial : event
     , now : Time.Absolute
+    , delay : Time.Duration
     , events : Timetable event
     , queued : Maybe (Schedule event)
     , interruption : List (Schedule event)
@@ -1344,11 +1345,8 @@ visitAll transitionOngoing toAnchor interp details prev states future state =
 
 
 log x y =
-    Debug.log x y
-
-
-
--- y
+    -- Debug.log x y
+        y
 
 
 {-|

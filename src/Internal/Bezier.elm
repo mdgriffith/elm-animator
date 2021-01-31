@@ -7,9 +7,10 @@ module Internal.Bezier exposing
     , firstDerivative
     , firstX
     , firstY
+    , lastY
     , hash
     , normalize
-    , normalizedString
+    , cssTimingString
     , pointOn
     , secondDerivative
     , splitAt
@@ -43,11 +44,11 @@ type Spline
 hash : Spline -> String
 hash (Spline c0 c1 c2 c3) =
     pointHash c0
-        ++ "-"
+        ++ dash
         ++ pointHash c1
-        ++ "-"
+        ++ dash
         ++ pointHash c2
-        ++ "-"
+        ++ dash
         ++ pointHash c3
 
 
@@ -58,7 +59,20 @@ floatStr f =
 
 pointHash : Point -> String
 pointHash { x, y } =
-    floatStr x ++ ":" ++ floatStr y
+    -- In order to reduce the size of the string generated we are going to slightly
+    -- the x value is usually a Time.Posix
+    -- Which means it's huge like: 1,612,028,089
+    -- we can likely wrap this
+    let
+        xInt = 
+            (round x)
+
+
+        yInt =
+             (round y)
+
+    in
+    String.fromInt yInt ++ dash ++ String.fromInt yInt
 
 {-|
 Normalize the spline from 
@@ -71,20 +85,39 @@ to
     y : 0-1 based on position domain
 
 -}
-normalizedString : Spline -> String
-normalizedString (Spline c0 c1 c2 c3) =
-     "cubic-bezier("
-                ++ (String.fromFloat c1.x ++ ", ")
-                ++ (String.fromFloat c1.y ++ ", ")
-                ++ (String.fromFloat c2.x ++ ", ")
-                ++ String.fromFloat c2.y
-                ++ ")"
+cssTimingString : Spline -> String
+cssTimingString (Spline c0 c1 c2 c3) =
+    let
+        xDomain = 
+            c3.x - c0.x 
 
-
+        yDomain =
+            c3.y - c0.y
+    in
+    if xDomain == 0 || yDomain == 0 then
+        "linear"
+    else
+        "cubic-bezier("
+                    ++ (String.fromFloat ((c1.x - c0.x) / xDomain) ++ comma)
+                    ++ (String.fromFloat ((c1.y - c0.y) / yDomain) ++ comma)
+                    ++ (String.fromFloat ((c2.x - c0.x) / xDomain) ++ comma)
+                    ++ String.fromFloat ((c2.y - c0.y) / yDomain)
+                    ++ ")"
+comma : String
+comma =
+    ","
+dash : String
+dash =
+    "-"
 
 firstY : Spline -> Float
 firstY (Spline first _ _ _) =
     first.y
+
+
+lastY : Spline -> Float
+lastY (Spline _ _ _ last) =
+    last.y
 
 
 firstX : Spline -> Float
