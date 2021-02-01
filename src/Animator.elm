@@ -263,6 +263,7 @@ init first =
         { initial = first
         , now = Time.absolute (Time.millisToPosix 0)
         , delay = Duration.milliseconds 0
+        , scale = 1
         , events =
             Timeline.Timetable []
         , queued = Nothing
@@ -278,6 +279,7 @@ initWith now first =
         { initial = first
         , now = Time.absolute (Time.millisToPosix 0)
         , delay = Duration.milliseconds 0
+        , scale = 1
         , events =
             Timeline.Timetable []
         , queued = Nothing
@@ -286,12 +288,35 @@ initWith now first =
         }
         |> Timeline.update now
 
+{-|
 
+Delay the events of a timeline.
+
+
+
+-}
 delay : Duration -> Timeline state -> Timeline state
 delay dur (Timeline.Timeline details) =
     (Timeline.Timeline 
         { details | delay = Time.expand details.delay (Time.positiveDuration dur) }
     )
+
+{-| Speedup or slowdown a timeline.
+
+    0.5 -> half speed
+    1.0 -> normal
+    2.0 -> twice as fast
+
+
+**Note** - 0.1 is the lowest number allowed, and 10 is the highest.
+
+-}
+scale : Float -> Timeline state -> Timeline state
+scale factor (Timeline.Timeline details) =
+    (Timeline.Timeline 
+        { details | scale = min 10 (max 0.1 factor) }
+    )
+
 
 
 {-| Get the current `state` of the timeline.

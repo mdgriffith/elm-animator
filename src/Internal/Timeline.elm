@@ -74,6 +74,7 @@ type alias TimelineDetails event =
     { initial : event
     , now : Time.Absolute
     , delay : Time.Duration
+    , scale : Float
     , events : Timetable event
     , queued : Maybe (Schedule event)
     , interruption : List (Schedule event)
@@ -398,7 +399,7 @@ atTime now (Timeline timeline) =
 
 getCurrentTime : Timeline event -> Time.Absolute
 getCurrentTime (Timeline timeline) =
-    timeline.now
+   (Time.rollbackBy timeline.delay timeline.now)
 
 
 update : Time.Posix -> Timeline event -> Timeline event
@@ -1122,15 +1123,18 @@ foldp lookup fn (Timeline timelineDetails) =
                 let
                     start =
                         fn.start (lookup timelineDetails.initial)
+
+                    now =
+                        (Time.rollbackBy timelineDetails.delay timelineDetails.now)
                 in
-                case timetable of
+                case rescale now timelineDetails.scale timetable of
                     [] ->
                         start
 
                     (Line lineStart firstEvent remain) :: remainingLines ->
                         throughLines
                             True
-                            (Time.rollbackBy timelineDetails.delay timelineDetails.now)
+                            now
                             lookup
                             fn
                             timelineDetails
@@ -1138,6 +1142,30 @@ foldp lookup fn (Timeline timelineDetails) =
                             []
                             timetable
                             start
+
+rescale : Time.Absolute -> Float -> List (Line event) -> List (Line event)
+rescale now scale lines =
+    if scale == 1 then
+        lines
+    else 
+        List.map (rescaleLine now scale) lines
+
+
+rescaleLine now scale (Line lineStart firstEvent remain) =
+    Line 
+        (rescaleTime now scale lineStart) 
+        (rescaleEvent now scale firstEvent)
+        (List.map (rescaleEvent now scale) remain)
+
+
+rescaleTime : Time.Absolute -> Float -> Time.Absolute -> Time.Absolute
+rescaleTime (Quantity.Quantity now) scale (Quantity.Quantity time) =
+    Time.millis (now + ((time - now) * scale))
+    
+
+rescaleEvent : Time.Absolute -> Float -> Occurring event -> Occurring event
+rescaleEvent now scale (Occurring event start end) =
+    Occurring event (rescaleTime now scale start) (rescaleTime now scale end)
 
 
 lookAhead :
