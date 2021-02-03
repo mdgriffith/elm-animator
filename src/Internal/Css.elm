@@ -104,7 +104,6 @@ cssFromProps timeline lookup =
 
         renderedProps =
             propsToCurves present lookup timeline
-                |> Debug.log "rendered"
     in
     renderCss ( (Timeline.getCurrentTime timeline)) renderers renderedProps
 
@@ -841,7 +840,7 @@ toCurvesVisit lookup target targetTime maybePrevious maybeLookAhead state existi
                     case existingSections of
                         [] ->
                             [(Section
-                                { start = Timeline.endTime (Debug.log "STAAART2" prev)
+                                { start = Timeline.endTime (prev)
                                 , period = once (Time.duration (Timeline.endTime prev) targetTime)
                                 , splines = visitSplines
                                 }
@@ -849,9 +848,6 @@ toCurvesVisit lookup target targetTime maybePrevious maybeLookAhead state existi
                         (Section top) :: remain ->
                             case top.period of
                                 Timeline.Repeat 1 dur ->
-                                    let
-                                        _ = Debug.log "Combining" (top.start, Timeline.endTime prev)
-                                    in
                                     (Section 
                                         { start = top.start
                                         , period = once (Time.expand dur (Time.duration (Timeline.endTime prev) targetTime))
@@ -864,7 +860,7 @@ toCurvesVisit lookup target targetTime maybePrevious maybeLookAhead state existi
                                     existingSections
                                         |> (::)
                                             (Section
-                                                { start = Timeline.endTime (Debug.log "STAAART" prev)
+                                                { start = Timeline.endTime (prev)
                                                 , period = once (Time.duration (Timeline.endTime prev) targetTime)
                                                 , splines = visitSplines
                                                 }

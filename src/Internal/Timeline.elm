@@ -192,6 +192,7 @@ type alias GetPersonality anchor =
 
 type alias Personality =
     { wobbliness : Float
+    , impulse : Float
     , arriveEarly : Float
     , arriveSlowly : Float
     , departLate : Float
@@ -2500,6 +2501,7 @@ linearDefault =
     { departLate = 0
     , departSlowly = 0
     , wobbliness = 0
+    , impulse = 0
     , arriveEarly = 0
     , arriveSlowly = 0
     }

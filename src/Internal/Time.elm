@@ -4,6 +4,7 @@ module Internal.Time exposing
     , inMilliseconds, expand
     , latest, earliest, toPosix, positiveDuration
     , advanceBy, millis, numberOfFrames, rollbackBy, thisAfterThat, thisBeforeThat, zeroDuration
+    , maxDuration
     )
 
 {-|
@@ -34,6 +35,9 @@ type alias Absolute =
 type alias Duration =
     Duration.Duration
 
+maxDuration : Duration -> Duration -> Duration
+maxDuration (Quantity.Quantity one) (Quantity.Quantity two) =
+    Quantity.Quantity (max one two)
 
 millis : Float -> Absolute
 millis ms =
@@ -86,7 +90,6 @@ duration one two =
 progress : Absolute -> Absolute -> Absolute -> Float
 progress (Quantity.Quantity start) (Quantity.Quantity end) (Quantity.Quantity current) =
     let
-        _ = Debug.log "progress" (start, current, end)
         total =
             abs (end - start)
     in

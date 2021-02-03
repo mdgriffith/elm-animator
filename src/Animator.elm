@@ -12,9 +12,8 @@ module Animator exposing
     , color
     , Movement, at, move, xy, xyz
     , linear
-    , leaveLate, arriveEarly
     , leaveSmoothly, arriveSmoothly
-    , withWobble
+    , withWobble, withImpulse
     , Oscillator, wave, wrap, zigzag
     , loop, once, repeat
     , step
@@ -125,7 +124,7 @@ So, for this code example:
      case state of
         True ->
             Animator.at 0
-                |> Animator.leaveLate 0.2
+                |> Animator.leaveSmoothely 0.2
 
         False ->
            Animator.at 50
@@ -134,11 +133,9 @@ If we're at a state of `True` and go to any other state, we're going to leave `T
 
 **Note** — These adjustments all take a `Float` between `0` and `1`. Behind the scenes they will be clamped at those values.
 
-@docs leaveLate, arriveEarly
-
 @docs leaveSmoothly, arriveSmoothly
 
-@docs withWobble
+@docs withWobble, withImpulse
 
 
 # Resting at a state
@@ -272,33 +269,31 @@ init first =
         }
 
 
-{-| -}
-initWith : Time.Posix -> state -> Timeline state
-initWith now first =
-    Timeline.Timeline
-        { initial = first
-        , now = Time.absolute (Time.millisToPosix 0)
-        , delay = Duration.milliseconds 0
-        , scale = 1
-        , events =
-            Timeline.Timetable []
-        , queued = Nothing
-        , interruption = []
-        , running = True
-        }
-        |> Timeline.update now
-
 {-|
 
 Delay the events of a timeline.
 
+This is generally used in your view function to add a bit of variety when animating multiple elements.
 
+
+        Animator.move (Animator.delay (Animator.millis 200) timeline) <|
+            \state ->
+                if state then
+                    Animator.at 0
+
+                else
+                    Animator.at 1
+                       
+
+This has a maximum value of 5 seconds.
+
+If you need a longer delay, it's likely you want to create a separate timeline.
 
 -}
 delay : Duration -> Timeline state -> Timeline state
 delay dur (Timeline.Timeline details) =
     (Timeline.Timeline 
-        { details | delay = Time.expand details.delay (Time.positiveDuration dur) }
+        { details | delay = Time.maxDuration (Duration.milliseconds 5000) (Time.expand details.delay (Time.positiveDuration dur)) }
     )
 
 {-| Speedup or slowdown a timeline.
@@ -308,13 +303,15 @@ delay dur (Timeline.Timeline details) =
     2.0 -> twice as fast
 
 
-**Note** - 0.1 is the lowest number allowed, and 10 is the highest.
+**Note** - 0.1 is the lowest number allowed, and 5 is the highest.
+
+This is generally used in your view function to add a bit of variety when animating multiple elements.
 
 -}
 scale : Float -> Timeline state -> Timeline state
 scale factor (Timeline.Timeline details) =
     (Timeline.Timeline 
-        { details | scale = min 10 (max 0.1 factor) }
+        { details | scale = min 5 (max 0.1 factor) }
     )
 
 
@@ -781,7 +778,7 @@ applyOption toOption movement =
 {- PERSONALITY -}
 
 
-{-| This will make the transition use a spring instead of bezier curves!
+{-| This will make the transition use a spring!
 
   - `withWobble 0` - absolutely no wobble
   - `withWobble 1` - all the wobble
@@ -792,6 +789,23 @@ Use your wobble responsibly.
 withWobble : Float -> Movement -> Movement
 withWobble p movement =
     applyOption (\def -> { def | wobbliness = Interpolate.Specified (clamp 0 1 p) }) movement
+
+
+{-| Leave a state with some initial velocity.
+
+This is given as a velocity (as value/second).  Usually this is pixels per second, but depends what you're animating.
+
+
+
+  - `withImpulse 0` - No initial velocity (the default)
+  - `withImpulse 200` - 200 units per second towards 
+  - `withImpulse -200` - Negative values work too!
+
+
+-}
+withImpulse : Float -> Movement -> Movement
+withImpulse p movement =
+    applyOption (\def -> { def | impulse = Interpolate.Specified (clamp 0 1 p) }) movement
 
 
 
@@ -805,32 +819,32 @@ withWobble p movement =
 --     0.8
 
 
-{-| Even though the transition officially starts at a certain time on the timeline, we can leave a little late.
+-- {-| Even though the transition officially starts at a certain time on the timeline, we can leave a little late.
 
-  - `0` means we leave at the normal time.
-  - `0.2` means we'll leave when the transition is at 20%.
-  - `1` means we leave at the end of the transition and instantly flip to the new state at that time.
+--   - `0` means we leave at the normal time.
+--   - `0.2` means we'll leave when the transition is at 20%.
+--   - `1` means we leave at the end of the transition and instantly flip to the new state at that time.
 
--}
-leaveLate : Float -> Movement -> Movement
-leaveLate p movement =
-    applyOption (\def -> { def | departLate = Interpolate.Specified (clamp 0 1 p) }) movement
+-- -}
+-- leaveLate : Float -> Movement -> Movement
+-- leaveLate p movement =
+--     applyOption (\def -> { def | departLate = Interpolate.Specified (clamp 0 1 p) }) movement
 
 
-{-| We can also arrive early to this state.
+-- {-| We can also arrive early to this state.
 
-  - `0` means we arrive at the normal time.
-  - `0.2` means we'll arrive early by 20% of the total duration.
-  - `1` means we arrive at the start of the transition. So basically we instantly transition over.
+--   - `0` means we arrive at the normal time.
+--   - `0.2` means we'll arrive early by 20% of the total duration.
+--   - `1` means we arrive at the start of the transition. So basically we instantly transition over.
 
-**Weird math note** — `arriveEarly` and `leaveLate` will collaborate to figure out how the transition happens. If `arriveEarly` and `leaveLate` sum up to more `1` for a transition, then their sum will be the new maximum. Likely you don't need to worry about this :D.
+-- **Weird math note** — `arriveEarly` and `leaveLate` will collaborate to figure out how the transition happens. If `arriveEarly` and `leaveLate` sum up to more `1` for a transition, then their sum will be the new maximum. Likely you don't need to worry about this :D.
 
-The intended use for `arriveEarly` and `leaveLate` is for staggering items in a list. In those cases, these values are pretty small `~0.1`.
+-- The intended use for `arriveEarly` and `leaveLate` is for staggering items in a list. In those cases, these values are pretty small `~0.1`.
 
--}
-arriveEarly : Float -> Movement -> Movement
-arriveEarly p movement =
-    applyOption (\def -> { def | arriveEarly = Interpolate.Specified (clamp 0 1 p) }) movement
+-- -}
+-- arriveEarly : Float -> Movement -> Movement
+-- arriveEarly p movement =
+--     applyOption (\def -> { def | arriveEarly = Interpolate.Specified (clamp 0 1 p) }) movement
 
 
 {-| Underneath the hood this library uses [Bézier curves](https://en.wikipedia.org/wiki/B%C3%A9zier_curve) to model motion.
@@ -1476,6 +1490,9 @@ And voilà, we can begin animating!
 update : Time.Posix -> Animator model -> model -> model
 update newTime (Timeline.Animator _ updateModel) model =
     updateModel newTime model
+
+
+
 
 
 {-| If you're creating something like a game, you might want to update your `Timelines` manually instead of using an `Animator`.

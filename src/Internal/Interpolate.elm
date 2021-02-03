@@ -47,6 +47,7 @@ type DefaultablePersonality
     = FullDefault
     | PartialDefault
         { wobbliness : DefaultOr Proportion
+        , impulse : DefaultOr Proportion
         , arriveEarly : DefaultOr Proportion
         , arriveSlowly : DefaultOr Proportion
         , departLate : DefaultOr Proportion
@@ -83,6 +84,7 @@ type DefaultOr thing
 
 type alias Personality =
     { wobbliness : Proportion
+    , impulse : Proportion
     , arriveEarly : Proportion
     , arriveSlowly : Proportion
     , departLate : Proportion
@@ -98,6 +100,7 @@ type alias Proportion =
 
 emptyDefaults =
     { wobbliness = Default
+    , impulse = Default
     , arriveEarly = Default
     , arriveSlowly = Default
     , departLate = Default
@@ -110,6 +113,7 @@ standardDefault =
     { departLate = 0
     , departSlowly = 0.4
     , wobbliness = 0
+    , impulse = 0
     , arriveEarly = 0
     , arriveSlowly = 0.8
     }
@@ -120,11 +124,16 @@ linearDefault =
     { departLate = 0
     , departSlowly = 0
     , wobbliness = 0
+    , impulse = 0
     , arriveEarly = 0
     , arriveSlowly = 0
     }
 
 
+{-|
+We have overrideable defaults because the constructors linear and move both have defaults, but we specify overrides on Animator.at
+
+-}
 fillDefaults : Personality -> DefaultablePersonality -> Personality
 fillDefaults builtInDefault specified =
     case specified of
@@ -134,6 +143,8 @@ fillDefaults builtInDefault specified =
         PartialDefault partial ->
             { wobbliness =
                 withDefault builtInDefault.wobbliness partial.wobbliness
+            , impulse =
+                withDefault builtInDefault.impulse partial.impulse
             , arriveEarly =
                 withDefault builtInDefault.arriveEarly partial.arriveEarly
             , arriveSlowly =
