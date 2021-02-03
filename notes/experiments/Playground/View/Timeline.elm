@@ -78,14 +78,14 @@ type alias LayoutCache =
 viewValues toValues timeline =
     let
         frames =
-           capture Faded (Debug.log "START OLD" 200) 1200
+           capture Faded (Debug.log "START OLD" 250) 1200
                 toValues
                 Interpolate.moving
                 timeline
                 []
 
         newFrames =
-           captureNew Highlight (Debug.log "START NEW" 200) 1200
+           captureNew Highlight (Debug.log "START NEW" 250) 1200
                 toValues
                 Interpolate.moving
                 timeline
@@ -134,7 +134,7 @@ viewCssProps toProps timeline =
         [ Attr.style "position" "fixed"
         , Attr.style "left" "100px"
         , Attr.style "bottom" "100px"
-        , Attr.style "white-space" "pre-line" 
+        , Attr.style "white-space" "pre" 
         , Attr.style "font-family" "monospace" 
         , Attr.style "font-size" "10px"
         ] 
@@ -165,7 +165,7 @@ viewCss toValues timeline =
         [ Attr.style "position" "fixed"
         , Attr.style "left" "100px"
         , Attr.style "bottom" "100px"
-        , Attr.style "white-space" "pre-line" 
+        , Attr.style "white-space" "pre" 
         , Attr.style "font-family" "monospace" 
         , Attr.style "font-size" "10px"
         ] 

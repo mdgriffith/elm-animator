@@ -187,6 +187,7 @@ viewBody model =
     let
         timeline = 
             createTimeline model.levels (startingTimeline)
+                |> Timeline.update (Time.millisToPosix 300)
     in
     div []
         [ h1 [] [ text "Timeline Playground" ]
@@ -216,7 +217,7 @@ viewBody model =
             , toValues = toValues
             }
         , Playground.View.Timeline.viewTimeline timeline
-        , Playground.View.Timeline.viewCss toValues timeline
+        -- , Playground.View.Timeline.viewCss toValues timeline
         , Playground.View.Timeline.viewCssProps toProps timeline
         ]
 

@@ -1052,7 +1052,6 @@ tailRecursion =
 
 
 ordering =
-    
     describe "Preserve Ordering"
         [ fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ]) "Line order is always preserved" <|
             \timelineInstruction ->

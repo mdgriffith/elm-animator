@@ -77,34 +77,7 @@ four =
 
 oscillations =
     describe "oscillations"
-        [ test "wave" <|
-            \_ ->
-                let
-                    osc =
-                        Animator.wave 0 1
-                            |> Animator.loop (Animator.millis 100)
-                in
-                case osc of
-                    Interpolate.Oscillate _ dir fn ->
-                        Expect.all
-                            [ \f ->
-                                Expect.within (Absolute 0.01)
-                                    (f 0)
-                                    0
-                            , \f ->
-                                Expect.within (Absolute 0.001)
-                                    (f 0.5)
-                                    1
-                            , \f ->
-                                Expect.within (Absolute 0.01)
-                                    (f 1)
-                                    0
-                            ]
-                            fn
-
-                    _ ->
-                        Expect.fail "Creating an oscillator did not create an oscillator"
-        , test "wave on timeline, halfwy" <|
+        [ test "wave on timeline, halfwy" <|
             \_ ->
                 let
                     { position, velocity } =

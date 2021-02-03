@@ -50,21 +50,21 @@ basic : Spring.SpringParams
 basic =
     -- Spring.select 0.5 (Duration.milliseconds 1000)
     Spring.select 0.5 (Duration.milliseconds 1000)
-        |> Debug.log "params"
+        -- |> Debug.log "params"
         
 
 full : Spring.SpringParams
 full =
     -- Spring.select 0.5 (Duration.milliseconds 1000)
     Spring.select 1 (Duration.milliseconds 1000)
-        |> Debug.log "params"
+        -- |> Debug.log "params"
 
 
 null : Spring.SpringParams
 null =
     -- Spring.select 0.5 (Duration.milliseconds 1000)
     Spring.select 0 (Duration.milliseconds 1000)
-        |> Debug.log "params"
+        -- |> Debug.log "params"
        
 
 
