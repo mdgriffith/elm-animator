@@ -2,6 +2,7 @@ module Internal.Css.Props exposing (Id, default, firstTransform, ids, isTransfor
 
 import Internal.Interpolate as Interpolate
 
+
 ids =
     { x = 0
     , y = 1
@@ -30,9 +31,10 @@ isTransformId id =
 
 name : Id -> String
 name id =
-     case id of
+    case id of
         13 ->
             "opacity"
+
         _ ->
             "unknown"
 
@@ -40,10 +42,39 @@ name id =
 toStr : Id -> (Float -> String)
 toStr id =
     case id of
+        0 ->
+            \f ->
+                "translateX(" ++ String.fromFloat f ++ "px)"
+
+        1 ->
+            \f ->
+                "translateY(" ++ String.fromFloat f ++ "px)"
+
+        2 ->
+            \f ->
+                "translateZ(" ++ String.fromFloat f ++ "px)"
+
+        3 ->
+            \f ->
+                "rotation(" ++ String.fromFloat f ++ "rad)"
+
+        4 ->
+            \f ->
+                "scale(" ++ String.fromFloat f ++ ")"
+
+        5 ->
+            \f ->
+                "scaleX(" ++ String.fromFloat f ++ ")"
+
+        6 ->
+            \f ->
+                "scaleY(" ++ String.fromFloat f ++ ")"
+
         13 ->
             -- opacity
             \f ->
                 String.fromFloat (f / 100)
+
         _ ->
             \f ->
                 String.fromFloat f
@@ -54,13 +85,13 @@ default id =
     case id of
         13 ->
             zero
-        
+
         _ ->
             zero
 
 
-
+zero : Interpolate.Movement
 zero =
-    Interpolate.Pos 
-                Interpolate.standardDefault
-                0
+    Interpolate.Pos
+        Interpolate.standardDefault
+        0

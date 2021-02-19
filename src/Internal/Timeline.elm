@@ -400,7 +400,7 @@ atTime now (Timeline timeline) =
 
 getCurrentTime : Timeline event -> Time.Absolute
 getCurrentTime (Timeline timeline) =
-   (Time.rollbackBy timeline.delay timeline.now)
+    Time.rollbackBy timeline.delay timeline.now
 
 
 update : Time.Posix -> Timeline event -> Timeline event
@@ -1119,42 +1119,44 @@ foldp :
     -> motion
 foldp lookup fn (Timeline timelineDetails) =
     -- log "NEW DONE" <|
-        case timelineDetails.events of
-            Timetable timetable ->
-                let
-                    start =
-                        fn.start (lookup timelineDetails.initial)
+    case timelineDetails.events of
+        Timetable timetable ->
+            let
+                start =
+                    fn.start (lookup timelineDetails.initial)
 
-                    now =
-                        (Time.rollbackBy timelineDetails.delay timelineDetails.now)
-                in
-                case rescale now timelineDetails.scale timetable of
-                    [] ->
+                now =
+                    Time.rollbackBy timelineDetails.delay timelineDetails.now
+            in
+            case rescale now timelineDetails.scale timetable of
+                [] ->
+                    start
+
+                (Line lineStart firstEvent remain) :: remainingLines ->
+                    throughLines
+                        True
+                        now
+                        lookup
+                        fn
+                        timelineDetails
+                        (Occurring timelineDetails.initial lineStart lineStart)
+                        []
+                        timetable
                         start
 
-                    (Line lineStart firstEvent remain) :: remainingLines ->
-                        throughLines
-                            True
-                            now
-                            lookup
-                            fn
-                            timelineDetails
-                            (Occurring timelineDetails.initial lineStart lineStart)
-                            []
-                            timetable
-                            start
 
 rescale : Time.Absolute -> Float -> List (Line event) -> List (Line event)
 rescale now scale lines =
     if scale == 1 then
         lines
-    else 
+
+    else
         List.map (rescaleLine now scale) lines
 
 
 rescaleLine now scale (Line lineStart firstEvent remain) =
-    Line 
-        (rescaleTime now scale lineStart) 
+    Line
+        (rescaleTime now scale lineStart)
         (rescaleEvent now scale firstEvent)
         (List.map (rescaleEvent now scale) remain)
 
@@ -1162,7 +1164,7 @@ rescaleLine now scale (Line lineStart firstEvent remain) =
 rescaleTime : Time.Absolute -> Float -> Time.Absolute -> Time.Absolute
 rescaleTime (Quantity.Quantity now) scale (Quantity.Quantity time) =
     Time.millis (now + ((time - now) * scale))
-    
+
 
 rescaleEvent : Time.Absolute -> Float -> Occurring event -> Occurring event
 rescaleEvent now scale (Occurring event start end) =
@@ -1232,7 +1234,7 @@ visitAll transitionOngoing toAnchor interp details prev states future state =
     --     _ =
     --         log "------NEW - ALL" ""
     -- in
-    case  states of
+    case states of
         [] ->
             case future of
                 [] ->
@@ -1376,7 +1378,7 @@ visitAll transitionOngoing toAnchor interp details prev states future state =
 
 log x y =
     -- Debug.log x y
-        y
+    y
 
 
 {-|
@@ -1420,7 +1422,8 @@ throughLines transitionOngoing now toAnchor interp details prev states future st
                     state
 
                 AdvanceTo (Line interruptionTime futureEvent futureRemain) ->
-                    throughLines False now
+                    throughLines False
+                        now
                         toAnchor
                         interp
                         details
@@ -1470,7 +1473,8 @@ throughLines transitionOngoing now toAnchor interp details prev states future st
                                     Time.thisAfterOrEqualThat now upcomingTransitionTime
                     in
                     if continuing then
-                        throughLines True now
+                        throughLines True
+                            now
                             toAnchor
                             interp
                             details
@@ -1497,7 +1501,8 @@ throughLines transitionOngoing now toAnchor interp details prev states future st
                             Nothing
 
                 AdvanceTo (Line interruptionTime futureEvent futureRemain) ->
-                    throughLines False now
+                    throughLines False
+                        now
                         toAnchor
                         interp
                         details
@@ -1560,7 +1565,8 @@ throughLines transitionOngoing now toAnchor interp details prev states future st
                                         Time.thisAfterOrEqualThat now upcomingTransitionTime
                         in
                         if continuing then
-                            throughLines True now
+                            throughLines True
+                                now
                                 toAnchor
                                 interp
                                 details
@@ -1574,7 +1580,8 @@ throughLines transitionOngoing now toAnchor interp details prev states future st
 
                     else
                         -- We have already transitioned to the new line
-                        throughLines False now
+                        throughLines False
+                            now
                             toAnchor
                             interp
                             details
@@ -1645,7 +1652,8 @@ throughLines transitionOngoing now toAnchor interp details prev states future st
                             visited
 
                     else
-                        throughLines False now
+                        throughLines False
+                            now
                             toAnchor
                             interp
                             details
@@ -1655,7 +1663,8 @@ throughLines transitionOngoing now toAnchor interp details prev states future st
                             state
 
                 AdvanceTo (Line interruptionTime futureEvent futureRemain) ->
-                    throughLines False now
+                    throughLines False
+                        now
                         toAnchor
                         interp
                         details
@@ -1730,7 +1739,8 @@ throughLines transitionOngoing now toAnchor interp details prev states future st
                                     visited
                         in
                         if continuing then
-                            throughLines True now
+                            throughLines True
+                                now
                                 toAnchor
                                 interp
                                 details
@@ -1792,7 +1802,8 @@ throughLines transitionOngoing now toAnchor interp details prev states future st
                                         )
                         in
                         if continuing then
-                            throughLines True now
+                            throughLines True
+                                now
                                 toAnchor
                                 interp
                                 details
@@ -1807,7 +1818,8 @@ throughLines transitionOngoing now toAnchor interp details prev states future st
                     else
                         -- OTHERWISE!
                         -- we need to fastforward on this line to find the event that happens right before the transition
-                        throughLines False now
+                        throughLines False
+                            now
                             toAnchor
                             interp
                             details
@@ -1938,10 +1950,8 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
     let
         -- _ =
         --     log "------" "OLD"
-
         -- _ =
         --     log "    ->" now
-
         transition prev newState =
             -- After we interpolate, we check here if we are actually done
             -- or if we were just interrupted and need to keep going

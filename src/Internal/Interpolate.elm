@@ -3,7 +3,7 @@ module Internal.Interpolate exposing
     , dwellPeriod
     , coloring, linearly, moving
     , fillDefaults, DefaultablePersonality(..), DefaultOr(..)
-    , Checkpoint, DefaultableMovement(..), Oscillator(..), Personality, Point, Timing(..), createSpline, details, emptyDefaults, lerpSplines, linearDefault, standardDefault, takeBefore, visit, withLinearDefault, withStandardDefault
+    , Checkpoint, DefaultableMovement(..), Oscillator(..), Personality, Point, Timing(..), createSpline, details, emptyDefaults, equalState, lerpSplines, linearDefault, standardDefault, takeBefore, visit, withLinearDefault, withStandardDefault
     )
 
 {-|
@@ -130,9 +130,7 @@ linearDefault =
     }
 
 
-{-|
-We have overrideable defaults because the constructors linear and move both have defaults, but we specify overrides on Animator.at
-
+{-| We have overrideable defaults because the constructors linear and move both have defaults, but we specify overrides on Animator.at
 -}
 fillDefaults : Personality -> DefaultablePersonality -> Personality
 fillDefaults builtInDefault specified =
@@ -258,6 +256,12 @@ type alias State =
     { position : Pixels
     , velocity : PixelsPerSecond
     }
+
+
+equalState : State -> State -> Bool
+equalState one two =
+    (Pixels.inPixels one.position - Pixels.inPixels two.position == 0)
+        && (Pixels.inPixelsPerSecond one.velocity - Pixels.inPixelsPerSecond two.velocity == 0)
 
 
 type alias XY thing =
@@ -395,7 +399,6 @@ visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeL
         --         , now = now
         --         , lookAhead = maybeLookAhead
         --         }
-
         dwellTime =
             case maybeLookAhead of
                 Nothing ->
@@ -408,29 +411,29 @@ visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeL
         --     Debug.log "DWELL TIME" ( now, start, eventEnd )
     in
     -- Debug.log "   <-" <|
-        if Time.zeroDuration dwellTime then
-            { position =
-                case lookup event of
-                    Osc _ target period decoration ->
-                        Pixels.pixels target
-
-                    Pos _ x ->
-                        Pixels.pixels x
-            , velocity =
-                newVelocityAtTarget (lookup event)
-                    start
-                    maybeLookAhead
-            }
-
-        else
+    if Time.zeroDuration dwellTime then
+        { position =
             case lookup event of
-                Pos _ pos ->
-                    { position = Pixels.pixels pos
-                    , velocity = Pixels.pixelsPerSecond 0
-                    }
+                Osc _ target period decoration ->
+                    Pixels.pixels target
 
-                Osc _ target period points ->
-                    oscillate target period points dwellTime
+                Pos _ x ->
+                    Pixels.pixels x
+        , velocity =
+            newVelocityAtTarget (lookup event)
+                start
+                maybeLookAhead
+        }
+
+    else
+        case lookup event of
+            Pos _ pos ->
+                { position = Pixels.pixels pos
+                , velocity = Pixels.pixelsPerSecond 0
+                }
+
+            Osc _ target period points ->
+                oscillate target period points dwellTime
 
 
 type alias Milliseconds =
@@ -549,16 +552,15 @@ lerp : Time.Absolute -> Movement -> Movement -> Time.Absolute -> Time.Absolute -
 lerp prevEndTime prev target targetTime now maybeLookAhead state =
     let
         -- _ =
-            -- Debug.log "    LERP"
-            --     { prevEndTime = prevEndTime
-            --     , prev = prev
-            --     , target = target
-            --     , targetTime = targetTime
-            --     , now = now
-            --     , maybeLookAhead = maybeLookAhead
-            --     , state = state
-            --     }
-
+        -- Debug.log "    LERP"
+        --     { prevEndTime = prevEndTime
+        --     , prev = prev
+        --     , target = target
+        --     , targetTime = targetTime
+        --     , now = now
+        --     , maybeLookAhead = maybeLookAhead
+        --     , state = state
+        --     }
         wobble =
             case target of
                 Osc personality _ _ _ ->
@@ -577,20 +579,20 @@ lerp prevEndTime prev target targetTime now maybeLookAhead state =
                         && (Pixels.inPixelsPerSecond state.velocity == 0)
     in
     -- Debug.log "   <-" <|
-        if nothingHappened then
-            state
+    if nothingHappened then
+        state
 
-        else
-            case maybeLookAhead of
-                Nothing ->
-                    if wobble /= 0 then
-                        springInterpolation prevEndTime prev target targetTime now maybeLookAhead state
+    else
+        case maybeLookAhead of
+            Nothing ->
+                if wobble /= 0 then
+                    springInterpolation prevEndTime prev target targetTime now maybeLookAhead state
 
-                    else
-                        interpolateBetween prevEndTime prev target targetTime now maybeLookAhead state
-
-                _ ->
+                else
                     interpolateBetween prevEndTime prev target targetTime now maybeLookAhead state
+
+            _ ->
+                interpolateBetween prevEndTime prev target targetTime now maybeLookAhead state
 
 
 {-| -}
