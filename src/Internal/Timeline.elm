@@ -8,7 +8,7 @@ module Internal.Timeline exposing
     , current, arrivedAt, arrived, previous, upcoming
     , Line(..), Timetable(..)
     , foldp, capture, captureTimeline
-    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), atTime, foldpAll, foldpOld, gc, getCurrentTime, hasChanged, justInitialized, linearDefault, linesAreActive, mapLookAhead, previousEndTime, previousStartTime, updateWith
+    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), atTime, foldpAll, foldpOld, gc, getCurrentTime, hasChanged, justInitialized, linearDefault, linesAreActive, mapLookAhead, periodDuration, previousEndTime, previousStartTime, updateWith
     )
 
 {-|
@@ -53,6 +53,16 @@ type Event event
 type Period
     = Loop Time.Duration
     | Repeat Int Time.Duration
+
+
+periodDuration : Period -> Time.Duration
+periodDuration per =
+    case per of
+        Loop dur ->
+            dur
+
+        Repeat i dur ->
+            dur
 
 
 getScheduledEvent : Event event -> event
@@ -532,6 +542,7 @@ garbageCollectOldEvents now droppable lines =
                             capturedLine :: remaining
 
 
+reverseEvents : Line event -> Line event
 reverseEvents (Line start event evs) =
     Line start event (List.reverse evs)
 
@@ -541,10 +552,12 @@ type HewStatus event
     | NothingCaptured
 
 
+hewLine : Time.Absolute -> List (Occurring event) -> HewStatus event
 hewLine now events =
     hewlineHelper now Nothing events
 
 
+hewlineHelper : Time.Absolute -> Maybe (Occurring event) -> List (Occurring event) -> HewStatus event
 hewlineHelper now maybePrevious events =
     case events of
         [] ->
