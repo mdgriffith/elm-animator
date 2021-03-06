@@ -4,13 +4,15 @@ module Internal.Bezier exposing
     , addX
     , afterLastX
     , atX
+    , cssTimingString
+    , doesNotMove
     , firstDerivative
     , firstX
     , firstY
-    , lastY
     , hash
+    , lastX
+    , lastY
     , normalize
-    , cssTimingString
     , pointOn
     , secondDerivative
     , splitAt
@@ -64,20 +66,18 @@ pointHash { x, y } =
     -- Which means it's huge like: 1,612,028,089
     -- we can likely wrap this
     let
-        xInt = 
-            (round x)
-
+        xInt =
+            round x
 
         yInt =
-             (round y)
-
+            round y
     in
     String.fromInt yInt ++ dash ++ String.fromInt yInt
 
-{-|
-Normalize the spline from 
-    x : Time.Absolute
-    y : Absolute Position
+
+{-| Normalize the spline from
+x : Time.Absolute
+y : Absolute Position
 
 to
 
@@ -88,27 +88,40 @@ to
 cssTimingString : Spline -> String
 cssTimingString (Spline c0 c1 c2 c3) =
     let
-        xDomain = 
-            c3.x - c0.x 
+        xDomain =
+            c3.x - c0.x
 
         yDomain =
             c3.y - c0.y
     in
     if xDomain == 0 || yDomain == 0 then
         "linear"
+
     else
         "cubic-bezier("
-                    ++ (String.fromFloat ((c1.x - c0.x) / xDomain) ++ comma)
-                    ++ (String.fromFloat ((c1.y - c0.y) / yDomain) ++ comma)
-                    ++ (String.fromFloat ((c2.x - c0.x) / xDomain) ++ comma)
-                    ++ String.fromFloat ((c2.y - c0.y) / yDomain)
-                    ++ ")"
+            ++ (String.fromFloat ((c1.x - c0.x) / xDomain) ++ comma)
+            ++ (String.fromFloat ((c1.y - c0.y) / yDomain) ++ comma)
+            ++ (String.fromFloat ((c2.x - c0.x) / xDomain) ++ comma)
+            ++ String.fromFloat ((c2.y - c0.y) / yDomain)
+            ++ ")"
+
+
 comma : String
 comma =
     ","
+
+
 dash : String
 dash =
     "-"
+
+
+doesNotMove : Spline -> Bool
+doesNotMove (Spline first one two last) =
+    (first.x == last.x)
+        && (one.x == first.x)
+        && (two.x == two.x)
+
 
 firstY : Spline -> Float
 firstY (Spline first _ _ _) =
@@ -123,6 +136,11 @@ lastY (Spline _ _ _ last) =
 firstX : Spline -> Float
 firstX (Spline first _ _ _) =
     first.x
+
+
+lastX : Spline -> Float
+lastX (Spline _ _ _ last) =
+    last.x
 
 
 afterLastX : Float -> Spline -> Bool

@@ -1,60 +1,58 @@
 module Playground.Timeline exposing (main)
 
-
 {- Timeline Playground!
 
 
-This is for getting a visual representation of a timeline.
+   This is for getting a visual representation of a timeline.
 
 
-    1. Plot all events on a symbolic timeline
-        - Plot unvisitable events as well, just have them be a separate style.
-        - Only event names as labels
-        - More data as tooltips
+       1. Plot all events on a symbolic timeline
+           - Plot unvisitable events as well, just have them be a separate style.
+           - Only event names as labels
+           - More data as tooltips
 
-    2. Scrub through timeline
-        - Set the current time of the timeline without updating it.
-            - can't go before last hard update
-        - See current, prev, upcoming, arrived vals
-        - See generated CSS
-        - See what the timeline would be if we updated
+       2. Scrub through timeline
+           - Set the current time of the timeline without updating it.
+               - can't go before last hard update
+           - See current, prev, upcoming, arrived vals
+           - See generated CSS
+           - See what the timeline would be if we updated
 
 
-----
+   ----
 
-    3. See actual rendered values on the timeline
-        - Plot the bezier splines
-        - Plot the actual values at regular intervals
+       3. See actual rendered values on the timeline
+           - Plot the bezier splines
+           - Plot the actual values at regular intervals
 
 
 -}
 
+import Animator
 import Browser
+import Duration
 import Html exposing (Html, button, div, h1, text)
 import Html.Attributes as Attr
 import Html.Events exposing (onClick)
-import Svg
-import Svg.Attributes as SvgA
-import Internal.Spring as Spring
-import Internal.Timeline as Timeline
-import Duration
-import Internal.Interpolate as Interpolate
 import Internal.Bezier as Bezier
 import Internal.Css as Css
-import Animator
-import Time
+import Internal.Css.Props
+import Internal.Interpolate as Interpolate
+import Internal.Spring as Spring
 import Internal.Time as Time
+import Internal.Timeline as Timeline
 import Pixels
 import Playground.View.Timeline
-import Internal.Css.Props
+import Svg
+import Svg.Attributes as SvgA
+import Time
+
 
 main =
     Browser.document
         { init =
             \() ->
-                ( { 
-                    
-                    -- timeline = 
+                ( { -- timeline =
                     -- Animator.init (State 0)
                     --     |> Animator.queue
                     --         [ Animator.event (Animator.millis 100) (State 1)
@@ -62,43 +60,47 @@ main =
                     --         , Animator.event (Animator.millis 100) (State 3)
                     --         ]
                     --     |> Timeline.update (Time.millisToPosix 0)
-                    --     |> Animator.interrupt 
+                    --     |> Animator.interrupt
                     --         [ Animator.event (Animator.millis 100) (State 4)
                     --         , Animator.event (Animator.millis 100) (State 5)
                     --         , Animator.event (Animator.millis 100) (State 6)
                     --         ]
                     --     |> Timeline.update (Time.millisToPosix 150)
-                        
-                --   , 
-                  lastUpdated = Time.millisToPosix 0
+                    --   ,
+                    lastUpdated = Time.millisToPosix 0
                   , tooltip = Nothing
                   , levels =
-                    createLevels 
-                        { events = 3
-                        , depth = 2
-                        }
-                        -- |> Debug.log "levels"
+                        createLevels
+                            { events = 3
+                            , depth = 2
+                            }
+
+                  -- |> Debug.log "levels"
                   }
                 , Cmd.none
                 )
         , view = view
         , update = update
-        , subscriptions = 
+        , subscriptions =
             \_ -> Sub.none
         }
 
 
-createLevels : {depth : Int, events : Int} ->  List 
+createLevels :
+    { depth : Int, events : Int }
+    ->
+        List
             { start : Int
             , events : List (Animator.Step State)
             }
 createLevels details =
-    createLevelsHelper details.depth details  []
+    createLevelsHelper details.depth details []
 
 
 createLevelsHelper index details created =
     if index == 0 then
         created
+
     else
         createLevelsHelper
             (index - 1)
@@ -106,17 +108,18 @@ createLevelsHelper index details created =
             ({ start = (index * 100) + 50
              , events =
                 let
-                    base = 
+                    base =
                         ((index - 1) * details.events) + 1
                 in
                 List.range base (base + details.events - 1)
-                    |> List.map 
+                    |> List.map
                         (\i ->
                             Animator.event (Animator.millis 100) (State i)
                         )
-            } :: created
-
+             }
+                :: created
             )
+
 
 type alias Model =
     { timeline : Animator.Timeline State
@@ -124,43 +127,47 @@ type alias Model =
     , tooltip : Maybe Tooltip
 
     -- interactive generation of timeline
-    , levels : 
-        List 
+    , levels :
+        List
             { start : Int
             , events : List (Animator.Step State)
             }
-
     }
+
 
 type alias Tooltip =
     { anchor : Interpolate.Point
-    , text : List (String, String)
+    , text : List ( String, String )
     }
 
 
-type State = State Int
+type State
+    = State Int
 
-type Msg 
+
+type Msg
     = ScrubTo Time.Posix
     | TooltipShow Tooltip
     | TooltipClear
 
 
-
 update msg model =
     case msg of
         ScrubTo time ->
-            (model, Cmd.none)
+            ( model, Cmd.none )
 
         TooltipShow tooltip ->
-            ({ model | tooltip = Just tooltip },Cmd.none)
+            ( { model | tooltip = Just tooltip }, Cmd.none )
 
         TooltipClear ->
-            ({ model | tooltip = Nothing },Cmd.none)
+            ( { model | tooltip = Nothing }, Cmd.none )
 
 
-
-type Style = Highlight | Normal | Faded | Mini
+type Style
+    = Highlight
+    | Normal
+    | Faded
+    | Mini
 
 
 view model =
@@ -168,47 +175,52 @@ view model =
     , body = [ viewBody model ]
     }
 
+
 createTimeline levels tl =
     case levels of
         [] ->
             tl
+
         top :: remain ->
-            createTimeline remain 
-                ( tl
-                    |> Animator.interrupt top.events 
+            createTimeline remain
+                (tl
+                    |> Animator.interrupt top.events
                     |> Timeline.update (Time.millisToPosix top.start)
                 )
 
+
+startingTimeline : Timeline.Timeline State
 startingTimeline =
     Animator.init (State 0)
         |> Timeline.update (Time.millisToPosix 0)
 
+
 viewBody model =
     let
-        timeline = 
-            createTimeline model.levels (startingTimeline)
+        timeline =
+            createTimeline model.levels startingTimeline
                 |> Timeline.update (Time.millisToPosix 300)
     in
     div []
         [ h1 [] [ text "Timeline Playground" ]
-        , case model.tooltip of 
+        , case model.tooltip of
             Nothing ->
                 Html.text ""
 
             Just tooltip ->
-                Html.div 
+                Html.div
                     [ Attr.style "position" "absolute"
                     , Attr.style "right" "100px"
                     , Attr.style "top" "100px"
-                    ] 
-                    (List.map 
-                        (\(name, val) -> 
+                    ]
+                    (List.map
+                        (\( name, val ) ->
                             Html.div []
                                 [ Html.text name
                                 , Html.text ": "
                                 , Html.text val
                                 ]
-                        ) 
+                        )
                         tooltip.text
                     )
         , Playground.View.Timeline.view timeline
@@ -217,35 +229,48 @@ viewBody model =
             , toValues = toValues
             }
         , Playground.View.Timeline.viewTimeline timeline
+
         -- , Playground.View.Timeline.viewCss toValues timeline
         , Playground.View.Timeline.viewCssProps toProps timeline
         ]
 
+
+toProps : State -> List Css.Prop
 toProps (State state) =
     let
-        base = toFloat state * 100
+        base =
+            toFloat state * 100
     in
     -- Interpolate.Pos Interpolate.standardDefault (toFloat (state * 100))
-    [ Css.Prop Internal.Css.Props.ids.opacity
-        (wave (Timeline.Repeat 5 (Animator.millis 200)) base (base + 100))
+    [ -- Css.Prop Internal.Css.Props.ids.opacity
+      -- (wave (Timeline.Repeat 5 (Animator.millis 200)) base (base + 100))
+      Css.Prop Internal.Css.Props.ids.opacity
+        (at (base / 500))
+    , Css.Prop Internal.Css.Props.ids.rotation
+        (at 0)
+    , Css.Prop Internal.Css.Props.ids.x
+        (at base)
     ]
 
 
+toValues : State -> Interpolate.Movement
 toValues (State state) =
     let
-        base = toFloat state * 100
+        base =
+            toFloat state * 100
     in
     -- Interpolate.Pos Interpolate.standardDefault (toFloat (state * 100))
     wave (Timeline.Repeat 5 (Animator.millis 200)) base (base + 100)
 
 
 
-
 {- OSCILLATORS -}
 
 
-pos state =
-    Interpolate.Pos Interpolate.standardDefault (toFloat (state * 100))
+at : Float -> Interpolate.Movement
+at state =
+    Interpolate.Pos Interpolate.standardDefault (state * 100)
+
 
 wave : Timeline.Period -> Float -> Float -> Interpolate.Movement
 wave period start end =
@@ -263,7 +288,7 @@ wave period start end =
             case period of
                 Timeline.Loop dur ->
                     dur
-                
+
                 Timeline.Repeat n dur ->
                     dur
     in
@@ -278,97 +303,108 @@ wave period start end =
         --     in
         --     start + total * normalized
         -- )
-        (scaleCurveTiming 0 periodDuration []
+        (scaleCurveTiming 0
+            periodDuration
+            []
             [ { value = end
-            , timing =
-                    Interpolate.Bezier 
+              , timing =
+                    Interpolate.Bezier
                         (Bezier.Spline
-                        { x = 0
-                        , y = start
-                        }
-                        { x = 0
-                        , y = start
-                        }
-                        { x = 0.5
-                        , y = end
-                        }
-                        { x = 0.5
-                        , y = end
-                        })
-                    -- Interpolate.Linear
-            , time = 0.5
-            }
+                            { x = 0
+                            , y = start
+                            }
+                            { x = 0
+                            , y = start
+                            }
+                            { x = 0.5
+                            , y = end
+                            }
+                            { x = 0.5
+                            , y = end
+                            }
+                        )
+
+              -- Interpolate.Linear
+              , time = 0.5
+              }
             , { value = start
-            , timing =
-                    Interpolate.Bezier 
+              , timing =
+                    Interpolate.Bezier
                         (Bezier.Spline
-                        { x = 0.5
-                        , y = end
-                        }
-                        { x = 0.5
-                        , y = end
-                        }
-                        { x = 1
-                        , y = start
-                        }
-                        { x = 1
-                        , y = start
-                        })
-                    -- Interpolate.Linear
-            , time = 1
-            }
-            ])
+                            { x = 0.5
+                            , y = end
+                            }
+                            { x = 0.5
+                            , y = end
+                            }
+                            { x = 1
+                            , y = start
+                            }
+                            { x = 1
+                            , y = start
+                            }
+                        )
+
+              -- Interpolate.Linear
+              , time = 1
+              }
+            ]
+        )
 
 
 scaleCurveTiming last periodDuration rendered sections =
     case sections of
         [] ->
             List.reverse rendered
-                -- |> Debug.log "dwelll curves"
 
+        -- |> Debug.log "dwelll curves"
         point :: remain ->
-           scaleCurveTiming
+            scaleCurveTiming
                 point.time
                 periodDuration
                 (scaleTiming last periodDuration point :: rendered)
                 remain
 
+
 scaleTiming last periodDuration point =
     case point.timing of
         Interpolate.Linear ->
             point
+
         Interpolate.Bezier (Bezier.Spline c0 c1 c2 c3) ->
             let
                 -- _ = Debug.log "SCALING" (duration, point.time, last)
-                duration = 
-                    --  (point.time - last) * 
-                     (Duration.inMilliseconds periodDuration)
-                -- current points take the form of 
+                duration =
+                    --  (point.time - last) *
+                    Duration.inMilliseconds periodDuration
+
+                -- current points take the form of
                 -- x : 0-1
                 -- y : actual position
                 -- and we want to scale x to be real duration numbers in millis
-
-                sc0 = 
+                sc0 =
                     { x = c0.x * duration
                     , y = c0.y
                     }
-                sc1 = 
+
+                sc1 =
                     { x = c1.x * duration
                     , y = c1.y
                     }
-                sc2 = 
+
+                sc2 =
                     { x = c2.x * duration
                     , y = c2.y
                     }
-                sc3 = 
+
+                sc3 =
                     { x = c3.x * duration
                     , y = c3.y
                     }
-
             in
             { value = point.value
-            , timing = 
-                Interpolate.Bezier 
+            , timing =
+                Interpolate.Bezier
                     (Bezier.Spline sc0 sc1 sc2 sc3)
             , time = point.time
             }
@@ -376,13 +412,13 @@ scaleTiming last periodDuration point =
 
 {-| Start at one number, move linearly to another, and then linearly back.
 -}
-zigzag : Timeline.Period ->  Float -> Float -> Interpolate.Movement
+zigzag : Timeline.Period -> Float -> Float -> Interpolate.Movement
 zigzag period start end =
     let
         total =
             end - start
     in
-    Interpolate.Osc Interpolate.standardDefault 
+    Interpolate.Osc Interpolate.standardDefault
         start
         period
         [ { value = end
@@ -395,18 +431,19 @@ zigzag period start end =
           }
         ]
 
+
 {-| Start at one number and move linearly to another, then immediately start again at the first.
 
 This was originally intended for animating rotation where you'd want 360deg to "wrap" to 0deg.
 
 -}
-wrap : Timeline.Period ->  Float -> Float -> Interpolate.Movement
+wrap : Timeline.Period -> Float -> Float -> Interpolate.Movement
 wrap period start end =
     let
         total =
             end - start
     in
-    Interpolate.Osc Interpolate.standardDefault 
+    Interpolate.Osc Interpolate.standardDefault
         start
         period
         [ { value = end
