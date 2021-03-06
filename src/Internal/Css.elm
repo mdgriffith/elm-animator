@@ -91,7 +91,9 @@ scan :
     -> Timeline.Timeline state
     -> List Prop
 scan lookup timeline =
-    [ Prop Internal.Css.Props.ids.opacity (Interpolate.Pos Interpolate.standardDefault 0)
+    [ Prop Internal.Css.Props.ids.opacity (Interpolate.Pos Interpolate.standardDefault 1)
+    , Prop Internal.Css.Props.ids.rotation (Interpolate.Pos Interpolate.standardDefault 0)
+    , Prop Internal.Css.Props.ids.x (Interpolate.Pos Interpolate.standardDefault 0)
     ]
 
 
@@ -134,51 +136,132 @@ transform now renderedProps =
         [] ->
             Nothing
 
-        top :: remain ->
-            -- let
-            --     firstTransform =
-            --         isTransform top
-            --     manyTransforms =
-            --         case remain of
-            --             penultimate :: _ ->
-            --                 isTransform penultimate
-            --             _ ->
-            --                 False
-            -- in
-            -- if manyTransforms then
-            --     let
-            --         ( transformProps, others ) =
-            --             partitionTransforms renderedProps []
-            --     in
-            --     Just
-            --         ( transformHelper (pivotTransform transformProps)
-            --         , others
-            --         )
-            -- else if firstTransform then
-            --     Just
-            --         ( propToCss now top
-            --         , remain
-            --         )
-            -- else
+        (CompoundProp comp) :: remain ->
+            let
+                _ =
+                    Debug.log "Compound" comp
+
+                cssAnim =
+                    renderCompoundSections comp.slices emptyAnim
+            in
+            Just ( cssAnim, remain )
+
+        _ ->
             Nothing
 
 
+renderCompoundSections : List CompoundSection -> CssAnim -> CssAnim
+renderCompoundSections sections anim =
+    case sections of
+        [] ->
+            anim
 
--- partitionTransforms : List RenderedProp -> List RenderedProp -> ( List RenderedProp, List RenderedProp )
--- partitionTransforms props transformProps =
---     case props of
---         [] ->
---             ( List.reverse transformProps, props )
---         top :: remain ->
---             if isTransform top then
---                 partitionTransforms (top :: transformProps) remain
---             else
---                 ( List.reverse transformProps
---                 , props
---                 )
--- isTransform : RenderedProp -> Bool
--- isTransform (RenderedProp prop) =
---     Internal.Css.Props.isTransformId prop.id
+        section :: remain ->
+            let
+                new =
+                    -- if top.conflicting then exact else
+                    renderCompoundKeyframes
+                        section.start
+                        section.period
+                        section.frames
+                        ""
+                        ""
+            in
+            renderCompoundSections remain
+                ({ hash = new.hash
+                 , animation = "1s"
+                 , keyframes =
+                    "@keyframes "
+                        ++ new.hash
+                        ++ " {\n"
+                        ++ new.keyframes
+                        ++ "\n}"
+                 }
+                    |> combine anim
+                )
+
+
+renderCompoundKeyframes :
+    Time.Absolute
+    -> Timeline.Period
+    -> List Keyframe
+    -> String
+    -> String
+    ->
+        { hash : String
+        , keyframes : String
+        }
+renderCompoundKeyframes start period frames hash rendered =
+    case frames of
+        [] ->
+            { hash = hash
+            , keyframes = rendered
+            }
+
+        keyframe :: remain ->
+            let
+                newHash =
+                    -- TODO: Also hash values in this keyframe
+                    bezierHash keyframe.timing
+
+                name =
+                    "transform: "
+
+                percentage =
+                    (100
+                        * Time.progress start
+                            (start |> Time.advanceBy (Timeline.periodDuration period))
+                            keyframe.end
+                    )
+                        |> round
+
+                frame =
+                    (String.fromInt percentage ++ "% {")
+                        ++ name
+                        ++ renderIndividualFragment
+                            keyframe.props
+                            ""
+                        ++ ";\n"
+                        ++ "animation-timing-function:"
+                        ++ renderBezierTiming keyframe.timing
+                        ++ "}"
+            in
+            renderCompoundKeyframes start
+                period
+                remain
+                (newHash ++ hash)
+                (rendered ++ frame ++ "\n")
+
+
+renderIndividualFragment :
+    List
+        { id : Internal.Css.Props.Id
+        , spline : Bezier.Spline
+        }
+    -> String
+    -> String
+renderIndividualFragment props rendered =
+    case props of
+        [] ->
+            rendered
+
+        prop :: remain ->
+            let
+                renderValue =
+                    Internal.Css.Props.toStr prop.id
+
+                val =
+                    renderValue (Bezier.lastX prop.spline)
+
+                new =
+                    case rendered of
+                        "" ->
+                            val
+
+                        _ ->
+                            rendered ++ " " ++ val
+            in
+            renderIndividualFragment remain new
 
 
 {-| Render the exact points with a linear timing function. instead of relying on a cubic-bezier.
@@ -338,11 +421,12 @@ scalarHelper now renderedProps anim =
 
 propToCss : Time.Absolute -> RenderedProp -> CssAnim
 propToCss now prop =
-    case prop of
+    case Debug.log "prop" prop of
         RenderedProp details ->
             propToCssHelper now details.id details.sections emptyAnim
 
         CompoundProp details ->
+            -- HERE"S WHERE YOU LEFT OFF!!
             emptyAnim
 
 
@@ -571,7 +655,7 @@ renderCssHelper now renderer props cssAnim =
                     cssAnim
 
                 _ ->
-                    case render now props of
+                    case Debug.log "RENDERING" <| render now props of
                         Nothing ->
                             renderCssHelper now
                                 remain
@@ -611,6 +695,12 @@ propsToCurves only lookup timeline =
         |> .rendered
 
 
+startProps :
+    List Prop
+    -> List Prop
+    -> Maybe Compound
+    -> List RenderedProp
+    -> List RenderedProp
 startProps only props maybeTransform rendered =
     case only of
         [] ->
@@ -924,20 +1014,22 @@ type alias Compound =
     }
 
 
+{-| A compound section represents all the
+props transitioning from one state to another.
+
+In CSS terms, each compound section is it's own
+@keyframe definition
+
+-}
 type alias CompoundSection =
     { start : Time.Absolute
     , period : Timeline.Period
     , conflicting : Bool
-
-    -- only relevant if we're not conflicting
-    -- basically what %keyframes we want (% -> 0 - 100)
-    , breakpoints : List Int
-
-    --         --> into the future
-    , frames : List CompoundFrame
+    , frames : List Keyframe
     }
 
 
+{-| -}
 type alias CompoundFrame =
     { -- A compound section is only valid if the only moving props share a personality
       -- ultimately we're going to need every prop for every keyframe
@@ -1084,11 +1176,64 @@ lerpCurvesCompound states prevEndTime previous target targetTime interruptedAt m
     ( { start = prevEndTime
       , period = once (Time.duration prevEndTime targetTime)
       , conflicting = new.conflicting
-      , breakpoints = splinesToBreakpoints prevEndTime targetTime new.breakpoints []
-      , frames = [ { props = new.movement } ]
+      , frames = new.keyframes
       }
     , new.states
     )
+
+
+
+{-
+   We have
+
+       List
+           { id : Id
+           , movement : CapturedMovement: (List Spline)
+           }
+
+
+   We want
+
+       List Keyframe
+
+
+
+
+
+   Every iteration we have a
+
+        List Spline
+
+        We then want to merge these into the current `List Keyframe`
+
+        We do this by putting each Spline in a separate Keyframe
+
+        If they match times, everything works out (common case)
+
+        If they do not match, split existing keyframes, mark sections as conflicting
+
+
+
+
+
+-}
+
+
+{-| A Keyframe are all the properties necesasry to render a single keyframe.
+-}
+type alias Keyframe =
+    { start : Time.Absolute
+    , end : Time.Absolute
+    , timing : Bezier.Spline
+
+    -- {1, spline}, {2, spline}
+    -- If the splines are not conflicting
+    , props :
+        List
+            { id : Id
+            , spline : Bezier.Spline
+            }
+    }
 
 
 {-| -}
@@ -1106,28 +1251,20 @@ lerpCurvesCompoundHelper :
     -> Time.Absolute
     -> Maybe (Timeline.LookAhead (List Prop))
     -> Bool
-    ->
-        List
-            { id : Id
-            , movement : CapturedMovement
-            }
+    -> List Keyframe
     -> List ( Id, Interpolate.State )
     ->
-        { movement :
-            List
-                { id : Id
-                , movement : CapturedMovement
-                }
-        , breakpoints : List Bezier.Spline
+        { keyframes : List Keyframe
         , conflicting : Bool
         , states : List ( Id, Interpolate.State )
         }
-lerpCurvesCompoundHelper remainingStates prevEndTime prev target targetTime interruptedAt maybeLookAhead conflicted propMovements updatedStates =
+lerpCurvesCompoundHelper remainingStates prevEndTime prev target targetTime interruptedAt maybeLookAhead conflicted keyframes updatedStates =
     case remainingStates of
         [] ->
             { states = List.reverse updatedStates
-            , movement = propMovements
-            , breakpoints = []
+            , keyframes = keyframes
+
+            -- , breakpoints = []
             , conflicting = False
             }
 
@@ -1165,17 +1302,22 @@ lerpCurvesCompoundHelper remainingStates prevEndTime prev target targetTime inte
                         )
                         state
 
-                propMovement =
-                    if Interpolate.equalState state newState then
-                        Stationary (Pixels.inPixels newState.position)
+                new =
+                    case keyframes of
+                        [] ->
+                            { keyframes =
+                                List.map
+                                    (splineToKeyframe id)
+                                    splines
+                            , conflicting = conflicted
+                            }
 
-                    else
-                        BySpline splines
-
-                newProp =
-                    { id = id
-                    , movement = propMovement
-                    }
+                        _ ->
+                            mergeIntoKeyframes conflicted
+                                id
+                                splines
+                                []
+                                keyframes
             in
             lerpCurvesCompoundHelper
                 remain
@@ -1185,9 +1327,126 @@ lerpCurvesCompoundHelper remainingStates prevEndTime prev target targetTime inte
                 targetTime
                 interruptedAt
                 maybeLookAhead
-                conflicting
-                (newProp :: propMovements)
+                new.conflicting
+                new.keyframes
                 (( id, newState ) :: updatedStates)
+
+
+{-| We know that all splines here cover the same domain, because they are simply a transition
+from state A to state B.
+
+The most common case is that each list of beziers is exactly one spline long.
+
+However for springs, there may be a sequence of beziers
+
+    A B
+
+1 |--------------| (normal)
+2 |------|--|--|-| (spring)
+
+In this case we know that they start at the same point (A).
+
+When we get a (1) first, we should create a single keyframe and add it
+
+ON the second iteration, if (2) shows up, we should split (1) into sections so it matches (2), and then merge.
+
+-}
+mergeIntoKeyframes : Bool -> Id -> List Bezier.Spline -> List Keyframe -> List Keyframe -> { conflicting : Bool, keyframes : List Keyframe }
+mergeIntoKeyframes conflicting id splines newKeyframes keyframes =
+    case splines of
+        [] ->
+            { conflicting = conflicting
+            , keyframes = newKeyframes
+            }
+
+        topSpline :: remainSpline ->
+            case keyframes of
+                [] ->
+                    -- This isnt quite right
+                    -- However, I don't think should ever happen :thinking:
+                    { conflicting = conflicting
+                    , keyframes =
+                        newKeyframes
+                            ++ List.map
+                                (splineToKeyframe id)
+                                splines
+                    }
+
+                keyTop :: remainingKeyframes ->
+                    -- we know that the starts of topSpline and keyTop match
+                    -- because that's one of the things we're maintaining.
+                    if Time.inMilliseconds keyTop.end == Bezier.lastX topSpline then
+                        -- exact match, add ths prop to this keyframe
+                        let
+                            -- this section is conflicting if
+                            --    1. it was already marked as conflicting
+                            --    2. topSpline moves
+                            sectionIsConflicting =
+                                conflicting
+                                    || (not (Bezier.doesNotMove topSpline)
+                                            && not (Bezier.doesNotMove keyTop.timing)
+                                       )
+
+                            new =
+                                { keyTop
+                                    | props =
+                                        { id = id, spline = topSpline } :: keyTop.props
+                                    , timing =
+                                        if Bezier.doesNotMove keyTop.timing && not (Bezier.doesNotMove topSpline) then
+                                            -- *NOTE* convert to timing bezier
+                                            topSpline
+
+                                        else
+                                            keyTop.timing
+                                }
+                                    :: newKeyframes
+                        in
+                        mergeIntoKeyframes sectionIsConflicting id remainSpline new remainingKeyframes
+
+                    else if Time.inMilliseconds keyTop.end < Bezier.lastX topSpline then
+                        -- If `topSpline is bigger than keyTop
+                        --   Chop off the front of topSpline and add it to keyTop
+                        --   Iterate with the second half of topSpline and splineRemain
+                        let
+                            new =
+                                keyTop :: newKeyframes
+
+                            -- TODO: Note, there is a case where these are *not* conflicting
+                            -- which is when there is only one prop (which is a spring), which is moving.
+                        in
+                        mergeIntoKeyframes True id remainSpline new remainingKeyframes
+
+                    else
+                        -- topSpline is shorter than keyTop
+                        --    Chop keyTop into 2 keyframes
+                        --    Add topSpline to slive[1] and add to `new`
+                        --    Continue on, maintaining slice[1] in remainingKeyframes
+                        let
+                            new =
+                                keyTop :: newKeyframes
+
+                            -- TODO: Note, there is a case where these are *not* conflicting
+                            -- which is when there is only one prop (which is a spring), which is moving.
+                        in
+                        mergeIntoKeyframes True id remainSpline new remainingKeyframes
+
+
+splineToKeyframe :
+    Id
+    -> Bezier.Spline
+    -> Keyframe
+splineToKeyframe id spline =
+    { start = Time.millis (Bezier.firstX spline)
+    , end = Time.millis (Bezier.lastX spline)
+
+    -- NOTE: This should be normalized to a time-spline
+    , timing = spline
+    , props =
+        [ { id = id
+          , spline = spline
+          }
+        ]
+    }
 
 
 visitCurvesCompound :
@@ -1213,7 +1472,6 @@ visitCurvesCompound states lookup previous target targetTime maybeLookahead =
                 False
                 []
                 []
-                []
 
         endPrevious =
             Timeline.endTime previous
@@ -1221,22 +1479,10 @@ visitCurvesCompound states lookup previous target targetTime maybeLookahead =
     ( { start = endPrevious
       , period = once (Time.duration endPrevious targetTime)
       , conflicting = new.conflicting
-      , breakpoints = splinesToBreakpoints endPrevious targetTime new.breakpoints []
-      , frames = [ { props = new.movement } ]
+      , frames = new.frames
       }
     , new.states
     )
-
-
-{-| AHH DO THIS
--}
-splinesToBreakpoints start end splines found =
-    case splines of
-        [] ->
-            List.reverse found
-
-        _ ->
-            found
 
 
 {-| -}
@@ -1251,29 +1497,18 @@ visitCurvesCompoundHelper :
     -> Time.Absolute
     -> Maybe (Timeline.LookAhead (List Prop))
     -> Bool
-    ->
-        List
-            { id : Id
-            , movement : CapturedMovement
-            }
+    -> List Keyframe
     -> List ( Id, Interpolate.State )
-    -> List Bezier.Spline
     ->
-        { movement :
-            List
-                { id : Id
-                , movement : CapturedMovement
-                }
-        , breakpoints : List Bezier.Spline
+        { frames : List Keyframe
         , conflicting : Bool
         , states : List ( Id, Interpolate.State )
         }
-visitCurvesCompoundHelper remainingStates lookup previous target targetTime maybeLookAhead conflicting propMovements updatedStates breakpoints =
+visitCurvesCompoundHelper remainingStates lookup previous target targetTime maybeLookAhead conflicting keyframes updatedStates =
     case remainingStates of
         [] ->
             { states = List.reverse updatedStates
-            , movement = propMovements
-            , breakpoints = breakpoints
+            , frames = keyframes
             , conflicting = conflicting
             }
 
@@ -1319,25 +1554,22 @@ visitCurvesCompoundHelper remainingStates lookup previous target targetTime mayb
                         )
                         state
 
-                newBreakpoints =
-                    case breakpoints of
+                new =
+                    case keyframes of
                         [] ->
-                            splines
+                            { keyframes =
+                                List.map
+                                    (splineToKeyframe id)
+                                    splines
+                            , conflicting = conflicting
+                            }
 
                         _ ->
-                            breakpoints
-
-                propMovement =
-                    if Interpolate.equalState state newState then
-                        Stationary (Pixels.inPixels newState.position)
-
-                    else
-                        BySpline splines
-
-                newProp =
-                    { id = id
-                    , movement = propMovement
-                    }
+                            mergeIntoKeyframes conflicting
+                                id
+                                splines
+                                []
+                                keyframes
             in
             visitCurvesCompoundHelper
                 remain
@@ -1346,10 +1578,9 @@ visitCurvesCompoundHelper remainingStates lookup previous target targetTime mayb
                 target
                 targetTime
                 maybeLookAhead
-                conflicting
-                (newProp :: propMovements)
+                new.conflicting
+                new.keyframes
                 (( id, newState ) :: updatedStates)
-                newBreakpoints
 
 
 isCombineableCompoundSections : CompoundSection -> CompoundSection -> Bool
@@ -1388,7 +1619,6 @@ combineCompound one two =
                 (periodDuration two.period)
             )
     , conflicting = one.conflicting
-    , breakpoints = one.breakpoints ++ two.breakpoints
     , frames = one.frames ++ two.frames
     }
 
@@ -1459,6 +1689,7 @@ toCurvesVisit lookup target targetTime maybePrevious maybeLookAhead state existi
                     sections
 
 
+once : Time.Duration -> Timeline.Period
 once =
     Timeline.Repeat 1
 
@@ -1984,16 +2215,22 @@ renderTimingHash timing =
         Interpolate.Linear ->
             "l"
 
-        Interpolate.Bezier (Bezier.Spline c0 c1 c2 c3) ->
-            -- the spline passed here needs to be normalized over 0-1
-            -- and then we only need to pass the two control points to the css animation
-            "bz-"
-                ++ (encodeFloat c1.x ++ "-")
-                ++ (encodeFloat c1.y ++ "-")
-                ++ (encodeFloat c2.x ++ "-")
-                ++ encodeFloat c2.y
+        Interpolate.Bezier spline ->
+            bezierHash spline
 
 
+bezierHash : Bezier.Spline -> String
+bezierHash (Bezier.Spline c0 c1 c2 c3) =
+    -- the spline passed here needs to be normalized over 0-1
+    -- and then we only need to pass the two control points to the css animation
+    "bz-"
+        ++ (encodeFloat c1.x ++ "-")
+        ++ (encodeFloat c1.y ++ "-")
+        ++ (encodeFloat c2.x ++ "-")
+        ++ encodeFloat c2.y
+
+
+encodeFloat : Float -> String
 encodeFloat fl =
     String.fromInt (round fl)
 
@@ -2004,15 +2241,22 @@ renderTiming timing =
         Interpolate.Linear ->
             "linear"
 
-        Interpolate.Bezier (Bezier.Spline c0 c1 c2 c3) ->
+        Interpolate.Bezier spline ->
             -- the spline passed here needs to be normalized over 0-1
             -- and then we only need to pass the two control points to the css animation
-            "cubic-bezier("
-                ++ (String.fromFloat c1.x ++ ", ")
-                ++ (String.fromFloat c1.y ++ ", ")
-                ++ (String.fromFloat c2.x ++ ", ")
-                ++ String.fromFloat c2.y
-                ++ ")"
+            renderBezierTiming spline
+
+
+renderBezierTiming : Bezier.Spline -> String
+renderBezierTiming (Bezier.Spline _ c1 c2 _) =
+    -- the spline passed here needs to be normalized over 0-1
+    -- and then we only need to pass the two control points to the css animation
+    "cubic-bezier("
+        ++ (String.fromFloat c1.x ++ ", ")
+        ++ (String.fromFloat c1.y ++ ", ")
+        ++ (String.fromFloat c2.x ++ ", ")
+        ++ String.fromFloat c2.y
+        ++ ")"
 
 
 {-| -}
