@@ -8,7 +8,7 @@ module Internal.Timeline exposing
     , current, arrivedAt, arrived, previous, upcoming
     , Line(..), Timetable(..)
     , foldp, capture, captureTimeline
-    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), atTime, foldpAll, foldpOld, gc, getCurrentTime, hasChanged, justInitialized, linearDefault, linesAreActive, mapLookAhead, periodDuration, previousEndTime, previousStartTime, updateWith
+    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), atTime, foldpAll, foldpOld, gc, getCurrentTime, hasChanged, isDuring, isOnce, justInitialized, linearDefault, linesAreActive, mapLookAhead, periodDuration, previousEndTime, previousStartTime, reduceIterations, updateWith
     )
 
 {-|
@@ -53,6 +53,43 @@ type Event event
 type Period
     = Loop Time.Duration
     | Repeat Int Time.Duration
+
+
+reduceIterations : Int -> Period -> Period
+reduceIterations removeN period =
+    case period of
+        Loop _ ->
+            period
+
+        Repeat n dur ->
+            Repeat (n - removeN) dur
+
+
+isDuring : Time.Absolute -> Time.Absolute -> Period -> Bool
+isDuring now start period =
+    case period of
+        Loop _ ->
+            Time.thisAfterOrEqualThat now start
+
+        Repeat n dur ->
+            let
+                end =
+                    start
+                        |> Time.advanceBy
+                            (Quantity.multiplyBy (toFloat n) dur)
+            in
+            Time.thisAfterOrEqualThat now start
+                && Time.thisBeforeOrEqualThat now end
+
+
+isOnce : Period -> Bool
+isOnce per =
+    case per of
+        Loop dur ->
+            False
+
+        Repeat i _ ->
+            (i - 0) == 1
 
 
 periodDuration : Period -> Time.Duration

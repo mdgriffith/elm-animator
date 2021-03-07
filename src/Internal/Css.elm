@@ -153,72 +153,102 @@ renderCompoundSections now sections anim =
         [] ->
             anim
 
-        section :: remain ->
+        targetSection :: tail ->
             let
-                new =
-                    -- if top.conflicting then exact else
-                    renderCompoundKeyframes
-                        section.start
-                        section.period
-                        section.frames
-                        ""
-                        ""
+                end =
+                    targetSection.start
+                        |> Time.advanceBy (Timeline.periodDuration targetSection.period)
 
-                duration =
-                    case section.period of
-                        Timeline.Loop dur ->
-                            dur
-
-                        Timeline.Repeat _ dur ->
-                            dur
-
-                durationStr =
-                    String.fromFloat
-                        (Duration.inMilliseconds duration)
-                        ++ "ms"
-
-                n =
-                    case section.period of
-                        Timeline.Loop _ ->
-                            infinite
-
-                        Timeline.Repeat count _ ->
-                            String.fromInt count
-
-                delay =
-                    Time.duration now section.start
-                        |> Duration.inMilliseconds
-                        |> String.fromFloat
-                        |> (\s -> s ++ "ms")
-
-                -- @keyframes duration | easing-function | delay |
-                --      iteration-count | direction | fill-mode | play-state | name */
-                -- animation: 3s ease-in 1s 2 reverse both paused slidein;
-                animation =
-                    (durationStr ++ " ")
-                        -- we specify an easing function here because it we have to
-                        -- , but it is overridden by the one in keyframes
-                        ++ "linear "
-                        ++ delay
-                        ++ " "
-                        ++ n
-                        ++ " normal forward running "
-                        ++ new.hash
+                onlyOnce =
+                    Timeline.isOnce targetSection.period
             in
-            renderCompoundSections now
-                remain
-                (combine
-                    { hash = new.hash
-                    , animation = animation
-                    , keyframes =
-                        "@keyframes "
+            if onlyOnce && Time.thisBeforeThat end now then
+                anim
+
+            else
+                let
+                    ( section, remain ) =
+                        if Timeline.isDuring now targetSection.start targetSection.period then
+                            let
+                                ( old_, active, maybeNext ) =
+                                    splitSection now targetSection
+                            in
+                            ( active
+                            , case maybeNext of
+                                Nothing ->
+                                    tail
+
+                                Just next ->
+                                    next :: tail
+                            )
+
+                        else
+                            ( targetSection, tail )
+
+                    new =
+                        -- if top.conflicting then exact else
+                        renderCompoundKeyframes
+                            section.start
+                            section.period
+                            section.frames
+                            ""
+                            ""
+
+                    duration =
+                        case section.period of
+                            Timeline.Loop dur ->
+                                dur
+
+                            Timeline.Repeat _ dur ->
+                                dur
+
+                    durationStr =
+                        String.fromFloat
+                            (Duration.inMilliseconds duration)
+                            ++ "ms"
+
+                    n =
+                        case section.period of
+                            Timeline.Loop _ ->
+                                infinite
+
+                            Timeline.Repeat count _ ->
+                                String.fromInt count
+
+                    delay =
+                        Time.duration now section.start
+                            |> Duration.inMilliseconds
+                            |> String.fromFloat
+                            |> (\s -> s ++ "ms")
+
+                    -- @keyframes duration | easing-function | delay |
+                    --      iteration-count | direction | fill-mode | play-state | name */
+                    -- animation: 3s ease-in 1s 2 reverse both paused slidein;
+                    animation =
+                        (durationStr ++ " ")
+                            -- we specify an easing function here because it we have to
+                            -- , but it is overridden by the one in keyframes
+                            ++ "linear "
+                            ++ delay
+                            ++ " "
+                            ++ n
+                            ++ " normal forward running "
                             ++ new.hash
-                            ++ " {\n"
-                            ++ new.keyframes
-                            ++ "\n}"
-                    }
-                    anim
-                )
+                in
+                renderCompoundSections now
+                    remain
+                    (combine
+                        { hash = new.hash
+                        , animation = animation
+                        , keyframes =
+                            "@keyframes "
+                                ++ new.hash
+                                ++ " {\n"
+                                ++ new.keyframes
+                                ++ "\n}"
+                        }
+                        anim
+                    )
 
 
 keyframeHash :
@@ -866,10 +896,6 @@ toPropCurves only =
             Nothing
     , visit =
         \lookup target targetTime maybeLookAhead data ->
-            let
-                _ =
-                    Debug.log "VISIT" targetTime
-            in
             { rendered =
                 case data.previous of
                     Nothing ->
@@ -880,39 +906,35 @@ toPropCurves only =
                             (\prop ->
                                 case prop of
                                     RenderedProp rendered ->
+                                        let
+                                            propLookup state =
+                                                lookup state
+                                                    |> stateOrDefault rendered.id
+
+                                            maybePropLookAhead =
+                                                Maybe.map
+                                                    (Timeline.mapLookAhead
+                                                        (stateOrDefault rendered.id)
+                                                    )
+                                                    maybeLookAhead
+                                        in
                                         RenderedProp
                                             { id = rendered.id
                                             , sections =
                                                 toCurvesVisit
-                                                    (\state ->
-                                                        lookup state
-                                                            |> stateOrDefault rendered.id
-                                                    )
+                                                    propLookup
                                                     target
                                                     targetTime
                                                     data.previous
-                                                    (Maybe.map
-                                                        (Timeline.mapLookAhead
-                                                            (stateOrDefault rendered.id)
-                                                        )
-                                                        maybeLookAhead
-                                                    )
+                                                    maybePropLookAhead
                                                     rendered.state
                                                     rendered.sections
                                             , state =
                                                 Interpolate.moving.visit
-                                                    (\state ->
-                                                        lookup state
-                                                            |> stateOrDefault rendered.id
-                                                    )
+                                                    propLookup
                                                     target
                                                     targetTime
-                                                    (Maybe.map
-                                                        (Timeline.mapLookAhead
-                                                            (stateOrDefault rendered.id)
-                                                        )
-                                                        maybeLookAhead
-                                                    )
+                                                    maybePropLookAhead
                                                     rendered.state
                                             }
 
@@ -947,45 +969,45 @@ toPropCurves only =
             }
     , lerp =
         \prevEndTime prev target targetTime interruptedAt maybeLookAhead data ->
-            let
-                _ =
-                    Debug.log "LERP" ( interruptedAt, targetTime )
-            in
             { rendered =
                 List.map
                     (\prop ->
                         case prop of
                             RenderedProp rendered ->
+                                let
+                                    previousProp =
+                                        stateOrDefault rendered.id prev
+
+                                    targetProp =
+                                        stateOrDefault rendered.id target
+
+                                    lookAheadProp =
+                                        Maybe.map
+                                            (Timeline.mapLookAhead
+                                                (stateOrDefault rendered.id)
+                                            )
+                                            maybeLookAhead
+                                in
                                 RenderedProp
                                     { id = rendered.id
                                     , sections =
                                         toCurvesLerp
                                             prevEndTime
-                                            (stateOrDefault rendered.id prev)
-                                            (stateOrDefault rendered.id target)
+                                            previousProp
+                                            targetProp
                                             targetTime
                                             interruptedAt
-                                            (Maybe.map
-                                                (Timeline.mapLookAhead
-                                                    (stateOrDefault rendered.id)
-                                                )
-                                                maybeLookAhead
-                                            )
+                                            lookAheadProp
                                             rendered.state
                                             rendered.sections
                                     , state =
                                         Interpolate.moving.lerp
                                             prevEndTime
-                                            (stateOrDefault rendered.id prev)
-                                            (stateOrDefault rendered.id target)
+                                            previousProp
+                                            targetProp
                                             targetTime
                                             interruptedAt
-                                            (Maybe.map
-                                                (Timeline.mapLookAhead
-                                                    (stateOrDefault rendered.id)
-                                                )
-                                                maybeLookAhead
-                                            )
+                                            lookAheadProp
                                             rendered.state
                                     }
 
@@ -1121,6 +1143,146 @@ type alias CompoundSection =
     , period : Timeline.Period
     , conflicting : Bool
     , frames : List Keyframe
+    }
+
+
+{-| Splitting a section is useful when rendering because maybe `now` is in the middle of a section.
+
+In the standard case, splitting a compound would return two sections.
+
+However, in the case of a repeating or looping event, it may return three.
+
+split here--|
+v
+A------------B(x3)
+
+    Will result in
+
+    |---1---|--2-|----3(x2)------|
+
+-}
+splitSection : Time.Absolute -> CompoundSection -> ( CompoundSection, CompoundSection, Maybe CompoundSection )
+splitSection at cpd =
+    let
+        split =
+            splitFrames at
+                cpd.frames
+
+        before =
+            { start = cpd.start
+            , period = once (Time.duration cpd.start at)
+            , conflicting = cpd.conflicting
+            , frames = split.before
+            }
+
+        after =
+            { start = cpd.start
+            , period = once (Time.duration cpd.start at)
+            , conflicting = cpd.conflicting
+            , frames = split.before
+            }
+
+        remaining =
+            if isOnce cpd.period then
+                Nothing
+
+            else
+                Just
+                    { start =
+                        cpd.start
+                            |> Time.advanceBy (Timeline.periodDuration cpd.period)
+                    , period = Timeline.reduceIterations 1 cpd.period
+                    , conflicting = cpd.conflicting
+                    , frames = cpd.frames
+                    }
+    in
+    ( before
+    , after
+    , remaining
+    )
+
+
+splitFrames : Time.Absolute -> List Keyframe -> { before : List Keyframe, after : List Keyframe }
+splitFrames at frames =
+    splitFramesHelper at frames []
+
+
+splitFramesHelper :
+    Time.Absolute
+    -> List Keyframe
+    -> List Keyframe
+    ->
+        { before : List Keyframe
+        , after : List Keyframe
+        }
+splitFramesHelper now frames passed =
+    case frames of
+        [] ->
+            { before = List.reverse passed
+            , after = []
+            }
+
+        top :: remain ->
+            if Time.equal now top.start then
+                { before = List.reverse passed
+                , after = frames
+                }
+
+            else if Time.thisBeforeThat now top.end then
+                -- first frame that
+                let
+                    split =
+                        splitKeyframe now top
+                in
+                { before = List.reverse (split.before :: passed)
+                , after = split.after :: remain
+                }
+
+            else
+                splitFramesHelper now
+                    remain
+                    (top :: passed)
+
+
+splitKeyframe : Time.Absolute -> Keyframe -> { before : Keyframe, after : Keyframe }
+splitKeyframe now keyframe =
+    let
+        nowMS =
+            Time.inMilliseconds now
+
+        ( beforeTiming, afterTiming ) =
+            Bezier.splitAtX nowMS keyframe.timing
+
+        propsBefore =
+            List.map
+                (\prop ->
+                    { id = prop.id
+                    , spline = Tuple.first (Bezier.splitAt nowMS prop.spline)
+                    }
+                )
+                keyframe.props
+
+        propsAfter =
+            List.map
+                (\prop ->
+                    { id = prop.id
+                    , spline = Tuple.second (Bezier.splitAt nowMS prop.spline)
+                    }
+                )
+                keyframe.props
+    in
+    { before =
+        { start = keyframe.start
+        , end = now
+        , timing = beforeTiming
+        , props = propsBefore
+        }
+    , after =
+        { start = now
+        , end = keyframe.end
+        , timing = afterTiming
+        , props = propsAfter
+        }
     }
 
 
