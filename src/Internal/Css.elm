@@ -138,11 +138,8 @@ transform now renderedProps =
 
         (CompoundProp comp) :: remain ->
             let
-                _ =
-                    Debug.log "Compound" comp
-
                 cssAnim =
-                    renderCompoundSections comp.slices emptyAnim
+                    renderCompoundSections now comp.slices emptyAnim
             in
             Just ( cssAnim, remain )
 
@@ -150,8 +147,8 @@ transform now renderedProps =
             Nothing
 
 
-renderCompoundSections : List CompoundSection -> CssAnim -> CssAnim
-renderCompoundSections sections anim =
+renderCompoundSections : Time.Absolute -> List CompoundSection -> CssAnim -> CssAnim
+renderCompoundSections now sections anim =
     case sections of
         [] ->
             anim
@@ -166,19 +163,79 @@ renderCompoundSections sections anim =
                         section.frames
                         ""
                         ""
-            in
-            renderCompoundSections remain
-                ({ hash = new.hash
-                 , animation = "1s"
-                 , keyframes =
-                    "@keyframes "
+
+                duration =
+                    case section.period of
+                        Timeline.Loop dur ->
+                            dur
+
+                        Timeline.Repeat _ dur ->
+                            dur
+
+                durationStr =
+                    String.fromFloat
+                        (Duration.inMilliseconds duration)
+                        ++ "ms"
+
+                n =
+                    case section.period of
+                        Timeline.Loop _ ->
+                            infinite
+
+                        Timeline.Repeat count _ ->
+                            String.fromInt count
+
+                delay =
+                    Time.duration now section.start
+                        |> Duration.inMilliseconds
+                        |> String.fromFloat
+                        |> (\s -> s ++ "ms")
+
+                -- @keyframes duration | easing-function | delay |
+                --      iteration-count | direction | fill-mode | play-state | name */
+                -- animation: 3s ease-in 1s 2 reverse both paused slidein;
+                animation =
+                    (durationStr ++ " ")
+                        -- we specify an easing function here because it we have to
+                        -- , but it is overridden by the one in keyframes
+                        ++ "linear "
+                        ++ delay
+                        ++ " "
+                        ++ n
+                        ++ " normal forward running "
                         ++ new.hash
-                        ++ " {\n"
-                        ++ new.keyframes
-                        ++ "\n}"
-                 }
-                    |> combine anim
+            in
+            renderCompoundSections now
+                remain
+                (combine
+                    { hash = new.hash
+                    , animation = animation
+                    , keyframes =
+                        "@keyframes "
+                            ++ new.hash
+                            ++ " {\n"
+                            ++ new.keyframes
+                            ++ "\n}"
+                    }
+                    anim
                 )
+
+
+keyframeHash :
+    List
+        { id : Id
+        , spline : Bezier.Spline
+        }
+    -> String
+    -> String
+keyframeHash keyframes rendered =
+    case keyframes of
+        [] ->
+            rendered
+
+        top :: remain ->
+            keyframeHash remain
+                (Internal.Css.Props.hash top.id ++ Bezier.hash top.spline ++ rendered)
 
 
 renderCompoundKeyframes :
@@ -200,47 +257,64 @@ renderCompoundKeyframes start period frames hash rendered =
 
         keyframe :: remain ->
             let
-                newHash =
-                    -- TODO: Also hash values in this keyframe
-                    bezierHash keyframe.timing
-
-                name =
-                    "transform: "
-
                 percentage =
-                    (100
-                        * Time.progress start
-                            (start |> Time.advanceBy (Timeline.periodDuration period))
-                            keyframe.end
-                    )
-                        |> round
+                    round
+                        (100
+                            * Time.progress start
+                                (start |> Time.advanceBy (Timeline.periodDuration period))
+                                keyframe.start
+                        )
 
                 frame =
-                    (String.fromInt percentage ++ "% {")
-                        ++ name
-                        ++ renderIndividualFragment
+                    "    "
+                        -- ++ String.fromFloat (Time.inMilliseconds keyframe.start)
+                        -- ++ " -- "
+                        ++ (String.fromInt percentage ++ "% {\n")
+                        ++ "        transform: "
+                        ++ renderFirstPoint
                             keyframe.props
                             ""
                         ++ ";\n"
-                        ++ "animation-timing-function:"
-                        ++ renderBezierTiming keyframe.timing
-                        ++ "}"
+                        ++ "        animation-timing-function:"
+                        ++ Bezier.cssTimingString keyframe.timing
+                        ++ ";\n    }"
             in
-            renderCompoundKeyframes start
-                period
-                remain
-                (newHash ++ hash)
-                (rendered ++ frame ++ "\n")
+            case remain of
+                [] ->
+                    let
+                        last =
+                            "    "
+                                -- ++ String.fromFloat (Time.inMilliseconds keyframe.end)
+                                -- ++ " -- "
+                                ++ "100% {\n"
+                                ++ "        transform: "
+                                ++ renderLastPoint
+                                    keyframe.props
+                                    ""
+                                ++ ";\n    }"
+                    in
+                    renderCompoundKeyframes start
+                        period
+                        remain
+                        (keyframeHash keyframe.props "" ++ hash)
+                        (rendered ++ frame ++ "\n" ++ last)
+
+                _ ->
+                    renderCompoundKeyframes start
+                        period
+                        remain
+                        (keyframeHash keyframe.props "" ++ hash)
+                        (rendered ++ frame ++ "\n")
 
 
-renderIndividualFragment :
+renderFirstPoint :
     List
         { id : Internal.Css.Props.Id
         , spline : Bezier.Spline
         }
     -> String
     -> String
-renderIndividualFragment props rendered =
+renderFirstPoint props rendered =
     case props of
         [] ->
             rendered
@@ -251,7 +325,7 @@ renderIndividualFragment props rendered =
                     Internal.Css.Props.toStr prop.id
 
                 val =
-                    renderValue (Bezier.lastX prop.spline)
+                    renderValue (Bezier.firstX prop.spline)
 
                 new =
                     case rendered of
@@ -261,7 +335,38 @@ renderIndividualFragment props rendered =
                         _ ->
                             rendered ++ " " ++ val
             in
-            renderIndividualFragment remain new
+            renderFirstPoint remain new
+
+
+renderLastPoint :
+    List
+        { id : Internal.Css.Props.Id
+        , spline : Bezier.Spline
+        }
+    -> String
+    -> String
+renderLastPoint props rendered =
+    case props of
+        [] ->
+            rendered
+
+        prop :: remain ->
+            let
+                renderValue =
+                    Internal.Css.Props.toStr prop.id
+
+                val =
+                    renderValue (Bezier.firstX prop.spline)
+
+                new =
+                    case rendered of
+                        "" ->
+                            val
+
+                        _ ->
+                            rendered ++ " " ++ val
+            in
+            renderFirstPoint remain new
 
 
 {-| Render the exact points with a linear timing function. instead of relying on a cubic-bezier.
@@ -375,24 +480,6 @@ compound props =
     -- if
     --
     emptyAnim
-
-
-
--- {-|
--- -}
--- compoundKeyframes :
---     Time.Absolute
---     -> Time.Absolute
---     -> Time.Absolute
---     -> List ((Float -> String), List Bezier.Spline)
---     -> String
---     -> String
--- compoundKeyframes start now end sect rendered =
---     let
---         frames = ""
---     in
---     rendered
--- compoundSectionCss : Time.Absolute -> Id -> Section -> List (Id, Section) ->  CssAnim
 
 
 scalars : Renderer
@@ -655,7 +742,7 @@ renderCssHelper now renderer props cssAnim =
                     cssAnim
 
                 _ ->
-                    case Debug.log "RENDERING" <| render now props of
+                    case render now props of
                         Nothing ->
                             renderCssHelper now
                                 remain
@@ -779,6 +866,10 @@ toPropCurves only =
             Nothing
     , visit =
         \lookup target targetTime maybeLookAhead data ->
+            let
+                _ =
+                    Debug.log "VISIT" targetTime
+            in
             { rendered =
                 case data.previous of
                     Nothing ->
@@ -856,6 +947,10 @@ toPropCurves only =
             }
     , lerp =
         \prevEndTime prev target targetTime interruptedAt maybeLookAhead data ->
+            let
+                _ =
+                    Debug.log "LERP" ( interruptedAt, targetTime )
+            in
             { rendered =
                 List.map
                     (\prop ->
@@ -1160,6 +1255,8 @@ lerpCurvesCompound :
     -> ( CompoundSection, List ( Id, Interpolate.State ) )
 lerpCurvesCompound states prevEndTime previous target targetTime interruptedAt maybeLookahead =
     let
+        -- _ =
+        --     Debug.log "LERP" ( prevEndTime, interruptedAt, targetTime )
         new =
             lerpCurvesCompoundHelper
                 states
@@ -1173,10 +1270,15 @@ lerpCurvesCompound states prevEndTime previous target targetTime interruptedAt m
                 []
                 []
     in
-    ( { start = prevEndTime
-      , period = once (Time.duration prevEndTime targetTime)
+    ( { start = interruptedAt
+      , period = once (Time.duration interruptedAt targetTime)
       , conflicting = new.conflicting
-      , frames = new.keyframes
+      , frames =
+            if interruptedAt == targetTime then
+                []
+
+            else
+                new.keyframes
       }
     , new.states
     )
@@ -1263,8 +1365,6 @@ lerpCurvesCompoundHelper remainingStates prevEndTime prev target targetTime inte
         [] ->
             { states = List.reverse updatedStates
             , keyframes = keyframes
-
-            -- , breakpoints = []
             , conflicting = False
             }
 
@@ -1288,9 +1388,16 @@ lerpCurvesCompoundHelper remainingStates prevEndTime prev target targetTime inte
                 conflicting =
                     False
 
+                -- _ =
+                --     Debug.log "LERP"
+                --         { prevEndTime = prevEndTime
+                --         , targetTime = targetTime
+                --         , interrutpedAt = interruptedAt
+                --         , splines = splines
+                --         }
                 splines =
                     Interpolate.lerpSplines
-                        prevEndTime
+                        interruptedAt
                         (stateOrDefault id prev)
                         (stateOrDefault id target)
                         targetTime
@@ -1462,6 +1569,8 @@ visitCurvesCompound :
     -> ( CompoundSection, List ( Id, Interpolate.State ) )
 visitCurvesCompound states lookup previous target targetTime maybeLookahead =
     let
+        -- _ =
+        --     Debug.log "VISIT" ( previous, target )
         new =
             visitCurvesCompoundHelper states
                 lookup
@@ -1611,7 +1720,7 @@ periodDuration period =
 
 combineCompound : CompoundSection -> CompoundSection -> CompoundSection
 combineCompound one two =
-    { start = one.start
+    { start = Time.earliest one.start two.start
     , period =
         once
             (Time.expand
@@ -1619,7 +1728,7 @@ combineCompound one two =
                 (periodDuration two.period)
             )
     , conflicting = one.conflicting
-    , frames = one.frames ++ two.frames
+    , frames = two.frames ++ one.frames
     }
 
 
@@ -2216,18 +2325,7 @@ renderTimingHash timing =
             "l"
 
         Interpolate.Bezier spline ->
-            bezierHash spline
-
-
-bezierHash : Bezier.Spline -> String
-bezierHash (Bezier.Spline c0 c1 c2 c3) =
-    -- the spline passed here needs to be normalized over 0-1
-    -- and then we only need to pass the two control points to the css animation
-    "bz-"
-        ++ (encodeFloat c1.x ++ "-")
-        ++ (encodeFloat c1.y ++ "-")
-        ++ (encodeFloat c2.x ++ "-")
-        ++ encodeFloat c2.y
+            Bezier.hash spline
 
 
 encodeFloat : Float -> String
@@ -2244,19 +2342,7 @@ renderTiming timing =
         Interpolate.Bezier spline ->
             -- the spline passed here needs to be normalized over 0-1
             -- and then we only need to pass the two control points to the css animation
-            renderBezierTiming spline
-
-
-renderBezierTiming : Bezier.Spline -> String
-renderBezierTiming (Bezier.Spline _ c1 c2 _) =
-    -- the spline passed here needs to be normalized over 0-1
-    -- and then we only need to pass the two control points to the css animation
-    "cubic-bezier("
-        ++ (String.fromFloat c1.x ++ ", ")
-        ++ (String.fromFloat c1.y ++ ", ")
-        ++ (String.fromFloat c2.x ++ ", ")
-        ++ String.fromFloat c2.y
-        ++ ")"
+            Bezier.cssTimingString spline
 
 
 {-| -}

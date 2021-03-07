@@ -1,4 +1,4 @@
-module Internal.Css.Props exposing (Id, default, firstTransform, ids, isTransformId, name, toStr)
+module Internal.Css.Props exposing (Id, default, firstTransform, hash, ids, isTransformId, name, toStr)
 
 import Internal.Interpolate as Interpolate
 
@@ -27,6 +27,38 @@ type alias Id =
 isTransformId : Id -> Bool
 isTransformId id =
     id < 12
+
+
+hash : Id -> String
+hash id =
+    case id of
+        0 ->
+            "x-"
+
+        1 ->
+            "y-"
+
+        2 ->
+            "z-"
+
+        3 ->
+            "r-"
+
+        4 ->
+            "s-"
+
+        5 ->
+            "sx-"
+
+        6 ->
+            "sy-"
+
+        13 ->
+            -- opacity
+            "o-"
+
+        _ ->
+            "unknown-"
 
 
 name : Id -> String
