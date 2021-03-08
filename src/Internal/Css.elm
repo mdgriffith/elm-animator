@@ -1101,39 +1101,6 @@ matchId onlyId props =
                 matchId onlyId remain
 
 
-{-| This is a fully composed css proeprty string, such as:
-
-    "background-color: rgb(0,0,0);"
-
-You can include multiple properties if necessary
-and we don't have the allocation of an intermediate datastruture like
-
-    [ ( "background-color", "rgb(0,0,0)" ) ]
-
--}
-type alias CssPropString =
-    String
-
-
-{-| Same as above, but we take it all the way to CSS.
-
-So we need:
-
-  - Props to render
-  - What props are present at this state
-  - How do we render these props as css?
-
--}
-propsToCss :
-    List Prop
-    -> (state -> List Prop)
-    -> (List ( Id, Float ) -> CssPropString)
-    -> Timeline.Timeline state
-    -> CssAnim
-propsToCss only lookup render timeline =
-    Debug.todo "Maybe this is the way to go :thinking:"
-
-
 {-| A group of curves represents the trail of one scalar property
 
     (Scalar property meaning something like opacity, or just the `R` channel of rgb.)
@@ -1164,7 +1131,7 @@ splitSection : Time.Absolute -> Section -> ( Section, Section, Maybe Section )
 splitSection at (Section section) =
     let
         split =
-            splitSplines (Time.inMilliseconds at)
+            Bezier.splitList (Time.inMilliseconds at)
                 section.splines
                 []
 
@@ -1199,35 +1166,6 @@ splitSection at (Section section) =
     , Section after
     , remaining
     )
-
-
-splitSplines :
-    Float
-    -> List Bezier.Spline
-    -> List Bezier.Spline
-    ->
-        { before : List Bezier.Spline
-        , after : List Bezier.Spline
-        }
-splitSplines at splines passed =
-    case splines of
-        [] ->
-            { before = List.reverse passed
-            , after = []
-            }
-
-        top :: remain ->
-            if Bezier.withinX at top then
-                let
-                    ( before, after ) =
-                        Bezier.splitAtX at top
-                in
-                { before = List.reverse (before :: passed)
-                , after = after :: remain
-                }
-
-            else
-                splitSplines at remain (top :: passed)
 
 
 {-| A compound section represents all the
@@ -2098,7 +2036,7 @@ toCurvesLerp prevEndTime prev target targetTime interruptedAt maybeLookAhead sta
                 transitionSplines
 
             else
-                Interpolate.takeBefore interruptedAt transitionSplines
+                Bezier.takeBefore (Time.inMilliseconds interruptedAt) transitionSplines
     in
     existingSections
         |> (::)

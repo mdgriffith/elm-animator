@@ -17,6 +17,8 @@ module Internal.Bezier exposing
     , secondDerivative
     , splitAt
     , splitAtX
+    , splitList
+    , takeBefore
     , withinX
     )
 
@@ -507,3 +509,58 @@ splitAt parameterValue (Spline p1 p2 p3 p4) =
     ( Spline p1 q1 r1 s
     , Spline s r2 q3 p4
     )
+
+
+takeBefore : Float -> List Spline -> List Spline
+takeBefore cutoff splines =
+    takeBeforeHelper cutoff splines []
+
+
+takeBeforeHelper : Float -> List Spline -> List Spline -> List Spline
+takeBeforeHelper cutoff splines captured =
+    case splines of
+        [] ->
+            List.reverse captured
+
+        spline :: upcoming ->
+            if withinX cutoff spline then
+                let
+                    parameter =
+                        0.5
+
+                    ( before, _ ) =
+                        splitAtX cutoff spline
+                in
+                List.reverse (before :: captured)
+
+            else
+                takeBeforeHelper cutoff upcoming (spline :: captured)
+
+
+splitList :
+    Float
+    -> List Spline
+    -> List Spline
+    ->
+        { before : List Spline
+        , after : List Spline
+        }
+splitList at splines passed =
+    case splines of
+        [] ->
+            { before = List.reverse passed
+            , after = []
+            }
+
+        top :: remain ->
+            if withinX at top then
+                let
+                    ( before, after ) =
+                        splitAtX at top
+                in
+                { before = List.reverse (before :: passed)
+                , after = after :: remain
+                }
+
+            else
+                splitList at remain (top :: passed)

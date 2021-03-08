@@ -3,7 +3,7 @@ module Internal.Interpolate exposing
     , dwellPeriod
     , coloring, linearly, moving
     , fillDefaults, DefaultablePersonality(..), DefaultOr(..)
-    , Checkpoint, DefaultableMovement(..), Oscillator(..), Personality, Point, Timing(..), createSpline, details, emptyDefaults, equalState, lerpSplines, linearDefault, standardDefault, takeBefore, visit, withLinearDefault, withStandardDefault
+    , Checkpoint, DefaultableMovement(..), Oscillator(..), Personality, Point, Timing(..), createSpline, details, emptyDefaults, equalState, lerpSplines, linearDefault, standardDefault, visit, withLinearDefault, withStandardDefault
     )
 
 {-|
@@ -521,31 +521,6 @@ lerpSplines prevEndTime prev target targetTime maybeLookAhead state =
                         personality
             }
         ]
-
-
-takeBefore : Time.Absolute -> List Bezier.Spline -> List Bezier.Spline
-takeBefore cutoff splines =
-    takeBeforeHelper (Time.inMilliseconds cutoff) splines []
-
-
-takeBeforeHelper cutoff splines captured =
-    case splines of
-        [] ->
-            List.reverse captured
-
-        spline :: upcoming ->
-            if Bezier.withinX cutoff spline then
-                let
-                    parameter =
-                        0.5
-
-                    ( before, _ ) =
-                        Bezier.splitAtX cutoff spline
-                in
-                List.reverse (before :: captured)
-
-            else
-                takeBeforeHelper cutoff upcoming (spline :: captured)
 
 
 lerp : Time.Absolute -> Movement -> Movement -> Time.Absolute -> Time.Absolute -> Maybe (Timeline.LookAhead Movement) -> State -> State
