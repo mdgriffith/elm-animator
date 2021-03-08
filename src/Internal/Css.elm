@@ -171,7 +171,7 @@ renderCompoundSections now sections anim =
                         if Timeline.isDuring now targetSection.start targetSection.period then
                             let
                                 ( old_, active, maybeNext ) =
-                                    splitSection now targetSection
+                                    splitCompoundSection now targetSection
                             in
                             ( active
                             , case maybeNext of
@@ -564,85 +564,114 @@ propToCssHelper now id sections anim =
 
 
 sectionCss : Time.Absolute -> Id -> Section -> CssAnim
-sectionCss now id (Section section) =
-    case section.splines of
+sectionCss now id ((Section details) as section) =
+    case details.splines of
         [] ->
             emptyAnim
 
         top :: _ ->
-            if Bezier.afterLastX (Time.inMilliseconds now) top then
+            let
+                end =
+                    details.start
+                        |> Time.advanceBy (Timeline.periodDuration details.period)
+
+                onlyOnce =
+                    Timeline.isOnce details.period
+            in
+            if onlyOnce && Time.thisBeforeThat end now then
                 emptyAnim
 
+            else if Timeline.isDuring now details.start details.period then
+                case splitSection now section of
+                    ( old_, active, Nothing ) ->
+                        sectionToCss now id active
+
+                    ( old_, active, Just next ) ->
+                        sectionToCss now id active
+                            |> combine (sectionToCss now id next)
+
             else
-                let
-                    name =
-                        Internal.Css.Props.name id
+                sectionToCss now id section
 
-                    toStr =
-                        Internal.Css.Props.toStr id
 
-                    animationName =
-                        name
-                            ++ "-"
-                            ++ splineListHash section.splines ""
+sectionToCss :
+    Time.Absolute
+    -> Internal.Css.Props.Id
+    -> Section
+    -> CssAnim
+sectionToCss now id (Section section) =
+    let
+        splines =
+            section.splines
 
-                    duration =
-                        case section.period of
-                            Timeline.Loop dur ->
-                                dur
+        name =
+            Internal.Css.Props.name id
 
-                            Timeline.Repeat _ dur ->
-                                dur
+        toStr =
+            Internal.Css.Props.toStr id
 
-                    durationStr =
-                        String.fromFloat
-                            (Duration.inMilliseconds duration)
-                            ++ "ms"
+        animationName =
+            name
+                ++ "-"
+                ++ splineListHash splines ""
 
-                    delay =
-                        Time.duration now section.start
-                            |> Duration.inMilliseconds
-                            |> String.fromFloat
-                            |> (\s -> s ++ "ms")
+        duration =
+            case section.period of
+                Timeline.Loop dur ->
+                    dur
 
-                    n =
-                        case section.period of
-                            Timeline.Loop _ ->
-                                infinite
+                Timeline.Repeat _ dur ->
+                    dur
 
-                            Timeline.Repeat count _ ->
-                                String.fromInt count
+        durationStr =
+            String.fromFloat
+                (Duration.inMilliseconds duration)
+                ++ "ms"
 
-                    -- @keyframes duration | easing-function | delay |
-                    --      iteration-count | direction | fill-mode | play-state | name */
-                    -- animation: 3s ease-in 1s 2 reverse both paused slidein;
-                    animation =
-                        (durationStr ++ " ")
-                            -- we specify an easing function here because it we have to
-                            -- , but it is overridden by the one in keyframes
-                            ++ "linear "
-                            ++ delay
-                            ++ " "
-                            ++ n
-                            ++ " normal forward running "
-                            ++ animationName
+        delay =
+            Time.duration now section.start
+                |> Duration.inMilliseconds
+                |> String.fromFloat
+                |> (\s -> s ++ "ms")
 
-                    keyframes =
-                        ("@keyframes " ++ animationName ++ " {\n")
-                            ++ sectionKeyFrames
-                                section.start
-                                now
-                                (Time.advanceBy duration section.start)
-                                name
-                                toStr
-                                section.splines
-                                ""
-                            ++ "\n}"
-                in
-                { hash = animationName
-                , animation = animation
-                , keyframes = keyframes
-                }
+        n =
+            case section.period of
+                Timeline.Loop _ ->
+                    infinite
+
+                Timeline.Repeat count _ ->
+                    String.fromInt count
+
+        -- @keyframes duration | easing-function | delay |
+        --      iteration-count | direction | fill-mode | play-state | name */
+        -- animation: 3s ease-in 1s 2 reverse both paused slidein;
+        animation =
+            (durationStr ++ " ")
+                -- we specify an easing function here because it we have to
+                -- , but it is overridden by the one in keyframes
+                ++ "linear "
+                ++ delay
+                ++ " "
+                ++ n
+                ++ " normal forward running "
+                ++ animationName
+
+        keyframes =
+            ("@keyframes " ++ animationName ++ " {\n")
+                ++ sectionKeyFrames
+                    section.start
+                    now
+                    (Time.advanceBy duration section.start)
+                    name
+                    toStr
+                    splines
+                    ""
+                ++ "\n}"
+    in
+    { hash = animationName
+    , animation = animation
+    , keyframes = keyframes
+    }
 
 
 {-| Reminder that `animation-timing-function` defines the timing function between the keyframe it's attached to and the next one.
@@ -1131,6 +1160,76 @@ type alias Compound =
     }
 
 
+splitSection : Time.Absolute -> Section -> ( Section, Section, Maybe Section )
+splitSection at (Section section) =
+    let
+        split =
+            splitSplines (Time.inMilliseconds at)
+                section.splines
+                []
+
+        before =
+            { start = section.start
+            , period = once (Time.duration section.start at)
+            , splines = split.before
+            }
+
+        after =
+            { start = section.start
+            , period = once (Time.duration section.start at)
+            , splines = split.before
+            }
+
+        remaining =
+            if isOnce section.period then
+                Nothing
+
+            else
+                Just
+                    (Section
+                        { start =
+                            section.start
+                                |> Time.advanceBy (Timeline.periodDuration section.period)
+                        , period = Timeline.reduceIterations 1 section.period
+                        , splines = section.splines
+                        }
+                    )
+    in
+    ( Section before
+    , Section after
+    , remaining
+    )
+
+
+splitSplines :
+    Float
+    -> List Bezier.Spline
+    -> List Bezier.Spline
+    ->
+        { before : List Bezier.Spline
+        , after : List Bezier.Spline
+        }
+splitSplines at splines passed =
+    case splines of
+        [] ->
+            { before = List.reverse passed
+            , after = []
+            }
+
+        top :: remain ->
+            if Bezier.withinX at top then
+                let
+                    ( before, after ) =
+                        Bezier.splitAtX at top
+                in
+                { before = List.reverse (before :: passed)
+                , after = after :: remain
+                }
+
+            else
+                splitSplines at remain (top :: passed)
+
+
 {-| A compound section represents all the
 props transitioning from one state to another.
 
@@ -1161,11 +1260,11 @@ A------------B(x3)
     |---1---|--2-|----3(x2)------|
 
 -}
-splitSection : Time.Absolute -> CompoundSection -> ( CompoundSection, CompoundSection, Maybe CompoundSection )
-splitSection at cpd =
+splitCompoundSection : Time.Absolute -> CompoundSection -> ( CompoundSection, CompoundSection, Maybe CompoundSection )
+splitCompoundSection at cpd =
     let
         split =
-            splitFrames at
+            splitKeyframeList at
                 cpd.frames
 
         before =
@@ -1202,12 +1301,12 @@ splitSection at cpd =
     )
 
 
-splitFrames : Time.Absolute -> List Keyframe -> { before : List Keyframe, after : List Keyframe }
-splitFrames at frames =
-    splitFramesHelper at frames []
+splitKeyframeList : Time.Absolute -> List Keyframe -> { before : List Keyframe, after : List Keyframe }
+splitKeyframeList at frames =
+    splitKeyframeListHelper at frames []
 
 
-splitFramesHelper :
+splitKeyframeListHelper :
     Time.Absolute
     -> List Keyframe
     -> List Keyframe
@@ -1215,7 +1314,7 @@ splitFramesHelper :
         { before : List Keyframe
         , after : List Keyframe
         }
-splitFramesHelper now frames passed =
+splitKeyframeListHelper now frames passed =
     case frames of
         [] ->
             { before = List.reverse passed
@@ -1239,7 +1338,7 @@ splitFramesHelper now frames passed =
                 }
 
             else
-                splitFramesHelper now
+                splitKeyframeListHelper now
                     remain
                     (top :: passed)
 
