@@ -538,7 +538,7 @@ scalarHelper now renderedProps anim =
 
 propToCss : Time.Absolute -> RenderedProp -> CssAnim
 propToCss now prop =
-    case Debug.log "prop" prop of
+    case prop of
         RenderedProp details ->
             propToCssHelper now details.id details.sections emptyAnim
 
