@@ -5,6 +5,9 @@ import Animator.Css
 import Array
 import Benchmark exposing (..)
 import Benchmark.Runner exposing (BenchmarkProgram, program)
+import Internal.Bezier as Bezier
+import Internal.Css as Css
+import Internal.Css.Props
 import Internal.Interpolate as Interpolate
 import Internal.Spring as Spring
 import Internal.Time as Time
@@ -12,22 +15,19 @@ import Internal.Timeline as Timeline
 import Pixels
 import Random
 import Time
-import Internal.Bezier as Bezier
-import Internal.Css as Css
-import Internal.Css.Props
 
 
 suite =
     Benchmark.describe "Animator benchmarks"
-        [ 
-            
-        --     springs
-        -- , randomness
-        -- , basicInterpolation
-        -- , floatComparison
-        -- , interpolationComponents
-        -- foldp
-        cssGeneration
+        [ --     springs
+          -- , randomness
+          -- , basicInterpolation
+          -- , floatComparison
+          -- , interpolationComponents
+          foldp
+
+        --   cssGeneration
+        --   stringifying
         ]
 
 
@@ -48,10 +48,10 @@ foldp =
                 |> Timeline.update (Time.millisToPosix 1400)
     in
     describe "foldp"
-        [ benchmark "new foldp" <| 
-            \_ -> 
-                Timeline.foldp 
-                    identity 
+        [ benchmark "new foldp" <|
+            \_ ->
+                Timeline.foldp
+                    identity
                     { start =
                         \_ ->
                             Hufflepuff
@@ -67,11 +67,10 @@ foldp =
                             target
                     }
                     timeline
-
-        , benchmark "new all foldp" <| 
-            \_ -> 
+        , benchmark "new all foldp" <|
+            \_ ->
                 Timeline.foldpAll
-                    identity 
+                    identity
                     { start =
                         \_ ->
                             Hufflepuff
@@ -87,11 +86,10 @@ foldp =
                             target
                     }
                     timeline
-
-        , benchmark "old foldp" <| 
-            \_ -> 
+        , benchmark "old foldp" <|
+            \_ ->
                 Timeline.foldpOld
-                    identity 
+                    identity
                     { start =
                         \_ ->
                             Hufflepuff
@@ -107,18 +105,15 @@ foldp =
                             target
                     }
                     timeline
-
-
         , benchmark "Visit" <|
             \_ ->
-                Interpolate.visit identity 
-                    (Timeline.Occurring (Interpolate.Pos Interpolate.standardDefault 20)  (Time.millis 100) (Time.millis 900))
+                Interpolate.visit identity
+                    (Timeline.Occurring (Interpolate.Pos Interpolate.standardDefault 20) (Time.millis 100) (Time.millis 900))
                     (Time.millis 500)
                     Nothing
                     { position = Pixels.pixels 0
                     , velocity = Pixels.pixelsPerSecond 0
                     }
-
         ]
 
 
@@ -131,18 +126,18 @@ springs =
     describe "Springs"
         [ benchmark "stepwise - 100 steps" <|
             \_ ->
-                Spring.stepOver  (Animator.millis (16 * 20))
+                Spring.stepOver (Animator.millis (16 * 20))
                     { stiffness = 180
                     , damping = 12
                     , mass = 1
-                    } 
+                    }
                     300
                     { velocity = 0
                     , position = 0
                     }
         , benchmark "Analytical measure" <|
             \_ ->
-                Spring.analytical 
+                Spring.analytical
                     { stiffness = 180
                     , damping = 12
                     , mass = 1
@@ -210,6 +205,30 @@ timeTwo =
     Time.absolute (Time.millisToPosix 500)
 
 
+stringifying : Benchmark
+stringifying =
+    let
+        point =
+            { x = 893213.3
+            , y = 84923.3
+            }
+
+        x =
+            84923
+
+        bez =
+            Bezier.Spline point point point point
+    in
+    describe "Stringifying numbers"
+        [ benchmark "Bezier, convert each number to string" <|
+            \_ ->
+                Bezier.hash bez
+        , benchmark "Bezier, convert only one" <|
+            \_ ->
+                String.fromInt x
+        ]
+
+
 floatComparison : Benchmark
 floatComparison =
     describe "Comparing Floats"
@@ -259,6 +278,7 @@ basicInterpolation =
                     timeline
         ]
 
+
 cssGeneration =
     let
         timeline =
@@ -275,7 +295,7 @@ cssGeneration =
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Timeline.update (Time.millisToPosix 1400)
     in
-    describe "Interpolate to a point on a 4 event timeline"
+    describe "Css generation:4 event timeline"
         [ benchmark "capture frames, 60fps, (old)" <|
             \_ ->
                 Timeline.capture 60
@@ -288,14 +308,9 @@ cssGeneration =
                     (Interpolate.withStandardDefault << toPos)
                     Interpolate.moving
                     timeline
-
         , benchmark "bezier-generation (new)" <|
             \_ ->
-                -- Timeline.capture 15
-                --     (Interpolate.withStandardDefault << toPos)
-                --     Interpolate.moving
-                --     timeline
-                Css.cssFromProps 
+                Css.cssFromProps
                     timeline
                     toProps
         ]
@@ -309,7 +324,7 @@ toProps event =
     -- [ Css.Prop Internal.Css.Props.ids.opacity
     --     (wave (Timeline.Repeat 5 (Animator.millis 200)) base (base + 100))
     -- ]
-     case event of
+    case event of
         Hufflepuff ->
             [ Css.Prop Internal.Css.Props.ids.opacity
                 (pos 100)
@@ -332,6 +347,7 @@ toProps event =
             [ Css.Prop Internal.Css.Props.ids.opacity
                 (pos 1000)
             ]
+
 
 pos state =
     Interpolate.Pos Interpolate.standardDefault state
@@ -413,5 +429,4 @@ interpolationComponents =
         , benchmark "Find x on spline" <|
             \_ ->
                 Bezier.atX baseSpline 625
-                 
         ]
