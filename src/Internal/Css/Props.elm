@@ -1,6 +1,60 @@
-module Internal.Css.Props exposing (Id, default, firstTransform, hash, ids, isTransformId, name, toStr)
+module Internal.Css.Props exposing
+    ( Id, ids, hash, default
+    , isTransformId
+    , Format, format, float, int, px
+    , name, toStr
+    )
+
+{-|
+
+@docs Id, ids, hash, default
+
+@docs isTransformId
+
+@docs Format, format, float, int, px
+
+-}
 
 import Internal.Interpolate as Interpolate
+
+
+format : Float -> Format -> String
+format num form =
+    case form of
+        AsFloat ->
+            String.fromFloat num
+
+        AsInt ->
+            String.fromInt (round num)
+
+        Px ->
+            String.fromInt (round num) ++ "px"
+
+
+type Format
+    = AsFloat
+    | AsInt
+    | Px
+
+
+float : Format
+float =
+    AsFloat
+
+
+int : Format
+int =
+    AsInt
+
+
+px : Format
+px =
+    Px
+
+
+noId : Id
+noId =
+    -1
 
 
 ids =
@@ -12,6 +66,7 @@ ids =
     , scaleX = 5
     , scaleY = 6
     , opacity = 13
+    , bgColor = 14
     }
 
 
@@ -57,6 +112,9 @@ hash id =
             -- opacity
             "o-"
 
+        14 ->
+            "bgc-"
+
         _ ->
             "unknown-"
 
@@ -66,6 +124,9 @@ name id =
     case id of
         13 ->
             "opacity"
+
+        14 ->
+            "background-color"
 
         _ ->
             "unknown"

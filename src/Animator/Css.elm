@@ -940,13 +940,6 @@ node name timeline divAttrs attrs children =
             else
                 Attr.style "" ""
     in
-    -- Html.Keyed.node "div"
-    --     []
-    --     [ ( "animator-stylesheet", stylesheet (renderAnimations animations) )
-    --     , ( "div-node"
-    --       , Html.div (Attr.class (renderClassName "" animations) :: attrs) children
-    --       )
-    --     ]
     Html.node name
         (Attr.class (renderClassName "" animations)
             :: possiblyExplainAttr

@@ -49,40 +49,10 @@ All properties will need an inherent default in case they are missing.
 -}
 type Prop
     = -- binary id for comparisons
-      Prop Id Interpolate.Movement
-
-
-{-| This is mainly to help rendering a transform.
-
-If more than one of these properties is present for any state,
-then these properties are overlapping.
-
-This is because if there is both
-rotate and translateX
-or even
-translateX and translateY
-
-Then we can't use a single timing operation to describe them.
-
-So, we'll need to render each frame.
-
-Other properties, like background-color and color can be rendered independently by simply being in separate animations.
-
--}
-overlapping :
-    List Prop
-    -> (state -> List Prop)
-    -> Timeline.Timeline state
-    -> Bool
-overlapping only lookup timeline =
-    False
-
-
-type Property
-    = --     name   suffix
-      Color Id Color.Color
-      -- This can be X, Y, Rotate, or Scale
-    | Transform Id Interpolate.Movement
+      -- they are only really necessary for `transforms`
+      -- props defined by the user use the prop name for identity
+      Prop Id String Interpolate.Movement Internal.Css.Props.Format
+    | ColorProp ColorPropDetails
 
 
 {-| -}
@@ -91,9 +61,9 @@ scan :
     -> Timeline.Timeline state
     -> List Prop
 scan lookup timeline =
-    [ Prop Internal.Css.Props.ids.opacity (Interpolate.Pos Interpolate.standardDefault 1)
-    , Prop Internal.Css.Props.ids.rotation (Interpolate.Pos Interpolate.standardDefault 0)
-    , Prop Internal.Css.Props.ids.x (Interpolate.Pos Interpolate.standardDefault 0)
+    [--     Prop Internal.Css.Props.ids.opacity (Interpolate.Pos Interpolate.standardDefault 1)
+     -- , Prop Internal.Css.Props.ids.rotation (Interpolate.Pos Interpolate.standardDefault 0)
+     -- , Prop Internal.Css.Props.ids.x (Interpolate.Pos Interpolate.standardDefault 0)
     ]
 
 
@@ -546,6 +516,9 @@ propToCss now prop =
             -- HERE"S WHERE YOU LEFT OFF!!
             emptyAnim
 
+        RenderedColorProp details ->
+            emptyAnim
+
 
 propToCssHelper : Time.Absolute -> Internal.Css.Props.Id -> List Section -> CssAnim -> CssAnim
 propToCssHelper now id sections anim =
@@ -858,18 +831,18 @@ startProps only props maybeTransform rendered =
                     CompoundProp cmpd
                         :: rendered
 
-        (Prop onlyId onlyMove) :: remain ->
-            let
-                found =
-                    matchId onlyId props
+        (ColorProp details) :: remain ->
+            rendered
 
+        (Prop onlyId onlyName onlyMove onlyFormat) :: remain ->
+            let
                 state =
-                    case found of
+                    case matchForMovement onlyId onlyName props of
                         Nothing ->
                             Interpolate.moving.start
                                 (Internal.Css.Props.default onlyId)
 
-                        Just (Prop id move) ->
+                        Just move ->
                             Interpolate.moving.start move
             in
             if Internal.Css.Props.isTransformId onlyId then
@@ -934,6 +907,9 @@ toPropCurves only =
                         List.map
                             (\prop ->
                                 case prop of
+                                    RenderedColorProp details ->
+                                        prop
+
                                     RenderedProp rendered ->
                                         let
                                             propLookup state =
@@ -1002,6 +978,9 @@ toPropCurves only =
                 List.map
                     (\prop ->
                         case prop of
+                            RenderedColorProp details ->
+                                prop
+
                             RenderedProp rendered ->
                                 let
                                     previousProp =
@@ -1073,32 +1052,46 @@ toPropCurves only =
     }
 
 
+{-| -}
 stateOrDefault : Id -> List Prop -> Interpolate.Movement
 stateOrDefault targetId props =
     case props of
         [] ->
             Internal.Css.Props.default targetId
 
-        (Prop id move) :: remain ->
+        (Prop id _ move _) :: remain ->
             if id == targetId then
                 move
 
             else
                 stateOrDefault targetId remain
 
+        (ColorProp details) :: remain ->
+            stateOrDefault targetId remain
 
-matchId : Id -> List Prop -> Maybe Prop
-matchId onlyId props =
+
+matchForMovement : Id -> String -> List Prop -> Maybe Interpolate.Movement
+matchForMovement onlyId onlyName props =
     case props of
         [] ->
             Nothing
 
-        ((Prop id _) as top) :: remain ->
-            if id == onlyId then
-                Just top
+        (ColorProp details) :: remain ->
+            matchForMovement onlyId onlyName remain
+
+        ((Prop id name movement _) as top) :: remain ->
+            if id + 1 == 0 then
+                if name == onlyName then
+                    Just movement
+
+                else
+                    matchForMovement onlyId onlyName remain
+
+            else if id - onlyId == 0 then
+                Just movement
 
             else
-                matchId onlyId remain
+                matchForMovement onlyId onlyName remain
 
 
 {-| A group of curves represents the trail of one scalar property
@@ -1109,6 +1102,14 @@ matchId onlyId props =
 type RenderedProp
     = RenderedProp RenderedPropDetails
     | CompoundProp Compound
+    | RenderedColorProp ColorPropDetails
+
+
+type alias ColorPropDetails =
+    { id : Id
+    , name : String
+    , color : Color.Color
+    }
 
 
 type alias RenderedPropDetails =
@@ -1569,23 +1570,28 @@ lerpCurvesCompoundHelper remainingStates prevEndTime prev target targetTime inte
 
         ( id, state ) :: remain ->
             let
+                prevState =
+                    stateOrDefault id prev
+
+                targetState =
+                    stateOrDefault id target
+
+                lookAheadState =
+                    Maybe.map
+                        (Timeline.mapLookAhead
+                            (stateOrDefault id)
+                        )
+                        maybeLookAhead
+
                 newState =
                     Interpolate.moving.lerp
                         prevEndTime
-                        (stateOrDefault id prev)
-                        (stateOrDefault id target)
+                        prevState
+                        targetState
                         targetTime
                         interruptedAt
-                        (Maybe.map
-                            (Timeline.mapLookAhead
-                                (stateOrDefault id)
-                            )
-                            maybeLookAhead
-                        )
+                        lookAheadState
                         state
-
-                conflicting =
-                    False
 
                 -- _ =
                 --     Debug.log "LERP"
@@ -1597,15 +1603,10 @@ lerpCurvesCompoundHelper remainingStates prevEndTime prev target targetTime inte
                 splines =
                     Interpolate.lerpSplines
                         interruptedAt
-                        (stateOrDefault id prev)
-                        (stateOrDefault id target)
+                        prevState
+                        targetState
                         targetTime
-                        (Maybe.map
-                            (Timeline.mapLookAhead
-                                (stateOrDefault id)
-                            )
-                            maybeLookAhead
-                        )
+                        lookAheadState
                         state
 
                 new =
@@ -2553,106 +2554,6 @@ type alias CssAnim =
     , animation : String
     , keyframes : String
     }
-
-
-
--- compoundSequence :
---     (state -> List ( Key, Interpolate.Movement ))
---     ->
---         Timeline.Interp state
---             Interpolate.Movement
---             { sequence : Sequence (Dict Key Interpolate.Checkpoint)
---             , transformConflict : Bool
---             , keys : Set Key
---             }
--- compoundSequence toMotion =
---     Debug.todo ""
--- {-| render keyframes to string
---     p {
---         animation-duration: 3s;
---         animation-name: one;
---         animation-delay: 300ms;
---         animation-iteration-count: infinite | 5;
---     }
---     @keyframes transitionOne {
---         0% {
---             -- we can define the timing function which says how to interpolate from this keyframe to the next
---             animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
---             transform: translate(0px, 0px)
---         }
---         100% {
---             transform: translate(1000px, 1000px)
---         }
---     }
--- Transitions:
--- When doing transitions, we can't add a `timing-fn` to a keyframe with no values, which would have been perfect.
--- Instead, for each transition, we need to compose a full animation
--- Example: <https://codepen.io/mechanical-elephant/pen/MWjEXzq>
---     @keyframes normal {
---         from {
---             transform: translateX(0px);
---         }
---         to {
---             transform: translateX(200px);
---         }
---     }
---     @keyframes transition {
---         to {
---             transform: translateX(1200px);
---         }
---     }
---     /* The element to apply the animation to */
---     .item {
---         width: 100px;
---         height: 100px;
---         background-color:red;
---         transform: translateX(0px);
---         animation-timing-function: linear, cubic-bezier(0.1, -0.6, 0.2, 0);
---         animation-name: normal, transition;
---         animation-delay: 0ms, 4s;
---         animation-duration: 8s, 4s;
---     }
--- Each property, and each "set" will render as a separate keyframe statement
--- -}
--- encode :
---     (frame
---      ->
---         -- this is timing to get to this state
---         -- for transitions, this turns out to be what we want
---         -- for normal keyframes, we have to shift it back one step.
---         { timing : Interpolate.Timing
---         , name : String
---         , value : String
---         }
---     )
---     -> Sequence frame
---     -> CssAnim
--- encode fn (Sequence seq) =
---     { hash = ""
---     , animation = ""
---     , keyframes = ""
---     }
--- {-| A less efficient version of the above that encodes every frame as a keyframe.
--- returned frames will be distributed evenly.
--- -}
--- encodeEveryFrame :
---     (frame
---      ->
---         -- this is timing to get to this state
---         -- for transitions, this turns out to be what we want
---         -- for normal keyframes, we have to shift it back one step.
---         List
---             { name : String
---             , value : String
---             }
---     )
---     -> Sequence frame
---     -> CssAnim
--- encodeEveryFrame fn (Sequence seq) =
---     { hash = ""
---     , animation = ""
---     , keyframes = ""
---     }
 
 
 combine : CssAnim -> CssAnim -> CssAnim

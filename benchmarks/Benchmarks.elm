@@ -2,6 +2,7 @@ module Benchmarks exposing (suite)
 
 import Animator
 import Animator.Css
+import Animator.Css2
 import Array
 import Benchmark exposing (..)
 import Benchmark.Runner exposing (BenchmarkProgram, program)
@@ -24,7 +25,8 @@ suite =
           -- , basicInterpolation
           -- , floatComparison
           -- , interpolationComponents
-          foldp
+          --   foldp
+          equalityCompare
 
         --   cssGeneration
         --   stringifying
@@ -229,6 +231,37 @@ stringifying =
         ]
 
 
+batman =
+    "batman"
+
+
+superman =
+    "superman"
+
+
+eightySeven =
+    87
+
+
+twentythree =
+    23
+
+
+equalityCompare : Benchmark
+equalityCompare =
+    describe "Comparing equality checks for primitives"
+        [ benchmark "Strings equal" <|
+            \_ ->
+                batman == superman
+        , benchmark "Ints" <|
+            \_ ->
+                eightySeven == twentythree
+        , benchmark "Ints w/0 trick" <|
+            \_ ->
+                eightySeven - twentythree == 0
+        ]
+
+
 floatComparison : Benchmark
 floatComparison =
     describe "Comparing Floats"
@@ -326,26 +359,26 @@ toProps event =
     -- ]
     case event of
         Hufflepuff ->
-            [ Css.Prop Internal.Css.Props.ids.opacity
-                (pos 100)
+            [ Animator.Css2.opacity
+                (Animator.at 100)
             ]
 
         Griffyndor ->
             -- pos 400
-            [ Css.Prop Internal.Css.Props.ids.opacity
-                (pos 400)
+            [ Animator.Css2.opacity
+                (Animator.at 400)
             ]
 
         Slytherin ->
             -- pos 700
-            [ Css.Prop Internal.Css.Props.ids.opacity
-                (pos 700)
+            [ Animator.Css2.opacity
+                (Animator.at 700)
             ]
 
         Ravenclaw ->
             -- pos 1000
-            [ Css.Prop Internal.Css.Props.ids.opacity
-                (pos 1000)
+            [ Animator.Css2.opacity
+                (Animator.at 1000)
             ]
 
 

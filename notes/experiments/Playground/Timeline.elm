@@ -29,6 +29,7 @@ module Playground.Timeline exposing (main)
 -}
 
 import Animator
+import Animator.Css2
 import Browser
 import Duration
 import Html exposing (Html, button, div, h1, text)
