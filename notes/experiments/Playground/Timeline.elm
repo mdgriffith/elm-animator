@@ -245,12 +245,12 @@ toProps (State state) =
     -- Interpolate.Pos Interpolate.standardDefault (toFloat (state * 100))
     [ -- Css.Prop Internal.Css.Props.ids.opacity
       -- (wave (Timeline.Repeat 5 (Animator.millis 200)) base (base + 100))
-      Css.Prop Internal.Css.Props.ids.opacity
-        (at (base / 500))
-    , Css.Prop Internal.Css.Props.ids.rotation
-        (at 0)
-    , Css.Prop Internal.Css.Props.ids.x
-        (at base)
+      Animator.Css2.opacity
+        (Animator.at (base / 500))
+    , Animator.Css2.rotation
+        (Animator.at 0)
+    , Animator.Css2.x
+        (Animator.at base)
     ]
 
 
