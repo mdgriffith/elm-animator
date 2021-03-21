@@ -2,7 +2,7 @@ module Internal.Css.Props exposing
     ( Id, ids, hash, default
     , isTransformId
     , Format, format, float, int, px
-    , name, toStr
+    , name, noId, toStr, transparent
     )
 
 {-|
@@ -15,7 +15,13 @@ module Internal.Css.Props exposing
 
 -}
 
+import Color
 import Internal.Interpolate as Interpolate
+
+
+transparent : Color.Color
+transparent =
+    Color.rgba 0 0 0 0
 
 
 format : Float -> Format -> String
@@ -52,9 +58,16 @@ px =
     Px
 
 
+{-| We make this huge because we want it last.
+
+The order of the ids matters, as it's the order that they're rendered in.
+
+Which we really only care about for transforms, we want them to be first.
+
+-}
 noId : Id
 noId =
-    -1
+    100000
 
 
 ids =
@@ -66,7 +79,6 @@ ids =
     , scaleX = 5
     , scaleY = 6
     , opacity = 13
-    , bgColor = 14
     }
 
 

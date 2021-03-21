@@ -180,15 +180,22 @@ float =
 
 
 {-| -}
-style : String -> Format -> (Float -> String) -> Property
-style name format lookup =
-    Debug.todo "STYLE"
+style : String -> Format -> Movement -> Property
+style name format n =
+    Css.Prop
+        Internal.Css.Props.noId
+        name
+        (Interpolate.withStandardDefault n)
+        format
 
 
 {-| -}
 color : String -> Color.Color -> Property
-color =
-    Debug.todo "COLOR"
+color name colorValue =
+    Css.ColorProp
+        { name = name
+        , color = colorValue
+        }
 
 
 {--}

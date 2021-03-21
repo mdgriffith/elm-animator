@@ -11,6 +11,7 @@ import Internal.Interpolate as Interpolate
 import Internal.Time as Time
 import Internal.Timeline as Timeline
 import Pixels
+import Set exposing (Set)
 
 
 {-| An id representing a prop type.
@@ -55,23 +56,118 @@ type Prop
     | ColorProp ColorPropDetails
 
 
-{-| -}
-scan :
-    (state -> List Prop)
-    -> Timeline.Timeline state
+type alias ColorPropDetails =
+    { name : String
+    , color : Color.Color
+    }
+
+
+add :
+    List Prop
     -> List Prop
-scan lookup timeline =
-    [--     Prop Internal.Css.Props.ids.opacity (Interpolate.Pos Interpolate.standardDefault 1)
-     -- , Prop Internal.Css.Props.ids.rotation (Interpolate.Pos Interpolate.standardDefault 0)
-     -- , Prop Internal.Css.Props.ids.x (Interpolate.Pos Interpolate.standardDefault 0)
-    ]
+    -> Set String
+    -> Set Id
+    ->
+        { props : List Prop
+        , cache :
+            { name : Set String
+            , id : Set Id
+            }
+        }
+add new existingProps names ids =
+    case new of
+        [] ->
+            { props = existingProps
+            , cache =
+                { name = names
+                , id = ids
+                }
+            }
+
+        ((Prop id name _ _) as prop) :: remain ->
+            if (id - Internal.Css.Props.noId) == 0 then
+                if Set.member id ids then
+                    add remain existingProps names ids
+
+                else
+                    add remain
+                        (prop :: existingProps)
+                        names
+                        (Set.insert id ids)
+
+            else if Set.member name names then
+                add remain existingProps names ids
+
+            else
+                add remain
+                    (prop :: existingProps)
+                    (Set.insert name names)
+                    ids
+
+        ((ColorProp details) as prop) :: remain ->
+            if Set.member details.name names then
+                add remain existingProps names ids
+
+            else
+                add remain
+                    (prop :: existingProps)
+                    (Set.insert details.name names)
+                    ids
+
+
+sortProps : Prop -> Int
+sortProps prop =
+    case prop of
+        Prop id _ _ _ ->
+            id
+
+        ColorProp details ->
+            Internal.Css.Props.noId
+
+
+scanProps :
+    Timeline.Interp state
+        (List Prop)
+        { props : List Prop
+        , cache :
+            { name : Set String
+            , id : Set Id
+            }
+        }
+scanProps =
+    { start =
+        \props ->
+            { props = props
+            , cache =
+                { name = Set.empty
+                , id = Set.empty
+                }
+            }
+    , adjustor =
+        \_ ->
+            Timeline.linearDefault
+    , dwellPeriod =
+        \_ ->
+            Nothing
+    , visit =
+        \lookup target targetTime maybeLookAhead data ->
+            add (lookup (Timeline.getEvent target))
+                data.props
+                data.cache.name
+                data.cache.id
+    , lerp =
+        \prevEndTime prev target targetTime interruptedAt maybeLookAhead data ->
+            add target data.props data.cache.name data.cache.id
+    }
 
 
 cssFromProps : Timeline.Timeline state -> (state -> List Prop) -> CssAnim
 cssFromProps timeline lookup =
     let
         present =
-            scan lookup timeline
+            Timeline.foldpAll lookup scanProps timeline
+                |> .props
+                |> List.sortBy sortProps
 
         renderedProps =
             propsToCurves present lookup timeline
@@ -95,9 +191,27 @@ renderers =
 
 colors : Renderer
 colors now renderedProps =
-    -- ()
-    -- Debug.todo ""
-    Nothing
+    case renderedProps of
+        [] ->
+            Nothing
+
+        (RenderedColorProp details) :: remain ->
+            let
+                rendered =
+                    Debug.todo ""
+            in
+            case colors now remain of
+                Nothing ->
+                    Just ( rendered, remain )
+
+                Just ( renderedColors, left ) ->
+                    Just
+                        ( combine renderedColors rendered
+                        , left
+                        )
+
+        _ ->
+            Nothing
 
 
 transform : Renderer
@@ -908,7 +1022,37 @@ toPropCurves only =
                             (\prop ->
                                 case prop of
                                     RenderedColorProp details ->
-                                        prop
+                                        let
+                                            previousTime =
+                                                case data.previous of
+                                                    Nothing ->
+                                                        targetTime
+
+                                                    Just prevEvent ->
+                                                        Timeline.endTime prevEvent
+
+                                            newColor =
+                                                lookup (Timeline.getEvent target)
+                                                    |> colorOrDefault details.name
+                                                        Internal.Css.Props.transparent
+
+                                            new =
+                                                { details
+                                                    | color = newColor
+                                                    , sections =
+                                                        { start = targetTime
+                                                        , duration =
+                                                            Time.duration previousTime targetTime
+                                                        , steps =
+                                                            [ details.color
+                                                            , Interpolate.color 0.5 details.color newColor
+                                                            , newColor
+                                                            ]
+                                                        }
+                                                            :: details.sections
+                                                }
+                                        in
+                                        RenderedColorProp new
 
                                     RenderedProp rendered ->
                                         let
@@ -979,7 +1123,34 @@ toPropCurves only =
                     (\prop ->
                         case prop of
                             RenderedColorProp details ->
-                                prop
+                                let
+                                    previousColor =
+                                        colorOrDefault details.name
+                                            Internal.Css.Props.transparent
+                                            prev
+
+                                    newColor =
+                                        colorOrDefault details.name
+                                            Internal.Css.Props.transparent
+                                            target
+
+                                    new =
+                                        { details
+                                            | color = newColor
+                                            , sections =
+                                                { start = targetTime
+                                                , duration =
+                                                    Time.duration prevEndTime targetTime
+                                                , steps =
+                                                    [ previousColor
+                                                    , Interpolate.color 0.5 previousColor newColor
+                                                    , newColor
+                                                    ]
+                                                }
+                                                    :: details.sections
+                                        }
+                                in
+                                RenderedColorProp new
 
                             RenderedProp rendered ->
                                 let
@@ -1070,6 +1241,24 @@ stateOrDefault targetId props =
             stateOrDefault targetId remain
 
 
+{-| -}
+colorOrDefault : String -> Color.Color -> List Prop -> Color.Color
+colorOrDefault name default props =
+    case props of
+        [] ->
+            default
+
+        (Prop id _ move _) :: remain ->
+            colorOrDefault name default remain
+
+        (ColorProp details) :: remain ->
+            if details.name == name then
+                details.color
+
+            else
+                colorOrDefault name default remain
+
+
 matchForMovement : Id -> String -> List Prop -> Maybe Interpolate.Movement
 matchForMovement onlyId onlyName props =
     case props of
@@ -1102,13 +1291,20 @@ matchForMovement onlyId onlyName props =
 type RenderedProp
     = RenderedProp RenderedPropDetails
     | CompoundProp Compound
-    | RenderedColorProp ColorPropDetails
+    | RenderedColorProp RenderedColorPropDetails
 
 
-type alias ColorPropDetails =
-    { id : Id
-    , name : String
+type alias RenderedColorPropDetails =
+    { name : String
     , color : Color.Color
+    , sections : List ColorSection
+    }
+
+
+type alias ColorSection =
+    { start : Time.Absolute
+    , duration : Time.Duration
+    , steps : List Color.Color
     }
 
 
@@ -1117,6 +1313,21 @@ type alias RenderedPropDetails =
     , sections : List Section
     , state : Interpolate.State
     }
+
+
+{-| A section is one segment of a scalar's journey that can be repeated.
+
+Every state transition will be a separate section.
+
+A dwell will be a section by itself and can possibly repeat.
+
+-}
+type Section
+    = Section
+        { start : Time.Absolute
+        , period : Timeline.Period
+        , splines : List Bezier.Spline
+        }
 
 
 type alias Compound =
@@ -1340,21 +1551,6 @@ type alias CompoundFrame =
 type CapturedMovement
     = BySpline (List Bezier.Spline)
     | Stationary Float
-
-
-{-| A section is one segment of a scalar's journey that can be repeated.
-
-Every state transition will be a separate section.
-
-A dwell will be a section by itself and can possibly repeat.
-
--}
-type Section
-    = Section
-        { start : Time.Absolute
-        , period : Timeline.Period
-        , splines : List Bezier.Spline
-        }
 
 
 curves :

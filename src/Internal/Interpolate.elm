@@ -3,7 +3,7 @@ module Internal.Interpolate exposing
     , dwellPeriod
     , coloring, linearly, moving
     , fillDefaults, DefaultablePersonality(..), DefaultOr(..)
-    , Checkpoint, DefaultableMovement(..), Oscillator(..), Personality, Point, Timing(..), createSpline, details, emptyDefaults, equalState, lerpSplines, linearDefault, standardDefault, visit, withLinearDefault, withStandardDefault
+    , Checkpoint, DefaultableMovement(..), Oscillator(..), Personality, Point, Timing(..), color, createSpline, details, emptyDefaults, equalState, lerpSplines, linearDefault, standardDefault, visit, withLinearDefault, withStandardDefault
     )
 
 {-|
@@ -1312,12 +1312,18 @@ lerpColor prevEndTime maybePrev target targetTime now maybeLookAhead state =
                 prevEndTime
                 targetTime
                 now
+    in
+    color progress state target
 
+
+color : Float -> Color.Color -> Color.Color -> Color.Color
+color progress from to =
+    let
         one =
-            Color.toRgba state
+            Color.toRgba from
 
         two =
-            Color.toRgba target
+            Color.toRgba to
     in
     Color.rgba
         (average one.red two.red progress)
