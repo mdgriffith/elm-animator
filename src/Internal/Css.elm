@@ -198,7 +198,7 @@ colors now renderedProps =
         (RenderedColorProp details) :: remain ->
             let
                 rendered =
-                    Debug.todo ""
+                    renderColorSection now details.name details.sections emptyAnim
             in
             case colors now remain of
                 Nothing ->
@@ -212,6 +212,112 @@ colors now renderedProps =
 
         _ ->
             Nothing
+
+
+{-| -}
+renderColorSection : Time.Absolute -> String -> List ColorSection -> CssAnim -> CssAnim
+renderColorSection now name sections anim =
+    case sections of
+        [] ->
+            anim
+
+        top :: remain ->
+            renderColorSection
+                now
+                name
+                remain
+                (combine anim (renderColorSectionToCss now name top))
+
+
+renderColorSectionToCss : Time.Absolute -> String -> ColorSection -> CssAnim
+renderColorSectionToCss now name section =
+    -- TODO: NEED TO SLICE AT `now`
+    let
+        animationName =
+            name
+                ++ "-"
+                ++ multiColorHash section.steps ""
+
+        durationStr =
+            String.fromFloat
+                (Duration.inMilliseconds section.duration)
+                ++ "ms"
+
+        delay =
+            Time.duration now section.start
+                |> Duration.inMilliseconds
+                |> String.fromFloat
+                |> (\s -> s ++ "ms")
+
+        n =
+            "1"
+
+        -- @keyframes duration | easing-function | delay |
+        --      iteration-count | direction | fill-mode | play-state | name */
+        -- animation: 3s ease-in 1s 2 reverse both paused slidein;
+        animation =
+            (durationStr ++ " ")
+                -- we specify an easing function here because it we have to
+                -- , but it is overridden by the one in keyframes
+                ++ "linear "
+                ++ delay
+                ++ " "
+                ++ n
+                ++ " normal forward running "
+                ++ animationName
+
+        keyframes =
+            ("@keyframes " ++ animationName ++ " {\n")
+                ++ colorFrames name section.steps ""
+                ++ "\n}"
+    in
+    { hash = animationName
+    , animation = animation
+    , keyframes = keyframes
+    }
+
+
+multiColorHash :
+    List
+        { percent : Int
+        , color : Color.Color
+        }
+    -> String
+    -> String
+multiColorHash colorList str =
+    case colorList of
+        [] ->
+            str
+
+        step :: remain ->
+            multiColorHash remain
+                (Internal.Css.Props.colorHash step.color
+                    ++ str
+                )
+
+
+colorFrames :
+    String
+    ->
+        List
+            { percent : Int
+            , color : Color.Color
+            }
+    -> String
+    -> String
+colorFrames name colorList str =
+    case colorList of
+        [] ->
+            str
+
+        step :: remain ->
+            colorFrames name
+                remain
+                (str
+                    ++ (String.fromInt step.percent ++ "% {")
+                    ++ (name ++ ": " ++ Color.toCssString step.color)
+                    ++ "}"
+                )
 
 
 transform : Renderer
@@ -381,6 +487,7 @@ renderCompoundKeyframes start period frames hash rendered =
 
                 frame =
                     "    "
+                        -- This is for debugging, to see the literal time generated
                         -- ++ String.fromFloat (Time.inMilliseconds keyframe.start)
                         -- ++ " -- "
                         ++ (String.fromInt percentage ++ "% {\n")
@@ -398,6 +505,7 @@ renderCompoundKeyframes start period frames hash rendered =
                     let
                         last =
                             "    "
+                                -- This is for debugging, to see the literal time generated
                                 -- ++ String.fromFloat (Time.inMilliseconds keyframe.end)
                                 -- ++ " -- "
                                 ++ "100% {\n"
@@ -624,18 +732,19 @@ propToCss : Time.Absolute -> RenderedProp -> CssAnim
 propToCss now prop =
     case prop of
         RenderedProp details ->
-            propToCssHelper now details.id details.sections emptyAnim
+            propToCssHelper now details.id details.name details.format details.sections emptyAnim
 
         CompoundProp details ->
-            -- HERE"S WHERE YOU LEFT OFF!!
+            -- both compound props and colors should have already been covered
+            -- by transform and color renderers
             emptyAnim
 
         RenderedColorProp details ->
             emptyAnim
 
 
-propToCssHelper : Time.Absolute -> Internal.Css.Props.Id -> List Section -> CssAnim -> CssAnim
-propToCssHelper now id sections anim =
+propToCssHelper : Time.Absolute -> Internal.Css.Props.Id -> String -> Internal.Css.Props.Format -> List Section -> CssAnim -> CssAnim
+propToCssHelper now id name format sections anim =
     case sections of
         [] ->
             anim
@@ -643,15 +752,17 @@ propToCssHelper now id sections anim =
         top :: remain ->
             propToCssHelper now
                 id
+                name
+                format
                 remain
                 (combine
                     anim
-                    (sectionCss now id top)
+                    (sectionCss now id name format top)
                 )
 
 
-sectionCss : Time.Absolute -> Id -> Section -> CssAnim
-sectionCss now id ((Section details) as section) =
+sectionCss : Time.Absolute -> Id -> String -> Internal.Css.Props.Format -> Section -> CssAnim
+sectionCss now id name format ((Section details) as section) =
     case details.splines of
         [] ->
             emptyAnim
@@ -671,31 +782,30 @@ sectionCss now id ((Section details) as section) =
             else if Timeline.isDuring now details.start details.period then
                 case splitSection now section of
                     ( old_, active, Nothing ) ->
-                        sectionToCss now id active
+                        sectionToCss now id name format active
 
                     ( old_, active, Just next ) ->
-                        sectionToCss now id active
-                            |> combine (sectionToCss now id next)
+                        sectionToCss now id name format active
+                            |> combine (sectionToCss now id name format next)
 
             else
-                sectionToCss now id section
+                sectionToCss now id name format section
 
 
 sectionToCss :
     Time.Absolute
     -> Internal.Css.Props.Id
+    -> String
+    -> Internal.Css.Props.Format
     -> Section
     -> CssAnim
-sectionToCss now id (Section section) =
+sectionToCss now id name format (Section section) =
     let
         splines =
             section.splines
 
-        name =
-            Internal.Css.Props.name id
-
         toStr =
-            Internal.Css.Props.toStr id
+            Internal.Css.Props.format format
 
         animationName =
             name
@@ -981,6 +1091,8 @@ startProps only props maybeTransform rendered =
                     new =
                         RenderedProp
                             { id = onlyId
+                            , name = onlyName
+                            , format = onlyFormat
                             , sections = []
                             , state = state
                             }
@@ -1044,9 +1156,15 @@ toPropCurves only =
                                                         , duration =
                                                             Time.duration previousTime targetTime
                                                         , steps =
-                                                            [ details.color
-                                                            , Interpolate.color 0.5 details.color newColor
-                                                            , newColor
+                                                            [ { percent = 0
+                                                              , color = details.color
+                                                              }
+                                                            , { percent = 50
+                                                              , color = Interpolate.color 0.5 details.color newColor
+                                                              }
+                                                            , { percent = 100
+                                                              , color = newColor
+                                                              }
                                                             ]
                                                         }
                                                             :: details.sections
@@ -1069,6 +1187,8 @@ toPropCurves only =
                                         in
                                         RenderedProp
                                             { id = rendered.id
+                                            , name = rendered.name
+                                            , format = rendered.format
                                             , sections =
                                                 toCurvesVisit
                                                     propLookup
@@ -1142,9 +1262,15 @@ toPropCurves only =
                                                 , duration =
                                                     Time.duration prevEndTime targetTime
                                                 , steps =
-                                                    [ previousColor
-                                                    , Interpolate.color 0.5 previousColor newColor
-                                                    , newColor
+                                                    [ { percent = 0
+                                                      , color = previousColor
+                                                      }
+                                                    , { percent = 50
+                                                      , color = Interpolate.color 0.5 previousColor newColor
+                                                      }
+                                                    , { percent = 100
+                                                      , color = newColor
+                                                      }
                                                     ]
                                                 }
                                                     :: details.sections
@@ -1169,6 +1295,8 @@ toPropCurves only =
                                 in
                                 RenderedProp
                                     { id = rendered.id
+                                    , name = rendered.name
+                                    , format = rendered.format
                                     , sections =
                                         toCurvesLerp
                                             prevEndTime
@@ -1304,12 +1432,18 @@ type alias RenderedColorPropDetails =
 type alias ColorSection =
     { start : Time.Absolute
     , duration : Time.Duration
-    , steps : List Color.Color
+    , steps :
+        List
+            { percent : Int
+            , color : Color.Color
+            }
     }
 
 
 type alias RenderedPropDetails =
     { id : Id
+    , name : String
+    , format : Internal.Css.Props.Format
     , sections : List Section
     , state : Interpolate.State
     }

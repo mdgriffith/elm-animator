@@ -2,7 +2,7 @@ module Internal.Css.Props exposing
     ( Id, ids, hash, default
     , isTransformId
     , Format, format, float, int, px
-    , name, noId, toStr, transparent
+    , colorHash, name, noId, toStr, transparent
     )
 
 {-|
@@ -24,8 +24,8 @@ transparent =
     Color.rgba 0 0 0 0
 
 
-format : Float -> Format -> String
-format num form =
+format : Format -> Float -> String
+format form num =
     case form of
         AsFloat ->
             String.fromFloat num
@@ -178,7 +178,7 @@ toStr id =
         13 ->
             -- opacity
             \f ->
-                String.fromFloat (f / 100)
+                String.fromFloat f
 
         _ ->
             \f ->
@@ -200,3 +200,15 @@ zero =
     Interpolate.Pos
         Interpolate.standardDefault
         0
+
+
+colorHash : Color.Color -> String
+colorHash color =
+    let
+        rgba =
+            Color.toRgba color
+    in
+    (String.fromInt (round (rgba.red * 255)) ++ "-")
+        ++ (String.fromInt (round (rgba.green * 255)) ++ "-")
+        ++ (String.fromInt (round (rgba.blue * 255)) ++ "-")
+        ++ (String.fromInt (round (rgba.alpha * 255)) ++ "-")
