@@ -888,27 +888,20 @@ scalarHelper now renderedProps anim =
         [] ->
             ( anim, [] )
 
-        top :: remain ->
+        (RenderedProp details) :: remain ->
             scalarHelper now
                 remain
-                (propToCss now top
+                (propToCssHelper now details.id details.name details.format details.sections emptyAnim
                     |> combine anim
                 )
 
+        (CompoundProp _) :: remain ->
+            -- handled by transform renderer
+            scalarHelper now remain anim
 
-propToCss : Time.Absolute -> RenderedProp -> CssAnim
-propToCss now prop =
-    case prop of
-        RenderedProp details ->
-            propToCssHelper now details.id details.name details.format details.sections emptyAnim
-
-        CompoundProp details ->
-            -- both compound props and colors should have already been covered
-            -- by transform and color renderers
-            emptyAnim
-
-        RenderedColorProp details ->
-            emptyAnim
+        (RenderedColorProp _) :: remain ->
+            -- handled by color renderer
+            scalarHelper now remain anim
 
 
 propToCssHelper : Time.Absolute -> Internal.Css.Props.Id -> String -> Internal.Css.Props.Format -> List Section -> CssAnim -> CssAnim
