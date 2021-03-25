@@ -297,8 +297,8 @@ secondDerivative (Spline p1 p2 p3 p4) proportion =
     scaleBy 6 (interpolatePoints v1 v2 proportion)
 
 
-atX : Spline -> Float -> { point : { x : Float, y : Float }, t : Float }
-atX spline x =
+atX : Float -> Spline -> { point : { x : Float, y : Float }, t : Float }
+atX x spline =
     atXHelper spline x 0.25 (guessTime x spline) 0
 
 
@@ -477,7 +477,7 @@ splitAtX : Float -> Spline -> ( Spline, Spline )
 splitAtX x spline =
     let
         { t } =
-            atX spline x
+            atX x spline
     in
     splitAt t spline
 

@@ -222,16 +222,41 @@ renderColorSection now name sections anim =
             anim
 
         top :: remain ->
-            renderColorSection
-                now
-                name
-                remain
-                (combine anim (renderColorSectionToCss now name top))
+            let
+                end =
+                    top.start
+                        |> Time.advanceBy top.duration
+            in
+            if Time.thisBeforeThat end now then
+                renderColorSection
+                    now
+                    name
+                    remain
+                    anim
+
+            else if Time.thisBeforeThat top.start now && Time.thisAfterThat end now then
+                case splitColorSection now top of
+                    ( before_, after ) ->
+                        renderColorSection
+                            now
+                            name
+                            remain
+                            (combine anim
+                                (renderColorSectionToCss now name after)
+                            )
+
+            else
+                renderColorSection
+                    now
+                    name
+                    remain
+                    (combine anim
+                        (renderColorSectionToCss now name top)
+                    )
 
 
 renderColorSectionToCss : Time.Absolute -> String -> ColorSection -> CssAnim
 renderColorSectionToCss now name section =
-    -- TODO: NEED TO SLICE AT `now`
     let
         animationName =
             name
@@ -376,13 +401,21 @@ renderCompoundSections now sections anim =
                             ( targetSection, tail )
 
                     new =
-                        -- if top.conflicting then exact else
-                        renderCompoundKeyframes
-                            section.start
-                            section.period
-                            section.frames
-                            ""
-                            ""
+                        if section.conflicting then
+                            renderCompoundKeyframesExact 12
+                                section.start
+                                section.period
+                                section.frames
+                                ""
+                                ""
+
+                        else
+                            renderCompoundKeyframes
+                                section.start
+                                section.period
+                                section.frames
+                                ""
+                                ""
 
                     duration =
                         case section.period of
@@ -458,6 +491,109 @@ keyframeHash keyframes rendered =
                 (Internal.Css.Props.hash top.id ++ Bezier.hash top.spline ++ rendered)
 
 
+{-|
+
+    keyframe is a snapshot between start and end.
+
+    render perecentages using Keyframe accordingly.
+
+-}
+renderAllExactFrames :
+    Time.Duration
+    -> Time.Absolute
+    -> Time.Absolute
+    -> Time.Absolute
+    -> Keyframe
+    -> String
+    -> String
+renderAllExactFrames duration start end now keyframe rendered =
+    if Time.thisAfterOrEqualThat now keyframe.end then
+        rendered
+
+    else
+        let
+            next =
+                now |> Time.advanceBy duration
+
+            percentage =
+                round (Time.progress start end now * 100)
+
+            newFrame =
+                (String.fromInt percentage ++ "% {\n")
+                    ++ "        transform: "
+                    ++ renderPointAt (Time.inMilliseconds now)
+                        keyframe.props
+                        ""
+                    ++ ";}"
+        in
+        if Time.thisAfterOrEqualThat next keyframe.end then
+            let
+                lastPercentage =
+                    round (Time.progress start end next * 100)
+
+                lastFrame =
+                    (String.fromInt percentage ++ "% {\n")
+                        ++ "        transform: "
+                        ++ renderPointAt (Time.inMilliseconds next)
+                            keyframe.props
+                            ""
+                        ++ ";}"
+            in
+            rendered ++ newFrame ++ lastFrame
+
+        else
+            renderAllExactFrames duration
+                start
+                end
+                next
+                keyframe
+                (rendered ++ "    " ++ newFrame)
+
+
+{-| -}
+renderCompoundKeyframesExact :
+    Int
+    -> Time.Absolute
+    -> Timeline.Period
+    -> List Keyframe
+    -> String
+    -> String
+    ->
+        { hash : String
+        , keyframes : String
+        }
+renderCompoundKeyframesExact fps start period keyframeList hash rendered =
+    case keyframeList of
+        [] ->
+            { hash = hash
+            , keyframes = rendered
+            }
+
+        keyframe :: remain ->
+            let
+                end =
+                    start |> Time.advanceBy (Timeline.periodDuration period)
+
+                msPerFrame =
+                    Duration.milliseconds (1 / (toFloat fps / 1000))
+
+                frames =
+                    renderAllExactFrames
+                        msPerFrame
+                        start
+                        end
+                        start
+                        keyframe
+                        ""
+            in
+            renderCompoundKeyframesExact fps
+                start
+                period
+                remain
+                (keyframeHash keyframe.props "" ++ hash)
+                (rendered ++ frames)
+
+
 renderCompoundKeyframes :
     Time.Absolute
     -> Timeline.Period
@@ -499,11 +635,10 @@ renderCompoundKeyframes start period frames hash rendered =
                         ++ "        animation-timing-function:"
                         ++ Bezier.cssTimingString keyframe.timing
                         ++ ";\n    }"
-            in
-            case remain of
-                [] ->
-                    let
-                        last =
+
+                last =
+                    case remain of
+                        [] ->
                             "    "
                                 -- This is for debugging, to see the literal time generated
                                 -- ++ String.fromFloat (Time.inMilliseconds keyframe.end)
@@ -514,19 +649,52 @@ renderCompoundKeyframes start period frames hash rendered =
                                     keyframe.props
                                     ""
                                 ++ ";\n    }"
-                    in
-                    renderCompoundKeyframes start
-                        period
-                        remain
-                        (keyframeHash keyframe.props "" ++ hash)
-                        (rendered ++ frame ++ "\n" ++ last)
 
-                _ ->
-                    renderCompoundKeyframes start
-                        period
-                        remain
-                        (keyframeHash keyframe.props "" ++ hash)
-                        (rendered ++ frame ++ "\n")
+                        _ ->
+                            ""
+            in
+            renderCompoundKeyframes start
+                period
+                remain
+                (keyframeHash keyframe.props "" ++ hash)
+                (rendered ++ frame ++ "\n" ++ last)
+
+
+renderPointAt :
+    Float
+    ->
+        List
+            { id : Internal.Css.Props.Id
+            , spline : Bezier.Spline
+            }
+    -> String
+    -> String
+renderPointAt now props rendered =
+    case props of
+        [] ->
+            rendered
+
+        prop :: remain ->
+            let
+                renderValue =
+                    Internal.Css.Props.toStr prop.id
+
+                val =
+                    renderValue
+                        (Bezier.atX now prop.spline
+                            |> .point
+                            |> .y
+                        )
+
+                new =
+                    case rendered of
+                        "" ->
+                            val
+
+                        _ ->
+                            rendered ++ " " ++ val
+            in
+            renderPointAt now remain new
 
 
 renderFirstPoint :
@@ -1471,6 +1639,138 @@ type alias Compound =
     --         V-- across props
     , states : List ( Id, Interpolate.State )
     }
+
+
+splitColorSection : Time.Absolute -> ColorSection -> ( ColorSection, ColorSection )
+splitColorSection at colorSection =
+    let
+        end =
+            colorSection.start
+                |> Time.advanceBy colorSection.duration
+
+        atPercent =
+            round (Time.progress colorSection.start end at * 100)
+
+        before =
+            { start = colorSection.start
+            , duration = Time.duration colorSection.start at
+            , steps =
+                colorSection.steps
+                    |> renormalizeBefore atPercent
+            }
+
+        after =
+            { start = at
+            , duration = Time.duration at end
+            , steps =
+                colorSection.steps
+                    |> renormalizeAfter atPercent
+            }
+    in
+    ( before
+    , after
+    )
+
+
+{-| Taking a list of elements and slicing it so that it only contains frames before the checkpoint.
+
+And renormalize the percents so they still make sense
+
+-}
+renormalizeBefore :
+    Int
+    ->
+        List
+            { percent : Int
+            , color : Color.Color
+            }
+    ->
+        List
+            { percent : Int
+            , color : Color.Color
+            }
+renormalizeBefore checkpoint steps =
+    renormalizeBeforeHelper checkpoint steps []
+
+
+renormalizeBeforeHelper checkpoint steps captured =
+    case steps of
+        [] ->
+            captured
+
+        step :: remain ->
+            if step.percent - checkpoint < 0 then
+                let
+                    renormalized =
+                        { percent =
+                            (toFloat step.percent * (1 / toFloat checkpoint))
+                                * 100
+                                |> round
+                        , color = step.color
+                        }
+                in
+                renormalizeBeforeHelper
+                    checkpoint
+                    remain
+                    (renormalized :: captured)
+
+            else
+                case remain of
+                    [] ->
+                        captured
+
+                    final :: _ ->
+                        let
+                            progress =
+                                toFloat (checkpoint - step.percent)
+                                    / toFloat (final.percent - step.percent)
+                        in
+                        { percent = 100
+                        , color = Interpolate.color progress step.color final.color
+                        }
+                            :: captured
+
+
+renormalizeAfter :
+    Int
+    ->
+        List
+            { percent : Int
+            , color : Color.Color
+            }
+    ->
+        List
+            { percent : Int
+            , color : Color.Color
+            }
+renormalizeAfter checkpoint steps =
+    renormalizeAfterHelper checkpoint steps []
+
+
+renormalizeAfterHelper checkpoint steps captured =
+    case steps of
+        [] ->
+            captured
+
+        step :: remain ->
+            if step.percent - checkpoint > 0 then
+                let
+                    renormalized =
+                        { percent =
+                            step.percent - checkpoint
+                        , color = step.color
+                        }
+                in
+                renormalizeAfterHelper
+                    checkpoint
+                    remain
+                    (renormalized :: captured)
+
+            else
+                renormalizeAfterHelper
+                    checkpoint
+                    remain
+                    captured
 
 
 splitSection : Time.Absolute -> Section -> ( Section, Section, Maybe Section )

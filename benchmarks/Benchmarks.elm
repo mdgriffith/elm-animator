@@ -26,9 +26,9 @@ suite =
           -- , floatComparison
           -- , interpolationComponents
           --   foldp
-          equalityCompare
+          --   equalityCompare
+          cssGeneration
 
-        --   cssGeneration
         --   stringifying
         ]
 

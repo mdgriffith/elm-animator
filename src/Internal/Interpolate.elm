@@ -667,7 +667,7 @@ interpolateBetween startTimeInMs previous target targetTimeInMs now maybeLookAhe
                 }
 
         current =
-            Bezier.atX curve (Time.inMilliseconds now)
+            Bezier.atX (Time.inMilliseconds now) curve
 
         firstDerivative =
             Bezier.firstDerivative curve current.t
@@ -873,7 +873,7 @@ atTiming subPeriodDuration timing time start target =
                 --     , time = time
                 --     }
                 current =
-                    Bezier.atX spline (Duration.inMilliseconds time)
+                    Bezier.atX (Duration.inMilliseconds time) spline
 
                 firstDerivative =
                     let
