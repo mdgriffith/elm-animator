@@ -928,7 +928,7 @@ sectionCss now id name format ((Section details) as section) =
         [] ->
             emptyAnim
 
-        top :: _ ->
+        _ ->
             let
                 end =
                     details.start
