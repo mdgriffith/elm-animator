@@ -539,7 +539,12 @@ interrupt steps (Timeline.Timeline tl) =
                         tl.interruption
 
                     Just ( schedule, otherSteps ) ->
-                        List.foldl stepsToEvents schedule otherSteps :: tl.interruption
+                        -- **NOTE** - if we recieve a new interruption, we throw away the existing one!
+                        -- This was leading to issues when the same event was added to the `interrupted` queue
+                        -- multiple times in before being scheduled.
+                        -- So, I imagine it does make sense to dedup these
+                        -- But does it ALWAYS make sense to replace the currently scheduled interruption?
+                        [ List.foldl stepsToEvents schedule otherSteps ]
         }
 
 
