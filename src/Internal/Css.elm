@@ -165,7 +165,8 @@ cssFromProps timeline lookup =
                 |> List.sortBy sortProps
 
         renderedProps =
-            propsToCurves present lookup timeline
+            Timeline.foldpAll lookup (toPropCurves present) timeline
+                |> .rendered
     in
     renderCss (Timeline.getCurrentTime timeline) renderers renderedProps
 
@@ -1168,32 +1169,6 @@ renderCssHelper now renderer props cssAnim =
                                 (combine newCss cssAnim)
 
 
-{-|
-
-  - Ids of props to render
-  - What props are present at this state
-
-In some cases like `Color`, multiple props need to be rendered as one prop. Same with `transform`.
-
-Deciding how they should combine can be done after this fist pass.
-
-Properties:
-
-  - List RenderedProp is in the same order as List Prop
-  - Each `RenderedProp` will have the same number of sections
-  - sections are ordered by starting time.
-
--}
-propsToCurves :
-    List Prop
-    -> (state -> List Prop)
-    -> Timeline.Timeline state
-    -> List RenderedProp
-propsToCurves only lookup timeline =
-    Timeline.foldpAll lookup (toPropCurves only) timeline
-        |> .rendered
-
-
 startProps :
     List Prop
     -> List Prop
@@ -1769,6 +1744,10 @@ splitSection at (Section section) =
                 section.splines
                 []
 
+        end =
+            section.start
+                |> Time.advanceBy (Timeline.periodDuration section.period)
+
         before =
             { start = section.start
             , period = once (Time.duration section.start at)
@@ -1776,9 +1755,9 @@ splitSection at (Section section) =
             }
 
         after =
-            { start = section.start
-            , period = once (Time.duration section.start at)
-            , splines = split.before
+            { start = at
+            , period = once (Time.duration at end)
+            , splines = split.after
             }
 
         remaining =
@@ -1788,9 +1767,7 @@ splitSection at (Section section) =
             else
                 Just
                     (Section
-                        { start =
-                            section.start
-                                |> Time.advanceBy (Timeline.periodDuration section.period)
+                        { start = end
                         , period = Timeline.reduceIterations 1 section.period
                         , splines = section.splines
                         }
@@ -2650,6 +2627,9 @@ toCurvesLerp prevEndTime prev target targetTime interruptedAt maybeLookAhead sta
                 maybeLookAhead
                 state
 
+        dur =
+            Time.duration prevEndTime targetTime
+
         sliced =
             if interruptedAt == targetTime then
                 transitionSplines
@@ -2661,7 +2641,7 @@ toCurvesLerp prevEndTime prev target targetTime interruptedAt maybeLookAhead sta
         |> (::)
             (Section
                 { start = prevEndTime
-                , period = once (Time.duration prevEndTime targetTime)
+                , period = once dur
                 , splines = sliced
                 }
             )
