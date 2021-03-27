@@ -2,8 +2,9 @@ module Animator.Css2 exposing
     ( Property
     , opacity
     , rotation, x, y, z, scale, scaleX, scaleY
-    , css, Css
-    , Format, px, int, float
+    , div, node
+    , Css, css
+    , color, px, int, float
     )
 
 {-|
@@ -14,9 +15,14 @@ module Animator.Css2 exposing
 
 @docs rotation, x, y, z, scale, scaleX, scaleY
 
-@docs css, Css
+@docs div, node
 
-@docs Format, px, int, float
+@docs Css, css
+
+
+# Custom
+
+@docs color, px, int, float
 
 -}
 
@@ -85,7 +91,7 @@ opacity : Movement -> Property
 opacity o =
     Css.Prop
         Internal.Css.Props.ids.opacity
-        ""
+        "opacity"
         (Interpolate.withStandardDefault o)
         Internal.Css.Props.float
 
@@ -160,33 +166,34 @@ z n =
         Internal.Css.Props.float
 
 
-type alias Format =
-    Internal.Css.Props.Format
-
-
-px : Format
-px =
-    Internal.Css.Props.px
-
-
-int : Format
-int =
-    Internal.Css.Props.int
-
-
-float : Format
-float =
-    Internal.Css.Props.float
-
-
 {-| -}
-style : String -> Format -> Movement -> Property
-style name format n =
+px : String -> Movement -> Property
+px name n =
     Css.Prop
         Internal.Css.Props.noId
         name
         (Interpolate.withStandardDefault n)
-        format
+        Internal.Css.Props.px
+
+
+{-| -}
+int : String -> Movement -> Property
+int name n =
+    Css.Prop
+        Internal.Css.Props.noId
+        name
+        (Interpolate.withStandardDefault n)
+        Internal.Css.Props.int
+
+
+{-| -}
+float : String -> Movement -> Property
+float name n =
+    Css.Prop
+        Internal.Css.Props.noId
+        name
+        (Interpolate.withStandardDefault n)
+        Internal.Css.Props.float
 
 
 {-| -}
