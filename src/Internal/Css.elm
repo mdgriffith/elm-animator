@@ -137,12 +137,7 @@ scanProps :
 scanProps =
     { start =
         \props ->
-            { props = props
-            , cache =
-                { name = Set.empty
-                , id = Set.empty
-                }
-            }
+            add props [] Set.empty Set.empty
     , adjustor =
         \_ ->
             Timeline.linearDefault
@@ -288,7 +283,7 @@ renderColorSectionToCss now name section =
                 ++ delay
                 ++ " "
                 ++ n
-                ++ " normal forward running "
+                ++ " normal forwards running "
                 ++ animationName
 
         keyframes =
@@ -455,7 +450,7 @@ renderCompoundSections now sections anim =
                             ++ delay
                             ++ " "
                             ++ n
-                            ++ " normal forward running "
+                            ++ " normal forwards running "
                             ++ new.hash
                 in
                 renderCompoundSections now
@@ -1011,7 +1006,7 @@ sectionToCss now id name format (Section section) =
                 ++ delay
                 ++ " "
                 ++ n
-                ++ " normal forward running "
+                ++ " normal forwards running "
                 ++ animationName
 
         keyframes =
@@ -2793,7 +2788,7 @@ finalize name renderValue now stack =
                         -- , but it is overridden by the one in keyframes
                         ++ "linear "
                         ++ delay
-                        ++ " 1 normal forward running "
+                        ++ " 1 normal forwards running "
                         ++ animationName
 
                 keyframes =
@@ -3069,7 +3064,7 @@ addDwell lookup name renderValue target startTime now state details =
                         ++ "linear "
                         ++ (delay ++ " ")
                         ++ iterationCount
-                        ++ " normal forward running "
+                        ++ " normal forwards running "
                         ++ animationName
 
                 keyframes =
@@ -3189,6 +3184,6 @@ combine one two =
 
     else
         { hash = one.hash ++ two.hash
-        , animation = one.animation ++ ", " ++ two.animation
+        , animation = two.animation ++ ", " ++ one.animation
         , keyframes = one.keyframes ++ "\n" ++ two.keyframes
         }
