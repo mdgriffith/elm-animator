@@ -629,46 +629,39 @@ color timeline lookup =
         timeline
 
 
-{-| Interpolate linearly between destinations. This is a shortcut to help you out.
 
-You can do this with `move` by doing
-
-    Animator.move timeline <|
-        \state ->
-            if state then
-                Animator.at 0
-                    |> Animator.leaveSmoothly 0
-                    |> Animator.arriveSmoothly 0
-
-            else
-                Animator.at 1
-                    |> Animator.leaveSmoothly 0
-                    |> Animator.arriveSmoothly 0
-
-Which is equivalent to
-
-    Animator.linear timeline <|
-        \state ->
-            if state then
-                Animator.at 0
-
-            else
-                Animator.at 1
-
--}
-linear : Timeline state -> (state -> Movement) -> Float
-linear timeline lookup =
-    .position <|
-        Interpolate.details timeline
-            (Interpolate.withLinearDefault << lookup)
+-- {-| Interpolate linearly between destinations. This is a shortcut to help you out.
+-- You can do this with `move` by doing
+--     Animator.move timeline <|
+--         \state ->
+--             if state then
+--                 Animator.at 0
+--                     |> Animator.leaveSmoothly 0
+--                     |> Animator.arriveSmoothly 0
+--             else
+--                 Animator.at 1
+--                     |> Animator.leaveSmoothly 0
+--                     |> Animator.arriveSmoothly 0
+-- Which is equivalent to
+--     Animator.linear timeline <|
+--         \state ->
+--             if state then
+--                 Animator.at 0
+--             else
+--                 Animator.at 1
+-- -}
+-- linear : Timeline state -> (state -> Movement) -> Float
+-- linear timeline lookup =
+--     .position <|
+--         Interpolate.details timeline
+--             (Interpolate.withLinearDefault << lookup)
 
 
 {-| -}
 move : Timeline state -> (state -> Movement) -> Float
 move timeline lookup =
     .position <|
-        Interpolate.details timeline
-            (Interpolate.withStandardDefault << lookup)
+        Interpolate.details timeline lookup
 
 
 {-| -}
@@ -685,14 +678,14 @@ xy :
 xy timeline lookup =
     { x =
         Timeline.foldp
-            (lookup >> .x >> Interpolate.withStandardDefault)
+            (lookup >> .x)
             Interpolate.moving
             timeline
             |> unwrapUnits
             |> .position
     , y =
         Timeline.foldp
-            (lookup >> .y >> Interpolate.withStandardDefault)
+            (lookup >> .y)
             Interpolate.moving
             timeline
             |> unwrapUnits
@@ -705,21 +698,21 @@ xyz : Timeline state -> (state -> { x : Movement, y : Movement, z : Movement }) 
 xyz timeline lookup =
     { x =
         Timeline.foldp
-            (lookup >> .x >> Interpolate.withStandardDefault)
+            (lookup >> .x)
             Interpolate.moving
             timeline
             |> unwrapUnits
             |> .position
     , y =
         Timeline.foldp
-            (lookup >> .y >> Interpolate.withStandardDefault)
+            (lookup >> .y)
             Interpolate.moving
             timeline
             |> unwrapUnits
             |> .position
     , z =
         Timeline.foldp
-            (lookup >> .z >> Interpolate.withStandardDefault)
+            (lookup >> .z)
             Interpolate.moving
             timeline
             |> unwrapUnits
@@ -741,47 +734,48 @@ unwrapUnits { position, velocity } =
 
 {-| -}
 type alias Movement =
-    Interpolate.DefaultableMovement
+    Interpolate.Movement
 
 
 {-| -}
 at : Float -> Movement
 at =
-    Interpolate.Position
-        Interpolate.FullDefault
+    Interpolate.Pos
+        Interpolate.standardDefault
 
 
-withDefault toDef currentDefault =
-    case currentDefault of
-        Interpolate.FullDefault ->
-            Interpolate.PartialDefault (toDef Interpolate.emptyDefaults)
-
-        Interpolate.PartialDefault thing ->
-            Interpolate.PartialDefault (toDef thing)
-
-
-applyOption toOption movement =
-    case movement of
-        Interpolate.Position personality pos ->
-            Interpolate.Position
-                (withDefault
-                    toOption
-                    personality
-                )
-                pos
-
-        Interpolate.Oscillate personality pos period points ->
-            Interpolate.Oscillate
-                (withDefault
-                    toOption
-                    personality
-                )
-                pos
-                period
-                points
+{-| -}
+linear : Float -> Movement
+linear =
+    Interpolate.Pos
+        Interpolate.linearDefault
 
 
 
+-- withDefault toDef currentDefault =
+--     case currentDefault of
+--         Interpolate.FullDefault ->
+--             Interpolate.PartialDefault (toDef Interpolate.emptyDefaults)
+--         Interpolate.PartialDefault thing ->
+--             Interpolate.PartialDefault (toDef thing)
+-- applyOption toOption movement =
+--     case movement of
+--         Interpolate.Position personality pos ->
+--             Interpolate.Position
+--                 (withDefault
+--                     toOption
+--                     personality
+--                 )
+--                 pos
+--         Interpolate.Oscillate personality pos period points ->
+--             Interpolate.Oscillate
+--                 (withDefault
+--                     toOption
+--                     personality
+--                 )
+--                 pos
+--                 period
+--                 points
 {- PERSONALITY -}
 
 
@@ -793,7 +787,9 @@ applyOption toOption movement =
 -}
 withWobble : Float -> Movement -> Movement
 withWobble p movement =
-    applyOption (\def -> { def | wobbliness = Interpolate.Specified (clamp 0 1 p) }) movement
+    Interpolate.mapPersonality
+        (\personality -> { personality | wobbliness = clamp 0 1 p })
+        movement
 
 
 {-| Leave a state with some initial velocity.
@@ -807,7 +803,9 @@ This is given as a velocity (as value/second). Usually this is pixels per second
 -}
 withImpulse : Float -> Movement -> Movement
 withImpulse p movement =
-    applyOption (\def -> { def | impulse = Interpolate.Specified (clamp 0 1 p) }) movement
+    Interpolate.mapPersonality
+        (\personality -> { personality | impulse = clamp 0 1 p })
+        movement
 
 
 
@@ -840,24 +838,21 @@ withImpulse p movement =
 
 
 {-| Underneath the hood this library uses [Bézier curves](https://en.wikipedia.org/wiki/B%C3%A9zier_curve) to model motion.
-
 Because of this you can adjust the "smoothness" of the curve that's ultimately used.
 
   - `leaveSmoothly 0` is essentially linear animation.
   - `leaveSmoothly 1` means the animation will start slowly and smoothly begin to accelerate.
-
-Here's a general diagram of what's going on:
-
-![](https://mdgriffith.github.io/elm-animator/images/default-personality.png)
-
-**Note** — The values in the above diagram are the built in defaults for most movements in `elm-animator`. They come from [`Material Design`](https://material.io/design/motion/speed.html#easing).
-
-**Note 2** — An [interactive version of the above diagram](https://ellie-app.com/8s2yjQzQmZda1) is also available.
+    Here's a general diagram of what's going on:
+    ![](https://mdgriffith.github.io/elm-animator/images/default-personality.png)
+    **Note** — The values in the above diagram are the built in defaults for most movements in `elm-animator`. They come from [`Material Design`](https://material.io/design/motion/speed.html#easing).
+    **Note 2** — An [interactive version of the above diagram](https://ellie-app.com/8s2yjQzQmZda1) is also available.
 
 -}
 leaveSmoothly : Float -> Movement -> Movement
 leaveSmoothly s movement =
-    applyOption (\def -> { def | departSlowly = Interpolate.Specified (clamp 0 1 s) }) movement
+    Interpolate.mapPersonality
+        (\personality -> { personality | departSlowly = clamp 0 1 s })
+        movement
 
 
 {-| We can also smooth out our arrival.
@@ -868,7 +863,9 @@ leaveSmoothly s movement =
 -}
 arriveSmoothly : Float -> Movement -> Movement
 arriveSmoothly s movement =
-    applyOption (\def -> { def | arriveSlowly = Interpolate.Specified (clamp 0 1 s) }) movement
+    Interpolate.mapPersonality
+        (\personality -> { personality | arriveSlowly = clamp 0 1 s })
+        movement
 
 
 {-| -}
@@ -896,8 +893,8 @@ once activeDuration osc =
             at i
 
         Interpolate.Oscillator start points ->
-            Interpolate.Oscillate
-                Interpolate.FullDefault
+            Interpolate.Osc
+                Interpolate.standardDefault
                 start
                 (Timeline.Repeat 1 activeDuration)
                 points
@@ -911,8 +908,8 @@ loop activeDuration osc =
             at i
 
         Interpolate.Oscillator start points ->
-            Interpolate.Oscillate
-                Interpolate.FullDefault
+            Interpolate.Osc
+                Interpolate.standardDefault
                 start
                 (Timeline.Loop activeDuration)
                 points
@@ -926,8 +923,8 @@ repeat n activeDuration osc =
             at i
 
         Interpolate.Oscillator start points ->
-            Interpolate.Oscillate
-                Interpolate.FullDefault
+            Interpolate.Osc
+                Interpolate.standardDefault
                 start
                 (Timeline.Repeat n activeDuration)
                 points

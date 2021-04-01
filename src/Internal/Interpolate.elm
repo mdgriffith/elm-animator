@@ -1,9 +1,8 @@
 module Internal.Interpolate exposing
     ( Movement(..), State, derivativeOfEasing
     , dwellPeriod
-    , coloring, linearly, moving
-    , fillDefaults, DefaultablePersonality(..), DefaultOr(..)
-    , Checkpoint, DefaultableMovement(..), Oscillator(..), Personality, Point, Timing(..), applyOption, base, color, createSpline, details, emptyDefaults, equalState, lerpSplines, linearDefault, standardDefault, visit, withLinearDefault, withStandardDefault
+    , coloring, linearly, moving, mapPersonality
+    , Checkpoint, Oscillator(..), Personality, Point, Timing(..), base, color, createSpline, details, equalState, lerpSplines, linearDefault, standardDefault, visit
     )
 
 {-|
@@ -14,9 +13,7 @@ module Internal.Interpolate exposing
 
 @docs startMoving, dwellPeriod
 
-@docs coloring, linearly, moving
-
-@docs fillDefaults, DefaultablePersonality, DefaultOr
+@docs coloring, linearly, moving, mapPersonality
 
 -}
 
@@ -32,27 +29,9 @@ import Quantity
 
 
 {-| -}
-type DefaultableMovement
-    = Oscillate DefaultablePersonality Float Period (List Checkpoint)
-    | Position DefaultablePersonality Float
-
-
-{-| -}
 type Movement
     = Osc Personality Float Period (List Checkpoint)
     | Pos Personality Float
-
-
-type DefaultablePersonality
-    = FullDefault
-    | PartialDefault
-        { wobbliness : DefaultOr Proportion
-        , impulse : DefaultOr Proportion
-        , arriveEarly : DefaultOr Proportion
-        , arriveSlowly : DefaultOr Proportion
-        , departLate : DefaultOr Proportion
-        , departSlowly : DefaultOr Proportion
-        }
 
 
 type alias Checkpoint =
@@ -77,11 +56,6 @@ type Oscillator
     | Resting Float
 
 
-type DefaultOr thing
-    = Default
-    | Specified thing
-
-
 type alias Personality =
     { wobbliness : Proportion
     , impulse : Proportion
@@ -96,16 +70,6 @@ type alias Personality =
 -}
 type alias Proportion =
     Float
-
-
-emptyDefaults =
-    { wobbliness = Default
-    , impulse = Default
-    , arriveEarly = Default
-    , arriveSlowly = Default
-    , departLate = Default
-    , departSlowly = Default
-    }
 
 
 standardDefault : Personality
@@ -140,110 +104,13 @@ base movement =
             f
 
 
-applyOption toOption movement =
+mapPersonality fn movement =
     case movement of
-        Pos personality pos ->
-            Pos
-                (toOption
-                    personality
-                )
-                pos
+        Osc p f period checkpoints ->
+            Osc (fn p) f period checkpoints
 
-        Osc personality pos period points ->
-            Osc
-                (toOption
-                    personality
-                )
-                pos
-                period
-                points
-
-
-withPropDefault toDef currentDefault =
-    case currentDefault of
-        FullDefault ->
-            PartialDefault (toDef emptyDefaults)
-
-        PartialDefault thing ->
-            PartialDefault (toDef thing)
-
-
-{-| We have overrideable defaults because the constructors linear and move both have defaults, but we specify overrides on Animator.at
--}
-fillDefaults : Personality -> DefaultablePersonality -> Personality
-fillDefaults builtInDefault specified =
-    case specified of
-        FullDefault ->
-            builtInDefault
-
-        PartialDefault partial ->
-            { wobbliness =
-                withDefault builtInDefault.wobbliness partial.wobbliness
-            , impulse =
-                withDefault builtInDefault.impulse partial.impulse
-            , arriveEarly =
-                withDefault builtInDefault.arriveEarly partial.arriveEarly
-            , arriveSlowly =
-                withDefault builtInDefault.arriveSlowly partial.arriveSlowly
-            , departLate =
-                withDefault builtInDefault.departLate partial.departLate
-            , departSlowly =
-                withDefault builtInDefault.departSlowly partial.departSlowly
-            }
-
-
-withStandardDefault : DefaultableMovement -> Movement
-withStandardDefault defMovement =
-    case defMovement of
-        Oscillate specifiedPersonality target period decoration ->
-            let
-                personality =
-                    fillDefaults standardDefault specifiedPersonality
-            in
-            Osc
-                personality
-                target
-                period
-                decoration
-
-        Position specifiedPersonality p ->
-            let
-                personality =
-                    fillDefaults standardDefault specifiedPersonality
-            in
-            Pos personality p
-
-
-withLinearDefault : DefaultableMovement -> Movement
-withLinearDefault defMovement =
-    case defMovement of
-        Oscillate specifiedPersonality target period decoration ->
-            let
-                personality =
-                    fillDefaults linearDefault specifiedPersonality
-            in
-            Osc
-                personality
-                target
-                period
-                decoration
-
-        Position specifiedPersonality p ->
-            let
-                personality =
-                    fillDefaults linearDefault specifiedPersonality
-            in
-            Pos personality p
-
-
-withDefault : thing -> DefaultOr thing -> thing
-withDefault def defaultOr =
-    case defaultOr of
-        Default ->
-            def
-
-        Specified specified ->
-            specified
+        Pos p f ->
+            Pos (fn p) f
 
 
 wrap : Float -> Float
@@ -263,12 +130,6 @@ wrapUnitAfter dur total =
 
         totalDuration =
             round (Duration.inMilliseconds total)
-
-        -- _ =
-        --     Debug.log "WRAP"
-        --         { current = totalDuration
-        --         , period = periodDuration
-        --         }
     in
     if periodDuration == 0 || totalDuration == 0 then
         0

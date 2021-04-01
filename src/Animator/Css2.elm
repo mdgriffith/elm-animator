@@ -170,9 +170,9 @@ withWobble : Float -> Property -> Property
 withWobble wob prop =
     prop
         |> Css.applyToMovement
-            (Interpolate.applyOption
-                (\def ->
-                    { def
+            (Interpolate.mapPersonality
+                (\personality ->
+                    { personality
                         | wobbliness =
                             clamp 0 1 wob
                     }
@@ -185,9 +185,9 @@ withImpulse : Float -> Property -> Property
 withImpulse impulse prop =
     prop
         |> Css.applyToMovement
-            (Interpolate.applyOption
-                (\def ->
-                    { def
+            (Interpolate.mapPersonality
+                (\personality ->
+                    { personality
                         | impulse =
                             impulse
                     }

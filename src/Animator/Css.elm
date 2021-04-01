@@ -408,7 +408,7 @@ renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
         Linear attrName lookup toString ->
             renderAnimation details.now
                 attrName
-                (Timeline.capture 60 (lookup >> Interpolate.withLinearDefault) Interpolate.moving timeline)
+                (Timeline.capture 60 lookup Interpolate.moving timeline)
                 (.position >> Pixels.inPixels >> toString)
                 (.position >> Pixels.inPixels >> stubFloat)
                 anim
@@ -416,7 +416,7 @@ renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
         Movement attrName lookup toString ->
             renderAnimation details.now
                 attrName
-                (Timeline.capture 60 (lookup >> Interpolate.withStandardDefault) Interpolate.moving timeline)
+                (Timeline.capture 60 lookup Interpolate.moving timeline)
                 (.position >> Pixels.inPixels >> toString)
                 (.position >> Pixels.inPixels >> stubFloat)
                 anim
@@ -429,34 +429,34 @@ renderAttrs ((Timeline.Timeline details) as timeline) attr anim =
                             deets
 
                 x =
-                    Timeline.capture 60 (lookup >> .x >> Interpolate.withStandardDefault) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .x) Interpolate.moving timeline
 
                 y =
-                    Timeline.capture 60 (lookup >> .y >> Interpolate.withStandardDefault) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .y) Interpolate.moving timeline
 
                 z =
-                    Timeline.capture 60 (lookup >> .z >> Interpolate.withStandardDefault) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .z) Interpolate.moving timeline
 
                 rotation =
-                    Timeline.capture 60 (lookup >> .rotate >> Interpolate.withLinearDefault) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .rotate) Interpolate.moving timeline
 
                 scaleX =
-                    Timeline.capture 60 (lookup >> .scaleX >> Interpolate.withStandardDefault) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .scaleX) Interpolate.moving timeline
 
                 scaleY =
-                    Timeline.capture 60 (lookup >> .scaleY >> Interpolate.withStandardDefault) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .scaleY) Interpolate.moving timeline
 
                 scaleZ =
-                    Timeline.capture 60 (lookup >> .scaleZ >> Interpolate.withStandardDefault) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .scaleZ) Interpolate.moving timeline
 
                 facingX =
-                    Timeline.capture 60 (lookup >> .facing >> .x >> Interpolate.withStandardDefault) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .facing >> .x) Interpolate.moving timeline
 
                 facingY =
-                    Timeline.capture 60 (lookup >> .facing >> .y >> Interpolate.withStandardDefault) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .facing >> .y) Interpolate.moving timeline
 
                 facingZ =
-                    Timeline.capture 60 (lookup >> .facing >> .z >> Interpolate.withStandardDefault) Interpolate.moving timeline
+                    Timeline.capture 60 (lookup >> .facing >> .z) Interpolate.moving timeline
 
                 combined =
                     toTransform options
@@ -1558,8 +1558,8 @@ renderOsc period oscillator =
             at f
 
         Interpolate.Oscillator x checkpoints ->
-            Interpolate.Oscillate
-                Interpolate.FullDefault
+            Interpolate.Osc
+                Interpolate.standardDefault
                 x
                 period
                 checkpoints
