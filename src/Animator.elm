@@ -790,8 +790,6 @@ applyOption toOption movement =
   - `withWobble 0` - absolutely no wobble
   - `withWobble 1` - all the wobble
 
-Use your wobble responsibly.
-
 -}
 withWobble : Float -> Movement -> Movement
 withWobble p movement =

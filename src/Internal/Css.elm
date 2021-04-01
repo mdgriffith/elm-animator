@@ -56,6 +56,16 @@ type Prop
     | ColorProp ColorPropDetails
 
 
+applyToMovement : (Interpolate.Movement -> Interpolate.Movement) -> Prop -> Prop
+applyToMovement fn prop =
+    case prop of
+        Prop id name m format ->
+            Prop id name (fn m) format
+
+        ColorProp details ->
+            ColorProp details
+
+
 type alias ColorPropDetails =
     { name : String
     , color : Color.Color

@@ -3,7 +3,7 @@ module Internal.Interpolate exposing
     , dwellPeriod
     , coloring, linearly, moving
     , fillDefaults, DefaultablePersonality(..), DefaultOr(..)
-    , Checkpoint, DefaultableMovement(..), Oscillator(..), Personality, Point, Timing(..), base, color, createSpline, details, emptyDefaults, equalState, lerpSplines, linearDefault, standardDefault, visit, withLinearDefault, withStandardDefault
+    , Checkpoint, DefaultableMovement(..), Oscillator(..), Personality, Point, Timing(..), applyOption, base, color, createSpline, details, emptyDefaults, equalState, lerpSplines, linearDefault, standardDefault, visit, withLinearDefault, withStandardDefault
     )
 
 {-|
@@ -138,6 +138,34 @@ base movement =
 
         Pos _ f ->
             f
+
+
+applyOption toOption movement =
+    case movement of
+        Pos personality pos ->
+            Pos
+                (toOption
+                    personality
+                )
+                pos
+
+        Osc personality pos period points ->
+            Osc
+                (toOption
+                    personality
+                )
+                pos
+                period
+                points
+
+
+withPropDefault toDef currentDefault =
+    case currentDefault of
+        FullDefault ->
+            PartialDefault (toDef emptyDefaults)
+
+        PartialDefault thing ->
+            PartialDefault (toDef thing)
 
 
 {-| We have overrideable defaults because the constructors linear and move both have defaults, but we specify overrides on Animator.at

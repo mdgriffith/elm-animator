@@ -1,10 +1,11 @@
 module Animator.Css2 exposing
-    ( Property
-    , opacity
-    , rotation, x, y, z, scale, scaleX, scaleY
+    ( opacity
+    , rotation, x, y, scale, scaleX, scaleY
+    , color, px, int, float
+    , withWobble, withImpulse, withCurve, withDelay
     , div, node
     , Css, css
-    , color, px, int, float
+    , Attribute
     )
 
 {-|
@@ -13,16 +14,18 @@ module Animator.Css2 exposing
 
 @docs opacity
 
-@docs rotation, x, y, z, scale, scaleX, scaleY
+@docs rotation, x, y, scale, scaleX, scaleY
+
+@docs color, px, int, float
+
+@docs withWobble, withImpulse, withCurve, withDelay
+
+
+# Rendering
 
 @docs div, node
 
 @docs Css, css
-
-
-# Custom
-
-@docs color, px, int, float
 
 -}
 
@@ -30,9 +33,15 @@ import Animator exposing (Movement, Timeline)
 import Color
 import Html exposing (Html)
 import Html.Attributes as Attr
+import Internal.Bezier as Bezier
 import Internal.Css as Css
 import Internal.Css.Props
 import Internal.Interpolate as Interpolate
+
+
+type Attribute
+    = Attr Css.Prop
+    | Batch (List Css.Prop)
 
 
 {-| -}
@@ -87,112 +96,172 @@ loop : Duration -> Oscillation -> Property -> Proeprty
             (wave 0 1)
 
 -}
-opacity : Movement -> Property
+opacity : Float -> Property
 opacity o =
     Css.Prop
         Internal.Css.Props.ids.opacity
         "opacity"
-        (Interpolate.withStandardDefault o)
+        (Interpolate.Pos Interpolate.standardDefault o)
         Internal.Css.Props.float
 
 
 {-| -}
-scale : Movement -> Property
+scale : Float -> Property
 scale s =
     Css.Prop
         Internal.Css.Props.ids.scale
         ""
-        (Interpolate.withStandardDefault s)
+        (Interpolate.Pos Interpolate.standardDefault s)
         Internal.Css.Props.float
 
 
 {-| -}
-scaleX : Movement -> Property
+scaleX : Float -> Property
 scaleX s =
     Css.Prop
         Internal.Css.Props.ids.scaleX
         ""
-        (Interpolate.withStandardDefault s)
+        (Interpolate.Pos Interpolate.standardDefault s)
         Internal.Css.Props.float
 
 
 {-| -}
-scaleY : Movement -> Property
+scaleY : Float -> Property
 scaleY s =
     Css.Prop
         Internal.Css.Props.ids.scaleY
         ""
-        (Interpolate.withStandardDefault s)
+        (Interpolate.Pos Interpolate.standardDefault s)
         Internal.Css.Props.float
 
 
 {-| -}
-rotation : Movement -> Property
+rotation : Float -> Property
 rotation n =
     Css.Prop
         Internal.Css.Props.ids.rotation
         ""
-        (Interpolate.withStandardDefault n)
+        (Interpolate.Pos Interpolate.standardDefault n)
         Internal.Css.Props.float
 
 
 {-| -}
-x : Movement -> Property
+x : Float -> Property
 x n =
     Css.Prop
         Internal.Css.Props.ids.x
         ""
-        (Interpolate.withStandardDefault n)
+        (Interpolate.Pos Interpolate.standardDefault n)
         Internal.Css.Props.float
 
 
 {-| -}
-y : Movement -> Property
+y : Float -> Property
 y n =
     Css.Prop
         Internal.Css.Props.ids.y
         ""
-        (Interpolate.withStandardDefault n)
+        (Interpolate.Pos Interpolate.standardDefault n)
         Internal.Css.Props.float
 
 
 {-| -}
-z : Movement -> Property
-z n =
-    Css.Prop
-        Internal.Css.Props.ids.z
-        ""
-        (Interpolate.withStandardDefault n)
-        Internal.Css.Props.float
+withWobble : Float -> Property -> Property
+withWobble wob prop =
+    prop
+        |> Css.applyToMovement
+            (Interpolate.applyOption
+                (\def ->
+                    { def
+                        | wobbliness =
+                            clamp 0 1 wob
+                    }
+                )
+            )
 
 
 {-| -}
-px : String -> Movement -> Property
+withImpulse : Float -> Property -> Property
+withImpulse impulse prop =
+    prop
+        |> Css.applyToMovement
+            (Interpolate.applyOption
+                (\def ->
+                    { def
+                        | impulse =
+                            impulse
+                    }
+                )
+            )
+
+
+{-| -}
+withDelay : Animator.Duration -> Property -> Property
+withDelay dur p =
+    p
+
+
+{-| -}
+withCurve : Bezier.Spline -> Property -> Property
+withCurve spline p =
+    p
+
+
+type Step
+    = Step Animator.Duration (List Attribute)
+
+
+{-| -}
+sequence : List Step -> Attribute
+sequence steps =
+    Debug.todo ""
+
+
+{-| -}
+loop : List Step -> Attribute
+loop steps =
+    -- Batch <|
+    -- List.map
+    --     (\(Step dur attrs) ->
+    --         Batch []
+    --     )
+    --     steps
+    Debug.todo ""
+
+
+{-| -}
+repeat : Int -> List Step -> Attribute
+repeat n steps =
+    Debug.todo ""
+
+
+{-| -}
+px : String -> Float -> Property
 px name n =
     Css.Prop
         Internal.Css.Props.noId
         name
-        (Interpolate.withStandardDefault n)
+        (Interpolate.Pos Interpolate.standardDefault n)
         Internal.Css.Props.px
 
 
 {-| -}
-int : String -> Movement -> Property
+int : String -> Float -> Property
 int name n =
     Css.Prop
         Internal.Css.Props.noId
         name
-        (Interpolate.withStandardDefault n)
+        (Interpolate.Pos Interpolate.standardDefault n)
         Internal.Css.Props.int
 
 
 {-| -}
-float : String -> Movement -> Property
+float : String -> Float -> Property
 float name n =
     Css.Prop
         Internal.Css.Props.noId
         name
-        (Interpolate.withStandardDefault n)
+        (Interpolate.Pos Interpolate.standardDefault n)
         Internal.Css.Props.float
 
 
