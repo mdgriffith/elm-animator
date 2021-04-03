@@ -34,6 +34,8 @@ Thanks Ian!
 
 -}
 
+import Internal.Bits as Bits
+
 
 {-| Number betwen 0 and 1
 -}
@@ -46,14 +48,10 @@ type Spline
 
 
 hash : Spline -> String
-hash (Spline c0 c1 c2 c3) =
-    pointHash c0
+hash (Spline one two three four) =
+    String.fromInt (Bits.value (Bits.store4Float one.x one.y two.x two.y))
         ++ dash
-        ++ pointHash c1
-        ++ dash
-        ++ pointHash c2
-        ++ dash
-        ++ pointHash c3
+        ++ String.fromInt (Bits.value (Bits.store4Float three.x three.y four.x four.y))
 
 
 floatStr : Float -> String
