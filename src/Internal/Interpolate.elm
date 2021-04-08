@@ -2,7 +2,7 @@ module Internal.Interpolate exposing
     ( Movement(..), State, derivativeOfEasing
     , dwellPeriod
     , coloring, linearly, moving, mapPersonality
-    , Checkpoint, Oscillator(..), Personality, Point, Timing(..), base, color, createSpline, details, equalState, lerpSplines, linearDefault, standardDefault, visit
+    , Checkpoint, Oscillator(..), Personality, Point, Sequence(..), Step(..), Timing(..), base, color, createSpline, details, equalState, lerpSplines, linearDefault, standardDefault, visit
     )
 
 {-|
@@ -24,16 +24,28 @@ import Internal.Bezier as Bezier
 import Internal.Spring as Spring
 import Internal.Time as Time
 import Internal.Timeline as Timeline exposing (Period(..))
+import Internal.Transition as Transition
 import Pixels
 import Quantity
 
 
 {-| -}
 type Movement
-    = Osc Personality Float Period (List Checkpoint)
-    | Pos Personality Float
+    = Pos Personality Float (Maybe (Sequence Float))
 
 
+{-| -}
+type Sequence value
+    = Repeat Int (List (Step value))
+
+
+type Step value
+    = Step Duration.Duration Transition.Transition value
+    | Wait Duration.Duration
+
+
+{-| @deprecated
+-}
 type alias Checkpoint =
     { value : Float
 
@@ -95,22 +107,14 @@ linearDefault =
 
 
 base : Movement -> Float
-base movement =
-    case movement of
-        Osc _ f _ _ ->
-            f
-
-        Pos _ f ->
-            f
+base (Pos _ f _) =
+    f
 
 
 mapPersonality fn movement =
     case movement of
-        Osc p f period checkpoints ->
-            Osc (fn p) f period checkpoints
-
-        Pos p f ->
-            Pos (fn p) f
+        Pos p f seq ->
+            Pos (fn p) f seq
 
 
 wrap : Float -> Float
@@ -198,23 +202,15 @@ startMoving : Movement -> State
 startMoving movement =
     { position =
         case movement of
-            Osc _ target period decoration ->
-                Pixels.pixels target
-
-            Pos _ x ->
+            Pos _ x _ ->
                 Pixels.pixels x
     , velocity = Pixels.pixelsPerSecond 0
     }
 
 
 getPersonality : Movement -> Personality
-getPersonality m =
-    case m of
-        Osc personality _ _ _ ->
-            personality
-
-        Pos personality _ ->
-            personality
+getPersonality (Pos personality _ _) =
+    personality
 
 
 zeroDuration : Duration.Duration
@@ -257,12 +253,8 @@ moving =
 
 dwellPeriod : Movement -> Maybe Period
 dwellPeriod movement =
-    case movement of
-        Pos _ _ ->
-            Nothing
-
-        Osc _ _ period _ ->
-            Just period
+    -- THIS IS GOING AWAY IM PRETTY SURE
+    Nothing
 
 
 {-| This is the combination of the previous `dwellFor` and `after` functions.
@@ -313,10 +305,7 @@ visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeL
     if Time.zeroDuration dwellTime then
         { position =
             case lookup event of
-                Osc _ target period decoration ->
-                    Pixels.pixels target
-
-                Pos _ x ->
+                Pos _ x _ ->
                     Pixels.pixels x
         , velocity =
             newVelocityAtTarget (lookup event)
@@ -326,13 +315,14 @@ visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeL
 
     else
         case lookup event of
-            Pos _ pos ->
+            Pos _ pos Nothing ->
                 { position = Pixels.pixels pos
                 , velocity = Pixels.pixelsPerSecond 0
                 }
 
-            Osc _ target period points ->
-                oscillate target period points dwellTime
+            Pos _ pos (Just seq) ->
+                -- oscillate target period points dwellTime
+                Debug.todo ""
 
 
 type alias Milliseconds =
@@ -344,10 +334,7 @@ lerpSplines prevEndTime prev target targetTime maybeLookAhead state =
     let
         wobble =
             case target of
-                Osc personality _ _ _ ->
-                    personality.wobbliness
-
-                Pos personality _ ->
+                Pos personality _ _ ->
                     personality.wobbliness
 
         shouldWobble =
@@ -360,10 +347,7 @@ lerpSplines prevEndTime prev target targetTime maybeLookAhead state =
 
         targetPos =
             case target of
-                Osc _ x period decoration ->
-                    x
-
-                Pos _ x ->
+                Pos _ x _ ->
                     x
     in
     if shouldWobble then
@@ -398,10 +382,7 @@ lerpSplines prevEndTime prev target targetTime maybeLookAhead state =
                 }
             , departure =
                 case prev of
-                    Pos personality _ ->
-                        personality
-
-                    Osc personality _ _ _ ->
+                    Pos personality _ _ ->
                         personality
             , end =
                 { x = Time.inMilliseconds targetTime
@@ -413,10 +394,7 @@ lerpSplines prevEndTime prev target targetTime maybeLookAhead state =
                 }
             , arrival =
                 case target of
-                    Pos personality _ ->
-                        personality
-
-                    Osc personality _ _ _ ->
+                    Pos personality _ _ ->
                         personality
             }
         ]
@@ -437,20 +415,17 @@ lerp prevEndTime prev target targetTime now maybeLookAhead state =
         --     }
         wobble =
             case target of
-                Osc personality _ _ _ ->
-                    personality.wobbliness
-
-                Pos personality _ ->
+                Pos personality _ _ ->
                     personality.wobbliness
 
         nothingHappened =
             case target of
-                Osc _ _ _ _ ->
-                    False
-
-                Pos _ x ->
+                Pos _ x Nothing ->
                     (x == Pixels.inPixels state.position)
                         && (Pixels.inPixelsPerSecond state.velocity == 0)
+
+                Pos _ _ (Just _) ->
+                    False
     in
     -- Debug.log "   <-" <|
     if nothingHappened then
@@ -483,18 +458,12 @@ springInterpolation prevEndTime _ target targetTime now _ state =
     let
         wobble =
             case target of
-                Osc personality _ _ _ ->
-                    personality.wobbliness
-
-                Pos personality _ ->
+                Pos personality _ _ ->
                     personality.wobbliness
 
         targetPos =
             case target of
-                Osc _ x period decoration ->
-                    x
-
-                Pos _ x ->
+                Pos _ x _ ->
                     x
 
         duration =
@@ -521,10 +490,7 @@ interpolateBetween startTimeInMs previous target targetTimeInMs now maybeLookAhe
     let
         targetPosition =
             case target of
-                Osc _ x period decoration ->
-                    Pixels.pixels x
-
-                Pos _ x ->
+                Pos _ x _ ->
                     Pixels.pixels x
 
         targetVelocity =
@@ -543,10 +509,7 @@ interpolateBetween startTimeInMs previous target targetTimeInMs now maybeLookAhe
                     }
                 , departure =
                     case previous of
-                        Pos personality _ ->
-                            personality
-
-                        Osc personality _ _ _ ->
+                        Pos personality _ _ ->
                             personality
                 , end =
                     { x = Time.inMilliseconds targetTimeInMs
@@ -558,10 +521,7 @@ interpolateBetween startTimeInMs previous target targetTimeInMs now maybeLookAhe
                     }
                 , arrival =
                     case target of
-                        Pos personality _ ->
-                            personality
-
-                        Osc personality _ _ _ ->
+                        Pos personality _ _ ->
                             personality
                 }
 
@@ -649,160 +609,232 @@ interpolateBetween startTimeInMs previous target targetTimeInMs now maybeLookAhe
 
 
 
-{- OSCILLATOR INTERPOLATION -}
+{- SEQUQENCER
 
 
-oscillate : Float -> Period -> List Checkpoint -> Duration.Duration -> State
-oscillate start period points dwellTime =
-    case points of
-        [] ->
-            { position = Pixels.pixels start
-            , velocity = Pixels.pixelsPerSecond 0
-            }
+   The sequence can be of:
+       Float
+       Color
+       Frame
 
-        _ ->
-            let
-                totalPeriodDuration =
-                    case period of
-                        Loop periodDuration ->
-                            periodDuration
+   We generally want a velocity and a value out of this.
 
-                        Repeat _ periodDuration ->
-                            periodDuration
+        - velocity -> predict how fast we should be going as we arrive into this state.
+        - position -> where are we
 
-                -- _ = Debug.log "PERIODS"
-                --     { dur = totalPeriodDuration
-                --     , dwellTime = dwellTime
-                --     , periodPercentage = percentage
-                --     }
-                percentage =
-                    case period of
-                        Loop periodDuration ->
-                            wrapUnitAfter periodDuration dwellTime
+    For Color and Frame, we care only about `progress` between two values
 
-                        Repeat n periodDuration ->
-                            let
-                                iterationTimeMS =
-                                    Duration.inMilliseconds periodDuration
-
-                                totalMS =
-                                    Duration.inMilliseconds dwellTime
-
-                                iteration =
-                                    floor (totalMS / iterationTimeMS)
-                            in
-                            if iteration >= n then
-                                1
-
-                            else
-                                wrapUnitAfter periodDuration dwellTime
-            in
-            oscillateHelper totalPeriodDuration start points percentage 0 dwellTime
+-}
 
 
-oscillateHelper periodDuration previous points currentTime previousTime dwellTime =
-    case points of
-        [] ->
-            { position = Pixels.pixels previous
-            , velocity = Pixels.pixelsPerSecond 0
-            }
-
-        checkpoint :: remaining ->
-            if currentTime > checkpoint.time then
-                oscillateHelper periodDuration checkpoint.value remaining currentTime checkpoint.time dwellTime
-
-            else
-                let
-                    -- _ = Debug.log "OSCILLATION" (progress, end)
-                    -- _ = Debug.log "times"
-                    --     { currentTime = currentTime
-                    --     , previousTime = previousTime
-                    --     , checkpoint = checkpoint.time
-                    --     , subPeriod = subPeriodDuration
-                    --     , progress = progress
-                    --     }
-                    progress =
-                        (currentTime - previousTime)
-                            / (checkpoint.time - previousTime)
-
-                    end =
-                        case remaining of
-                            [] ->
-                                1
-
-                            next :: _ ->
-                                next.time
-
-                    -- This is the duration of the current section we're on
-                    -- which is only a piece of the total repeating pattern
-                    subPeriodDuration =
-                        Quantity.multiplyBy (end - checkpoint.time) periodDuration
-                in
-                atTiming subPeriodDuration checkpoint.timing dwellTime previous checkpoint.value
+zeroVelocity : PixelsPerSecond
+zeroVelocity =
+    Pixels.pixelsPerSecond 0
 
 
-atTiming subPeriodDuration timing time start target =
-    case timing of
-        Linear ->
-            let
-                -- BUGBUG this needs to be calculated from time
-                percent =
-                    0.5
-            in
-            { position = Pixels.pixels (linear start target percent)
-            , velocity =
-                Pixels.pixelsPerSecond
-                    ((target - start)
-                        / Duration.inSeconds subPeriodDuration
-                    )
-            }
+initialSequenceVelocity : Sequence value -> PixelsPerSecond
+initialSequenceVelocity seq =
+    case seq of
+        Repeat 0 _ ->
+            zeroVelocity
 
-        Bezier spline ->
-            let
-                -- totalMs = Duration.inMilliseconds subPeriodDuration
-                -- time = totalMs * percent
-                -- percent = 25
-                -- _ = Debug.log "AT TIMEING"
-                --     { period = subPeriodDuration
-                --     -- , percent = percent
-                --     , timing = spline
-                --     , start = start
-                --     , target = target
-                --     , current = current
-                --     , time = time
-                --     }
-                current =
-                    Bezier.atX (Duration.inMilliseconds time) spline
+        Repeat _ [] ->
+            zeroVelocity
 
-                firstDerivative =
-                    let
-                        t =
-                            -- at t == 0, the first derivative vector will always be 0,0
-                            -- so we cheat in slightly.
-                            if Duration.inMilliseconds time == 0 then
-                                0.001
+        Repeat n ((Wait _) :: _) ->
+            zeroVelocity
 
-                            else
-                                current.t
-                    in
-                    Bezier.firstDerivative spline t
-            in
-            { position =
-                Pixels.pixels
-                    current.point.y
-            , velocity =
-                -- rescale velocity so that it's pixels/second
-                -- `createSpline` scales this vector sometimes, we need to ensure it's the right size.
-                if firstDerivative.x == 0 then
-                    Pixels.pixelsPerSecond 0
+        Repeat n ((Step dur transition _) :: _) ->
+            Transition.initialVelocity transition
+                |> (*) 1000
+                |> Pixels.pixelsPerSecond
 
-                else
-                    (firstDerivative.y / firstDerivative.x)
-                        |> (*) 1000
-                        |> Pixels.pixelsPerSecond
 
-            --  Pixels.pixelsPerSecond 0
-            }
+{-| -}
+sequence :
+    Float
+    -> Sequence Float
+    -> Duration.Duration
+    -> State
+sequence start seq duration =
+    Debug.todo ""
+
+
+{-| -}
+sequenceProgress :
+    value
+    -> Sequence value
+    -> Duration.Duration
+    ->
+        { progress : Float
+        , before : value
+        , after : value
+        }
+sequenceProgress start seq duration =
+    Debug.todo ""
+
+
+
+{- OSCILLATOR INTERPOLATION
+
+   THIS NEEDS TO BE REWRITTEN TO USE SEQUENCE
+
+
+       oscillate : Float -> Period -> List Checkpoint -> Duration.Duration -> State
+       oscillate start period points dwellTime =
+           case points of
+               [] ->
+                   { position = Pixels.pixels start
+                   , velocity = Pixels.pixelsPerSecond 0
+                   }
+
+               _ ->
+                   let
+                       totalPeriodDuration =
+                           case period of
+                               Loop periodDuration ->
+                                   periodDuration
+
+                               Repeat _ periodDuration ->
+                                   periodDuration
+
+                       -- _ = Debug.log "PERIODS"
+                       --     { dur = totalPeriodDuration
+                       --     , dwellTime = dwellTime
+                       --     , periodPercentage = percentage
+                       --     }
+                       percentage =
+                           case period of
+                               Loop periodDuration ->
+                                   wrapUnitAfter periodDuration dwellTime
+
+                               Repeat n periodDuration ->
+                                   let
+                                       iterationTimeMS =
+                                           Duration.inMilliseconds periodDuration
+
+                                       totalMS =
+                                           Duration.inMilliseconds dwellTime
+
+                                       iteration =
+                                           floor (totalMS / iterationTimeMS)
+                                   in
+                                   if iteration >= n then
+                                       1
+
+                                   else
+                                       wrapUnitAfter periodDuration dwellTime
+                   in
+                   oscillateHelper totalPeriodDuration start points percentage 0 dwellTime
+
+
+       oscillateHelper periodDuration previous points currentTime previousTime dwellTime =
+           case points of
+               [] ->
+                   { position = Pixels.pixels previous
+                   , velocity = Pixels.pixelsPerSecond 0
+                   }
+
+               checkpoint :: remaining ->
+                   if currentTime > checkpoint.time then
+                       oscillateHelper periodDuration checkpoint.value remaining currentTime checkpoint.time dwellTime
+
+                   else
+                       let
+                           -- _ = Debug.log "OSCILLATION" (progress, end)
+                           -- _ = Debug.log "times"
+                           --     { currentTime = currentTime
+                           --     , previousTime = previousTime
+                           --     , checkpoint = checkpoint.time
+                           --     , subPeriod = subPeriodDuration
+                           --     , progress = progress
+                           --     }
+                           progress =
+                               (currentTime - previousTime)
+                                   / (checkpoint.time - previousTime)
+
+                           end =
+                               case remaining of
+                                   [] ->
+                                       1
+
+                                   next :: _ ->
+                                       next.time
+
+                           -- This is the duration of the current section we're on
+                           -- which is only a piece of the total repeating pattern
+                           subPeriodDuration =
+                               Quantity.multiplyBy (end - checkpoint.time) periodDuration
+                       in
+                       atTiming subPeriodDuration checkpoint.timing dwellTime previous checkpoint.value
+
+
+       atTiming subPeriodDuration timing time start target =
+           case timing of
+               Linear ->
+                   let
+                       -- BUGBUG this needs to be calculated from time
+                       percent =
+                           0.5
+                   in
+                   { position = Pixels.pixels (linear start target percent)
+                   , velocity =
+                       Pixels.pixelsPerSecond
+                           ((target - start)
+                               / Duration.inSeconds subPeriodDuration
+                           )
+                   }
+
+               Bezier spline ->
+                   let
+                       -- totalMs = Duration.inMilliseconds subPeriodDuration
+                       -- time = totalMs * percent
+                       -- percent = 25
+                       -- _ = Debug.log "AT TIMEING"
+                       --     { period = subPeriodDuration
+                       --     -- , percent = percent
+                       --     , timing = spline
+                       --     , start = start
+                       --     , target = target
+                       --     , current = current
+                       --     , time = time
+                       --     }
+                       current =
+                           Bezier.atX (Duration.inMilliseconds time) spline
+
+                       firstDerivative =
+                           let
+                               t =
+                                   -- at t == 0, the first derivative vector will always be 0,0
+                                   -- so we cheat in slightly.
+                                   if Duration.inMilliseconds time == 0 then
+                                       0.001
+
+                                   else
+                                       current.t
+                           in
+                           Bezier.firstDerivative spline t
+                   in
+                   { position =
+                       Pixels.pixels
+                           current.point.y
+                   , velocity =
+                       -- rescale velocity so that it's pixels/second
+                       -- `createSpline` scales this vector sometimes, we need to ensure it's the right size.
+                       if firstDerivative.x == 0 then
+                           Pixels.pixelsPerSecond 0
+
+                       else
+                           (firstDerivative.y / firstDerivative.x)
+                               |> (*) 1000
+                               |> Pixels.pixelsPerSecond
+
+                   --  Pixels.pixelsPerSecond 0
+                   }
+
+
+
+-}
 
 
 {-| -}
@@ -815,25 +847,21 @@ newVelocityAtTarget target targetTime maybeLookAhead =
     case maybeLookAhead of
         Nothing ->
             case target of
-                Pos _ _ ->
-                    Pixels.pixelsPerSecond 0
+                Pos _ _ Nothing ->
+                    zeroVelocity
 
-                Osc _ x period points ->
-                    oscillate x period points (Duration.milliseconds 0)
-                        |> .velocity
+                Pos _ _ (Just seq) ->
+                    initialSequenceVelocity seq
 
         Just lookAhead ->
             let
                 targetPosition =
                     case target of
-                        Osc _ x period movement ->
-                            Pixels.pixels x
-
-                        Pos _ x ->
+                        Pos _ x _ ->
                             Pixels.pixels x
             in
             case lookAhead.anchor of
-                Pos _ aheadPosition ->
+                Pos _ aheadPosition Nothing ->
                     -- our target velocity is the linear velocity between target and lookahead
                     velocityBetween
                         targetPosition
@@ -841,16 +869,15 @@ newVelocityAtTarget target targetTime maybeLookAhead =
                         (Pixels.pixels aheadPosition)
                         lookAhead.time
 
-                Osc _ x period points ->
+                Pos _ aheadPosition (Just seq) ->
                     if lookAhead.resting then
-                        oscillate x period points (Duration.milliseconds 0)
-                            |> .velocity
+                        initialSequenceVelocity seq
 
                     else
                         velocityBetween
                             targetPosition
                             targetTime
-                            (Pixels.pixels x)
+                            (Pixels.pixels aheadPosition)
                             lookAhead.time
 
 

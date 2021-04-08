@@ -200,6 +200,7 @@ zero =
     Interpolate.Pos
         Interpolate.standardDefault
         0
+        Nothing
 
 
 colorHash : Color.Color -> String

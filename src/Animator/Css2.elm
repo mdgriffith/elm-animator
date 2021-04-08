@@ -101,7 +101,7 @@ opacity o =
     Css.Prop
         Internal.Css.Props.ids.opacity
         "opacity"
-        (Interpolate.Pos Interpolate.standardDefault o)
+        (Interpolate.Pos Interpolate.standardDefault o Nothing)
         Internal.Css.Props.float
 
 
@@ -111,7 +111,7 @@ scale s =
     Css.Prop
         Internal.Css.Props.ids.scale
         ""
-        (Interpolate.Pos Interpolate.standardDefault s)
+        (Interpolate.Pos Interpolate.standardDefault s Nothing)
         Internal.Css.Props.float
 
 
@@ -121,7 +121,7 @@ scaleX s =
     Css.Prop
         Internal.Css.Props.ids.scaleX
         ""
-        (Interpolate.Pos Interpolate.standardDefault s)
+        (Interpolate.Pos Interpolate.standardDefault s Nothing)
         Internal.Css.Props.float
 
 
@@ -131,7 +131,7 @@ scaleY s =
     Css.Prop
         Internal.Css.Props.ids.scaleY
         ""
-        (Interpolate.Pos Interpolate.standardDefault s)
+        (Interpolate.Pos Interpolate.standardDefault s Nothing)
         Internal.Css.Props.float
 
 
@@ -141,7 +141,7 @@ rotation n =
     Css.Prop
         Internal.Css.Props.ids.rotation
         ""
-        (Interpolate.Pos Interpolate.standardDefault n)
+        (Interpolate.Pos Interpolate.standardDefault n Nothing)
         Internal.Css.Props.float
 
 
@@ -151,7 +151,7 @@ x n =
     Css.Prop
         Internal.Css.Props.ids.x
         ""
-        (Interpolate.Pos Interpolate.standardDefault n)
+        (Interpolate.Pos Interpolate.standardDefault n Nothing)
         Internal.Css.Props.float
 
 
@@ -161,7 +161,7 @@ y n =
     Css.Prop
         Internal.Css.Props.ids.y
         ""
-        (Interpolate.Pos Interpolate.standardDefault n)
+        (Interpolate.Pos Interpolate.standardDefault n Nothing)
         Internal.Css.Props.float
 
 
@@ -241,7 +241,7 @@ px name n =
     Css.Prop
         Internal.Css.Props.noId
         name
-        (Interpolate.Pos Interpolate.standardDefault n)
+        (Interpolate.Pos Interpolate.standardDefault n Nothing)
         Internal.Css.Props.px
 
 
@@ -251,7 +251,7 @@ int name n =
     Css.Prop
         Internal.Css.Props.noId
         name
-        (Interpolate.Pos Interpolate.standardDefault n)
+        (Interpolate.Pos Interpolate.standardDefault n Nothing)
         Internal.Css.Props.int
 
 
@@ -261,7 +261,7 @@ float name n =
     Css.Prop
         Internal.Css.Props.noId
         name
-        (Interpolate.Pos Interpolate.standardDefault n)
+        (Interpolate.Pos Interpolate.standardDefault n Nothing)
         Internal.Css.Props.float
 
 
