@@ -149,9 +149,20 @@ atX progress domain introVelocity exitVelocity transition =
             onTrail progress domain introVelocity exitVelocity trail
 
         Wobble wobble ->
-            { position = domain.end.y
-            , velocity = 0
-            }
+            let
+                totalX =
+                    domain.end.x - domain.start.x
+
+                params =
+                    Spring.select wobble
+                        (Quantity.Quantity totalX)
+            in
+            Spring.analytical params
+                (Quantity.Quantity (totalX * progress))
+                domain.end.y
+                { position = domain.start.y
+                , velocity = introVelocity
+                }
 
 
 posVel progress spline =
