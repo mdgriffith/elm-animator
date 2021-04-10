@@ -1,25 +1,12 @@
 module Internal.Bezier exposing
-    ( Point
-    , Spline(..)
+    ( Spline(..), Point, hash, normalize
+    , atX, pointOn
+    , firstX, firstY, lastX, lastY
+    , firstDerivative, secondDerivative
+    , splitAt, splitAtX, splitList, takeBefore
     , addX
-    , afterLastX
-    , atX
-    , cssTimingString
-    , doesNotMove
-    , firstDerivative
-    , firstX
-    , firstY
-    , hash
-    , lastX
-    , lastY
-    , normalize
-    , pointOn
-    , secondDerivative
-    , splitAt
-    , splitAtX
-    , splitList
-    , takeBefore
-    , withinX
+    , doesNotMove, afterLastX
+    , toPath, cssTimingString
     )
 
 {-| This module defines types and functions for cubic bezier splines.
@@ -32,9 +19,53 @@ However! It's definitely a package worth checking out!
 
 Thanks Ian!
 
+@docs Spline, Point, hash, normalize
+
+@docs atX, pointOn
+
+@docs firstX, firstY, lastX, lastY
+
+@docs firstDerivative, secondDerivative
+
+@docs splitAt, splitAtX, splitList, takeBefore
+
+@docs addX
+
+@docs doesNotMove, afterLastX
+
+@docs toPath, cssTimingString
+
 -}
 
 import Internal.Bits as Bits
+
+
+
+{-
+   Current bezier formats for elm-animator
+
+
+       Standard:
+           x -> Time.Absolute in milliseconds
+           y -> actual value being animated
+
+        Alternatively we could store beziers in a normalized form
+
+        Normalized:
+            x -> 0-256
+            y -> 0-256
+
+        And then scale it to the duration and value domain we're expecting.
+
+        We can also assume that this is an easing that starts at 0,0 and ends at 256,256
+            (or maybe there are multiple control points in-between.
+
+        For transitions:
+            If we are passing through a state,
+            we want to be able to set the velocity for the before and after curve
+
+
+-}
 
 
 {-| Number betwen 0 and 1
@@ -52,6 +83,29 @@ hash (Spline one two three four) =
     String.fromInt (Bits.value (Bits.store4Float one.x one.y two.x two.y))
         ++ dash
         ++ String.fromInt (Bits.value (Bits.store4Float three.x three.y four.x four.y))
+
+
+{-|
+
+    -- (M100,250 C100,100 400,100 400,250)
+
+
+
+-}
+toPath : Spline -> String
+toPath (Spline one two three four) =
+    String.join " "
+        [ "M" ++ pathPoint one
+        , "C" ++ pathPoint two
+        , pathPoint three
+        , pathPoint four
+        ]
+
+
+pathPoint : Point -> String
+pathPoint point =
+    String.fromFloat point.x
+        ++ ("," ++ String.fromFloat point.y)
 
 
 floatStr : Float -> String
@@ -117,35 +171,45 @@ dash =
 
 
 doesNotMove : Spline -> Bool
-doesNotMove (Spline first one two last) =
-    (first.x == last.x)
-        && (one.x == first.x)
+doesNotMove (Spline fst one two lst) =
+    (fst.x == lst.x)
+        && (one.x == fst.x)
         && (two.x == two.x)
 
 
+first : Spline -> Point
+first (Spline f _ _ _) =
+    f
+
+
 firstY : Spline -> Float
-firstY (Spline first _ _ _) =
-    first.y
-
-
-lastY : Spline -> Float
-lastY (Spline _ _ _ last) =
-    last.y
+firstY (Spline fst _ _ _) =
+    fst.y
 
 
 firstX : Spline -> Float
-firstX (Spline first _ _ _) =
-    first.x
+firstX (Spline fst _ _ _) =
+    fst.x
+
+
+last : Spline -> Point
+last (Spline _ _ _ l) =
+    l
 
 
 lastX : Spline -> Float
-lastX (Spline _ _ _ last) =
-    last.x
+lastX (Spline _ _ _ lst) =
+    lst.x
+
+
+lastY : Spline -> Float
+lastY (Spline _ _ _ lst) =
+    lst.y
 
 
 afterLastX : Float -> Spline -> Bool
-afterLastX a (Spline _ _ _ last) =
-    a > last.x
+afterLastX a (Spline _ _ _ lst) =
+    a > lst.x
 
 
 zeroPoint : Point
@@ -165,6 +229,13 @@ scaleBy : Float -> Point -> Point
 scaleBy n { x, y } =
     { x = x * n
     , y = y * n
+    }
+
+
+scaleXYBy : Point -> Point -> Point
+scaleXYBy scale { x, y } =
+    { x = x * scale.x
+    , y = y * scale.y
     }
 
 
