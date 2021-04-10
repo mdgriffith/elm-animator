@@ -7,7 +7,7 @@ module Internal.Timeline exposing
     , progress, dwellingTime
     , current, arrivedAt, arrived, previous, upcoming
     , Line(..), Timetable(..)
-    , foldp, capture, captureTimeline
+    , foldp, captureTimeline
     , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), atTime, foldpAll, foldpOld, gc, getCurrentTime, hasChanged, isDuring, isOnce, justInitialized, linearDefault, linesAreActive, mapLookAhead, periodDuration, previousEndTime, previousStartTime, reduceIterations, updateWith
     )
 
@@ -29,7 +29,7 @@ module Internal.Timeline exposing
 
 @docs Line, Timetable
 
-@docs foldp, capture, captureTimeline
+@docs foldp, captureTimeline
 
 -}
 
@@ -176,10 +176,8 @@ Examples:
 -}
 type alias Interp state anchor motion =
     { start : anchor -> motion
-    , adjustor : GetPersonality anchor
-    , dwellPeriod : DwellPeriod anchor
     , visit : Visit state anchor motion
-    , lerp : Lerp anchor motion
+    , transition : Lerp anchor motion
     }
 
 
@@ -292,102 +290,6 @@ extendEventDwell extendBy ((Event at ev maybeDwell) as thisEvent) =
 hasDwell : Occurring event -> Bool
 hasDwell (Occurring _ (Quantity.Quantity start) (Quantity.Quantity end)) =
     (start - end) /= 0
-
-
-adjustTime : (event -> anchor) -> GetPersonality anchor -> Occurring event -> List (Occurring event) -> Occurring event
-adjustTime lookup getPersonality ((Occurring event start eventEnd) as unmodified) upcomingOccurring =
-    case upcomingOccurring of
-        [] ->
-            unmodified
-
-        (Occurring next nextStartTime _) :: _ ->
-            let
-                personality =
-                    getPersonality (lookup event)
-            in
-            if personality.departLate /= 0 then
-                let
-                    totalDuration =
-                        Time.duration eventEnd nextStartTime
-
-                    nextPersonality =
-                        getPersonality (lookup next)
-
-                    -- if portions sum to more than 1, then that sum represents the full duration
-                    totalPortions =
-                        max
-                            (personality.departLate + nextPersonality.arriveEarly)
-                            1
-
-                    lateBy =
-                        Quantity.multiplyBy
-                            (personality.departLate / totalPortions)
-                            totalDuration
-                in
-                Occurring event start (Time.advanceBy lateBy eventEnd)
-
-            else
-                unmodified
-
-
-adjustTimeWithPrevious : (event -> anchor) -> GetPersonality anchor -> Occurring event -> Occurring event -> List (Occurring event) -> Occurring event
-adjustTimeWithPrevious lookup getPersonality (Occurring prev prevStart prevEnd) ((Occurring event start eventEnd) as unmodified) upcomingOccurring =
-    let
-        personality =
-            getPersonality (lookup event)
-
-        prevPersonality =
-            getPersonality (lookup prev)
-
-        totalPrevDuration =
-            Time.duration prevEnd start
-
-        -- if portions sum to more than 1, then that sum represents the full duration
-        totalPrevPortions =
-            max
-                (prevPersonality.departLate + personality.arriveEarly)
-                1
-
-        earlyBy =
-            Quantity.multiplyBy
-                (personality.arriveEarly / totalPrevPortions)
-                totalPrevDuration
-    in
-    case upcomingOccurring of
-        [] ->
-            if Time.zeroDuration earlyBy then
-                unmodified
-
-            else
-                Occurring event (Time.rollbackBy earlyBy start) eventEnd
-
-        (Occurring next nextStartTime _) :: _ ->
-            if personality.departLate /= 0 then
-                let
-                    totalDuration =
-                        Time.duration eventEnd nextStartTime
-
-                    nextPersonality =
-                        getPersonality (lookup next)
-
-                    -- if portions sum to more than 1, then that sum represents the full duration
-                    totalPortions =
-                        max
-                            (personality.departLate + nextPersonality.arriveEarly)
-                            1
-
-                    lateBy =
-                        Quantity.multiplyBy
-                            (personality.departLate / totalPortions)
-                            totalDuration
-                in
-                Occurring event (Time.rollbackBy earlyBy start) (Time.advanceBy lateBy eventEnd)
-
-            else if Time.zeroDuration earlyBy then
-                unmodified
-
-            else
-                Occurring event (Time.rollbackBy earlyBy start) eventEnd
 
 
 startTime : Occurring event -> Time.Absolute
@@ -1296,7 +1198,7 @@ visitAll transitionOngoing toAnchor interp details prev states future state =
                     let
                         lerped =
                             state
-                                |> interp.lerp
+                                |> interp.transition
                                     (endTime prev)
                                     (toAnchor (getEvent prev))
                                     (toAnchor (getEvent futureEvent))
@@ -1364,7 +1266,7 @@ visitAll transitionOngoing toAnchor interp details prev states future state =
                         let
                             lerped =
                                 state
-                                    |> interp.lerp
+                                    |> interp.transition
                                         (endTime prev)
                                         (toAnchor (getEvent prev))
                                         (toAnchor (getEvent top))
@@ -1377,7 +1279,7 @@ visitAll transitionOngoing toAnchor interp details prev states future state =
                                             next :: _ ->
                                                 Just (lookAhead toAnchor next)
                                         )
-                                    |> interp.lerp
+                                    |> interp.transition
                                         futureStart
                                         (toAnchor (getEvent prev))
                                         (toAnchor (getEvent futureEvent))
@@ -1496,7 +1398,7 @@ throughLines transitionOngoing now toAnchor interp details prev states future st
                                     state
 
                         lerped =
-                            interp.lerp
+                            interp.transition
                                 interruptionTime
                                 (toAnchor (getEvent prev))
                                 (toAnchor (getEvent futureEvent))
@@ -1588,7 +1490,7 @@ throughLines transitionOngoing now toAnchor interp details prev states future st
                                     start
 
                             lerped =
-                                interp.lerp
+                                interp.transition
                                     interruptionTime
                                     (toAnchor (getEvent actualPrevious))
                                     (toAnchor (getEvent futureEvent))
@@ -1686,7 +1588,7 @@ throughLines transitionOngoing now toAnchor interp details prev states future st
                                         (Just (lookAhead toAnchor next))
                                         state
                         in
-                        interp.lerp
+                        interp.transition
                             (endTime start)
                             (toAnchor (getEvent start))
                             (toAnchor (getEvent next))
@@ -1773,7 +1675,7 @@ throughLines transitionOngoing now toAnchor interp details prev states future st
                                     start
 
                             lerped =
-                                interp.lerp
+                                interp.transition
                                     interruptionTime
                                     (toAnchor (getEvent actualPrevious))
                                     (toAnchor (getEvent futureEvent))
@@ -1824,7 +1726,7 @@ throughLines transitionOngoing now toAnchor interp details prev states future st
 
                             lerped =
                                 visited
-                                    |> interp.lerp
+                                    |> interp.transition
                                         (endTime actualPrevious)
                                         (toAnchor (getEvent actualPrevious))
                                         (toAnchor (getEvent next))
@@ -1837,7 +1739,7 @@ throughLines transitionOngoing now toAnchor interp details prev states future st
                                             upcomingEvent :: _ ->
                                                 Just (lookAhead toAnchor upcomingEvent)
                                         )
-                                    |> interp.lerp
+                                    |> interp.transition
                                         interruptionTime
                                         (toAnchor (getEvent actualPrevious))
                                         (toAnchor (getEvent futureEvent))
@@ -1963,7 +1865,7 @@ createLookAhead fn lookup currentEvent upcomingEvents =
         unadjustedUpcoming :: remain ->
             let
                 upcomingOccurring =
-                    adjustTimeWithPrevious lookup fn.adjustor currentEvent unadjustedUpcoming remain
+                    unadjustedUpcoming
             in
             Just
                 { anchor = lookup (getEvent upcomingOccurring)
@@ -2029,17 +1931,12 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                         details.now
 
         lineStartEv =
-            case maybePreviousEvent of
-                Nothing ->
-                    adjustTime lookup fn.adjustor unadjustedStartEvent lineRemain
-
-                Just prev ->
-                    adjustTimeWithPrevious lookup fn.adjustor prev unadjustedStartEvent lineRemain
+            unadjustedStartEvent
     in
     if Time.thisBeforeThat now (startTime lineStartEv) then
         -- lerp from state to lineStartEv
         -- now is before the first event start time.
-        fn.lerp
+        fn.transition
             lineStart
             (case maybePreviousEvent of
                 Nothing ->
@@ -2081,12 +1978,12 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
             unadjustedNext :: lineRemain2 ->
                 let
                     next =
-                        adjustTimeWithPrevious lookup fn.adjustor unadjustedStartEvent unadjustedNext lineRemain2
+                        unadjustedNext
                 in
                 if Time.thisBeforeThat now (startTime next) then
                     -- Before next.startTime
                     --     -> lerp start to next
-                    fn.lerp
+                    fn.transition
                         (endTime lineStartEv)
                         (lookup (getEvent lineStartEv))
                         (lookup (getEvent next))
@@ -2129,12 +2026,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                         unadjustedNext2 :: lineRemain3 ->
                             let
                                 next2 =
-                                    adjustTimeWithPrevious
-                                        lookup
-                                        fn.adjustor
-                                        unadjustedNext
-                                        unadjustedNext2
-                                        lineRemain3
+                                    unadjustedNext2
                             in
                             if Time.thisBeforeThat now (startTime next2) then
                                 let
@@ -2145,7 +2037,7 @@ overLines fn lookup details maybePreviousEvent (Line lineStart unadjustedStartEv
                                             (createLookAhead fn lookup unadjustedNext lineRemain2)
                                             state
                                 in
-                                fn.lerp
+                                fn.transition
                                     -- next end time?
                                     (endTime next)
                                     (lookup (getEvent next))
@@ -2203,139 +2095,6 @@ type alias FramesSummary motion =
 
 type Frame motion
     = Frame Float motion
-
-
-type alias FramesPerSecond =
-    Float
-
-
-capture :
-    FramesPerSecond
-    -> (state -> anchor)
-    -> Interp state anchor motion
-    -> Timeline state
-    -> FramesSummary motion
-capture fps lookup fn (Timeline timelineDetails) =
-    case timelineDetails.events of
-        Timetable timetable ->
-            let
-                start =
-                    fn.start (lookup timelineDetails.initial)
-            in
-            case timetable of
-                [] ->
-                    { frames = [ Frame 1 start ]
-                    , duration = zeroDuration
-                    , dwell = Nothing
-                    }
-
-                firstLine :: remainingLines ->
-                    let
-                        lastEvent =
-                            findLastEventInLines firstLine remainingLines
-
-                        ( _, numberOfFrames ) =
-                            if Time.thisAfterThat timelineDetails.now (startTime lastEvent) then
-                                ( 0, 1 )
-
-                            else
-                                Time.numberOfFrames fps
-                                    timelineDetails.now
-                                    timelineDetails.now
-                                    (startTime lastEvent)
-
-                        millisecondsPerFrame =
-                            1000 / fps
-
-                        frames =
-                            getFrames (startTime lastEvent)
-                                { perFrame =
-                                    Duration.milliseconds millisecondsPerFrame
-                                , offset = 0
-                                , startTime = timelineDetails.now
-                                , endTime = startTime lastEvent
-                                }
-                                (\currentTime ->
-                                    overLines
-                                        fn
-                                        lookup
-                                        -- maybe we break this out to a separate param to avoid updating?
-                                        { timelineDetails | now = currentTime }
-                                        Nothing
-                                        firstLine
-                                        remainingLines
-                                        start
-                                )
-                                []
-                    in
-                    { frames = frames
-                    , duration =
-                        if Time.thisAfterThat timelineDetails.now (startTime lastEvent) then
-                            zeroDuration
-
-                        else
-                            Time.duration timelineDetails.now (startTime lastEvent)
-                    , dwell =
-                        case fn.dwellPeriod (lookup (getEvent lastEvent)) of
-                            Nothing ->
-                                Nothing
-
-                            Just period ->
-                                let
-                                    dwellStartTime =
-                                        startTime lastEvent
-
-                                    endAt =
-                                        case period of
-                                            Repeat n totalDur ->
-                                                Time.advanceBy totalDur dwellStartTime
-
-                                            Loop totalDur ->
-                                                Time.advanceBy totalDur dwellStartTime
-
-                                    lastConcreteState =
-                                        overLines
-                                            fn
-                                            lookup
-                                            -- maybe we break this out to a separate param to avoid updating?
-                                            { timelineDetails | now = dwellStartTime }
-                                            Nothing
-                                            firstLine
-                                            remainingLines
-                                            start
-
-                                    lastEventEv =
-                                        lookup (getEvent lastEvent)
-
-                                    ( dwellOffset, numberOfDwellFrames ) =
-                                        Time.numberOfFrames fps
-                                            -- TODO: we might need some sort of correction
-                                            -- frames.lastFrameTime
-                                            dwellStartTime
-                                            dwellStartTime
-                                            endAt
-
-                                    dwellFrames =
-                                        getFrames endAt
-                                            { perFrame = Duration.milliseconds millisecondsPerFrame
-                                            , offset = dwellOffset
-                                            , startTime = dwellStartTime
-                                            , endTime = endAt
-                                            }
-                                            (\currentTime ->
-                                                fn.visit lookup
-                                                    lastEvent
-                                                    currentTime
-                                                    Nothing
-                                                    lastConcreteState
-                                            )
-                                            []
-                                in
-                                Just
-                                    { period = period
-                                    , frames = dwellFrames
-                                    }
-                    }
 
 
 type alias Summary event =
@@ -2578,14 +2337,10 @@ arrived ((Timeline details) as timeline) =
         { start =
             \_ ->
                 details.initial
-        , dwellPeriod = \_ -> Nothing
-        , adjustor =
-            \_ ->
-                linearDefault
         , visit =
             \lookup target targetTime maybeLookAhead state ->
                 getEvent target
-        , lerp =
+        , transition =
             \prevEndTime prev target targetTime now maybeLookAhead state ->
                 prev
         }
@@ -2599,14 +2354,10 @@ current ((Timeline details) as timeline) =
         { start =
             \_ ->
                 details.initial
-        , dwellPeriod = \_ -> Nothing
-        , adjustor =
-            \_ ->
-                linearDefault
         , visit =
             \lookup target now maybeLookAhead state ->
                 getEvent target
-        , lerp =
+        , transition =
             \_ maybePrevious target _ _ _ state ->
                 target
         }
@@ -2623,17 +2374,13 @@ previous ((Timeline details) as timeline) =
                 , current = start
                 , transitioning = False
                 }
-        , dwellPeriod = \_ -> Nothing
-        , adjustor =
-            \_ ->
-                linearDefault
         , visit =
             \lookup target now maybeLookAhead state ->
                 { current = lookup (getEvent target)
                 , prev = state.current
                 , transitioning = False
                 }
-        , lerp =
+        , transition =
             \lookup prev target _ _ _ state ->
                 -- if we've begun trasitioning to another state,
                 -- then the previous state is the last visited.
@@ -2660,15 +2407,11 @@ arrivedAt matches newTime (Timeline details) =
         { start =
             \_ ->
                 False
-        , dwellPeriod = \_ -> Nothing
-        , adjustor =
-            \_ ->
-                linearDefault
         , visit =
             \lookup target _ maybeLookAhead state ->
                 matches (getEvent target)
                     && Time.thisBeforeThat details.now (startTime target)
-        , lerp =
+        , transition =
             \_ _ target targetTime now _ state ->
                 state
                     || (matches target
@@ -2719,15 +2462,11 @@ upcoming matches (Timeline details) =
             { start =
                 \_ ->
                     False
-            , dwellPeriod = \_ -> Nothing
-            , adjustor =
-                \_ ->
-                    linearDefault
             , visit =
                 \lookup target _ maybeLookAhead state ->
                     matches (getEvent target)
                         && Time.thisBeforeThat details.now (startTime target)
-            , lerp =
+            , transition =
                 \_ _ target targetTime _ _ state ->
                     state
                         || (matches target
@@ -2744,10 +2483,6 @@ status ((Timeline details) as timeline) =
         { start =
             \_ ->
                 Transitioning 0
-        , dwellPeriod = \_ -> Nothing
-        , adjustor =
-            \_ ->
-                linearDefault
         , visit =
             \lookup (Occurring event start eventEnd) now maybeLookAhead state ->
                 let
@@ -2764,7 +2499,7 @@ status ((Timeline details) as timeline) =
 
                 else
                     Dwelling dwellTime
-        , lerp =
+        , transition =
             \prevEndTime maybePrev target targetTime now maybeLookAhead state ->
                 -- target
                 -- Transitioning 0

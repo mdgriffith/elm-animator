@@ -10,6 +10,7 @@ import Internal.Css.Props
 import Internal.Interpolate as Interpolate
 import Internal.Time as Time
 import Internal.Timeline as Timeline
+import Internal.Transition as Transition
 import Pixels
 import Set exposing (Set)
 
@@ -148,19 +149,13 @@ scanProps =
     { start =
         \props ->
             add props [] Set.empty Set.empty
-    , adjustor =
-        \_ ->
-            Timeline.linearDefault
-    , dwellPeriod =
-        \_ ->
-            Nothing
     , visit =
         \lookup target targetTime maybeLookAhead data ->
             add (lookup (Timeline.getEvent target))
                 data.props
                 data.cache.name
                 data.cache.id
-    , lerp =
+    , transition =
         \prevEndTime prev target targetTime interruptedAt maybeLookAhead data ->
             add target data.props data.cache.name data.cache.id
     }
@@ -752,7 +747,7 @@ renderLastPoint props rendered =
                     Internal.Css.Props.toStr prop.id
 
                 val =
-                    renderValue (Bezier.firstX prop.spline)
+                    renderValue (Bezier.lastX prop.spline)
 
                 new =
                     case rendered of
@@ -762,120 +757,7 @@ renderLastPoint props rendered =
                         _ ->
                             rendered ++ " " ++ val
             in
-            renderFirstPoint remain new
-
-
-{-| Render the exact points with a linear timing function. instead of relying on a cubic-bezier.
--}
-transformHelperExact : List RenderedProp -> Id -> ( CssAnim, List RenderedProp )
-transformHelperExact props expecting =
-    case props of
-        [] ->
-            ( emptyAnim, [] )
-
-        top :: remain ->
-            ( emptyAnim
-            , []
-            )
-
-
-pivotTransform :
-    List RenderedProp
-    ->
-        List
-            { conflicting : Bool
-            , sections :
-                List
-                    { id : Id
-                    , section : Section
-                    }
-            }
-pivotTransform props =
-    case props of
-        [] ->
-            []
-
-        _ ->
-            []
-
-
-{-| Transforms are weird because we can only render one timing-fn.
-
-However, transforms are only in direct conflict some of the times.
-
-The common behaviors are:
-
-    translate -> 2 properties, each rendered with standardDefault personality
-    scale -> 1 property, as standardDefault
-    rotation -> usually *not* transitioned between concrete values,
-        but could be rotating at a certain speed. when the state is at rest
-
-first prop renderedProp
-for each prop.section:
-for other props:
-other.id
-other.section
-
-            =>
-
-for prop each renderedprop:
-prop.sections
-
--- we have sectionKeyframes
-sectionKeyFrames :
-Time.Absolute
--> Time.Absolute
--> Time.Absolute
--> String
--> (Float -> String)
--> List Bezier.Spline
--> String
--> String
-
-we have:
-List (Id, List Section)
-
-we want
-List (List (Id, Section))
-
-    transform : List RenderedProp -> List (List ( Id, Section ))
-
-And then
-
--}
-transformHelper :
-    List
-        { conflicting : Bool
-        , sections :
-            List
-                { id : Id
-                , section : Section
-                }
-        }
-    -> CssAnim
-transformHelper props =
-    case props of
-        [] ->
-            emptyAnim
-
-        group :: remain ->
-            let
-                renderdSectionGroup =
-                    if group.conflicting then
-                        --
-                        group
-
-                    else
-                        group
-            in
-            emptyAnim
-
-
-compound : List RenderedProp -> CssAnim
-compound props =
-    -- if
-    --
-    emptyAnim
+            renderLastPoint remain new
 
 
 scalars : Renderer
@@ -1257,12 +1139,6 @@ toPropCurves only =
                 startProps only props Nothing []
             , previous = Nothing
             }
-    , adjustor =
-        \_ ->
-            Timeline.linearDefault
-    , dwellPeriod =
-        \_ ->
-            Nothing
     , visit =
         \lookup target targetTime maybeLookAhead data ->
             { rendered =
@@ -1377,7 +1253,7 @@ toPropCurves only =
                             data.rendered
             , previous = Just target
             }
-    , lerp =
+    , transition =
         \prevEndTime prev target targetTime interruptedAt maybeLookAhead data ->
             { rendered =
                 List.map
@@ -1449,7 +1325,7 @@ toPropCurves only =
                                             rendered.state
                                             rendered.sections
                                     , state =
-                                        Interpolate.moving.lerp
+                                        Interpolate.moving.transition
                                             prevEndTime
                                             previousProp
                                             targetProp
@@ -1992,12 +1868,6 @@ toCurves =
                 Interpolate.moving.start
                     motion
             }
-    , adjustor =
-        \_ ->
-            Timeline.linearDefault
-    , dwellPeriod =
-        \_ ->
-            Nothing
     , visit =
         \lookup target targetTime maybeLookAhead data ->
             { curves =
@@ -2018,7 +1888,7 @@ toCurves =
                     maybeLookAhead
                     data.state
             }
-    , lerp =
+    , transition =
         \prevEndTime prev target targetTime interruptedAt maybeLookAhead data ->
             { curves =
                 toCurvesLerp
@@ -2032,7 +1902,7 @@ toCurves =
                     data.curves
             , previous = Nothing
             , state =
-                Interpolate.moving.lerp
+                Interpolate.moving.transition
                     prevEndTime
                     prev
                     target
@@ -2189,7 +2059,7 @@ lerpCurvesCompoundHelper remainingStates prevEndTime prev target targetTime inte
                         maybeLookAhead
 
                 newState =
-                    Interpolate.moving.lerp
+                    Interpolate.moving.transition
                         prevEndTime
                         prevState
                         targetState
@@ -2206,7 +2076,7 @@ lerpCurvesCompoundHelper remainingStates prevEndTime prev target targetTime inte
                 --         , splines = splines
                 --         }
                 splines =
-                    Interpolate.lerpSplines
+                    Interpolate.transitionSplines
                         interruptedAt
                         prevState
                         targetState
@@ -2455,7 +2325,7 @@ visitCurvesCompoundHelper remainingStates lookup previous target targetTime mayb
                 splines =
                     -- NOTE, we could check movement equality here
                     -- to resolve to stationary
-                    Interpolate.lerpSplines
+                    Interpolate.transitionSplines
                         (Timeline.endTime previous)
                         previousMovement
                         targetMovement
@@ -2554,7 +2424,7 @@ toCurvesVisit lookup target targetTime maybePrevious maybeLookAhead state existi
         Just prev ->
             let
                 visitSplines =
-                    Interpolate.lerpSplines
+                    Interpolate.transitionSplines
                         (Timeline.endTime prev)
                         (lookup (Timeline.getEvent prev))
                         (lookup (Timeline.getEvent target))
@@ -2629,7 +2499,7 @@ toCurvesLerp prevEndTime prev target targetTime interruptedAt maybeLookAhead sta
         --     , interruptedAt = interruptedAt
         --     }
         transitionSplines =
-            Interpolate.lerpSplines
+            Interpolate.transitionSplines
                 prevEndTime
                 prev
                 target
@@ -2665,28 +2535,30 @@ dwellSplines :
     -> List Section
 dwellSplines lookup target startTime existing =
     case lookup (Timeline.getEvent target) of
-        Interpolate.Osc personality startPos period checkpoints ->
-            Section
-                { start = startTime
-                , period =
-                    period
-                , splines =
-                    List.filterMap
-                        (\point ->
-                            case point.timing of
-                                Interpolate.Linear ->
-                                    -- TODO: DO THIS ONE!
-                                    Nothing
-
-                                Interpolate.Bezier spline ->
-                                    Just (Bezier.addX (Time.inMilliseconds startTime) spline)
-                        )
-                        checkpoints
-                }
-                :: existing
-
-        Interpolate.Pos _ _ ->
+        Interpolate.Pos _ _ Nothing ->
             existing
+
+        Interpolate.Pos _ _ (Just seq) ->
+            --  Interpolate.Osc personality startPos period checkpoints ->
+            -- Section
+            --     { start = startTime
+            --     , period =
+            --         period
+            --     , splines =
+            --         List.filterMap
+            --             (\point ->
+            --                 case point.timing of
+            --                     Interpolate.Linear ->
+            --                         -- TODO: DO THIS ONE!
+            --                         Nothing
+            --                     Interpolate.Bezier spline ->
+            --                         Just (Bezier.addX (Time.inMilliseconds startTime) spline)
+            --             )
+            --             checkpoints
+            --     }
+            --     :: existing
+            -- existing
+            Debug.todo "dwell splines!"
 
 
 {-| From this we need to render css @keyframes
@@ -2847,12 +2719,6 @@ toCss now name renderValue toMotion =
             , stack = []
             , state = Interpolate.moving.start motion
             }
-    , adjustor =
-        \_ ->
-            Timeline.linearDefault
-    , dwellPeriod =
-        \_ ->
-            Nothing
     , visit =
         \lookup target targetTime maybeLookAhead data ->
             let
@@ -2928,14 +2794,14 @@ toCss now name renderValue toMotion =
                             :: data.stack
                     , state = state
                     }
-    , lerp =
+    , transition =
         \prevEndTime prev target targetTime now_IGNORE maybeLookAhead data ->
             -- finalize current stack
             -- create and finalizeTransition stack for the interruption
             -- (but use the special transition finalizer which embeds timing outside of keyframes)
             let
                 transitionSplines =
-                    Interpolate.lerpSplines
+                    Interpolate.transitionSplines
                         prevEndTime
                         prev
                         target
@@ -2965,7 +2831,7 @@ toCss now name renderValue toMotion =
             , stackEnd = targetTime
             , stack = []
             , state =
-                Interpolate.moving.lerp
+                Interpolate.moving.transition
                     prevEndTime
                     prev
                     target
@@ -3014,71 +2880,64 @@ addDwell :
         }
 addDwell lookup name renderValue target startTime now state details =
     case lookup (Timeline.getEvent target) of
-        Interpolate.Osc personality startPos period checkpoints ->
-            let
-                animationName =
-                    name ++ "-dwell"
+        Interpolate.Pos _ _ (Just seq) ->
+            -- Interpolate.Osc personality startPos period checkpoints ->
+            -- let
+            --     animationName =
+            --         name ++ "-dwell"
+            --     durationStr =
+            --         String.fromFloat (Duration.inMilliseconds duration) ++ "ms"
+            --     duration =
+            --         case period of
+            --             Timeline.Loop dur ->
+            --                 dur
+            --             Timeline.Repeat n dur ->
+            --                 dur
+            --     delay =
+            --         Time.duration now startTime
+            --             |> Duration.inMilliseconds
+            --             |> String.fromFloat
+            --             |> (\s -> s ++ "ms")
+            --     iterationCount =
+            --         case period of
+            --             Timeline.Loop dur ->
+            --                 "infinite"
+            --             Timeline.Repeat n dur ->
+            --                 String.fromInt n
+            --     -- @keyframes duration | easing-function | delay |
+            --     --      iteration-count | direction | fill-mode | play-state | name */
+            --     -- animation: 3s ease-in 1s 2 reverse both paused slidein;
+            --     animation =
+            --         (durationStr ++ " ")
+            --             -- we specify an easing function here because it we have to
+            --             -- , but it is overridden by the one in keyframes
+            --             ++ "linear "
+            --             ++ (delay ++ " ")
+            --             ++ iterationCount
+            --             ++ " normal forwards running "
+            --             ++ animationName
+            --     keyframes =
+            --         "@keyframes "
+            --             ++ animationName
+            --             ++ "{"
+            --             ++ checkpointKeyframes name
+            --                 renderValue
+            --                 checkpoints
+            --                 ""
+            --             ++ "}"
+            --     new =
+            --         { hash = animationName
+            --         , animation = animation
+            --         , keyframes = keyframes
+            --         }
+            -- in
+            -- { details
+            --     | css =
+            --         combine details.css new
+            -- }
+            Debug.todo "addDwell"
 
-                durationStr =
-                    String.fromFloat (Duration.inMilliseconds duration) ++ "ms"
-
-                duration =
-                    case period of
-                        Timeline.Loop dur ->
-                            dur
-
-                        Timeline.Repeat n dur ->
-                            dur
-
-                delay =
-                    Time.duration now startTime
-                        |> Duration.inMilliseconds
-                        |> String.fromFloat
-                        |> (\s -> s ++ "ms")
-
-                iterationCount =
-                    case period of
-                        Timeline.Loop dur ->
-                            "infinite"
-
-                        Timeline.Repeat n dur ->
-                            String.fromInt n
-
-                -- @keyframes duration | easing-function | delay |
-                --      iteration-count | direction | fill-mode | play-state | name */
-                -- animation: 3s ease-in 1s 2 reverse both paused slidein;
-                animation =
-                    (durationStr ++ " ")
-                        -- we specify an easing function here because it we have to
-                        -- , but it is overridden by the one in keyframes
-                        ++ "linear "
-                        ++ (delay ++ " ")
-                        ++ iterationCount
-                        ++ " normal forwards running "
-                        ++ animationName
-
-                keyframes =
-                    "@keyframes "
-                        ++ animationName
-                        ++ "{"
-                        ++ checkpointKeyframes name
-                            renderValue
-                            checkpoints
-                            ""
-                        ++ "}"
-
-                new =
-                    { hash = animationName
-                    , animation = animation
-                    , keyframes = keyframes
-                    }
-            in
-            { details
-                | css =
-                    combine details.css new
-            }
-
-        Interpolate.Pos _ _ ->
+        Interpolate.Pos _ _ Nothing ->
             details
 
 

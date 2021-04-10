@@ -17,6 +17,7 @@ module Internal.Css.Props exposing
 
 import Color
 import Internal.Interpolate as Interpolate
+import Internal.Transition as Transition
 
 
 transparent : Color.Color
@@ -198,7 +199,7 @@ default id =
 zero : Interpolate.Movement
 zero =
     Interpolate.Pos
-        Interpolate.standardDefault
+        Transition.standard
         0
         Nothing
 
