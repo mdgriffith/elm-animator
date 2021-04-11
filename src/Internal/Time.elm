@@ -3,7 +3,7 @@ module Internal.Time exposing
     , Absolute, AbsoluteTime(..), Duration, absolute, duration, progress
     , inMilliseconds
     , latest, earliest, toPosix
-    , advanceBy, expand, maxDuration, millis, numberOfFrames, positiveDuration, rollbackBy, thisAfterThat, thisBeforeThat, zeroDuration
+    , advanceBy, expand, isZeroDuration, maxDuration, millis, numberOfFrames, positiveDuration, rollbackBy, thisAfterThat, thisBeforeThat, zeroDuration
     )
 
 {-|
@@ -142,8 +142,13 @@ thisAfterOrEqualThat (Quantity.Quantity this) (Quantity.Quantity that) =
     (this - that) >= 0
 
 
-zeroDuration : Duration -> Bool
-zeroDuration (Quantity.Quantity dur) =
+zeroDuration : Duration
+zeroDuration =
+    Quantity.Quantity 0
+
+
+isZeroDuration : Duration -> Bool
+isZeroDuration (Quantity.Quantity dur) =
     dur == 0
 
 

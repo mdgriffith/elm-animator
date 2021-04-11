@@ -7,6 +7,7 @@ module Internal.Bezier exposing
     , addX
     , doesNotMove, afterLastX
     , toPath, cssTimingString
+    , horizontal
     )
 
 {-| This module defines types and functions for cubic bezier splines.
@@ -127,6 +128,23 @@ pointHash { x, y } =
             round y
     in
     String.fromInt yInt ++ dash ++ String.fromInt yInt
+
+
+horizontal : Float -> Float -> Float -> Spline
+horizontal start end level =
+    Spline
+        { x = start
+        , y = level
+        }
+        { x = start
+        , y = level
+        }
+        { x = end
+        , y = level
+        }
+        { x = end
+        , y = level
+        }
 
 
 {-| Normalize the spline from

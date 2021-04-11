@@ -1,7 +1,7 @@
 module Internal.Interpolate exposing
     ( Move(..), Movement, State, derivativeOfEasing
     , coloring, moving, mapPersonality
-    , Checkpoint, Oscillator(..), Point, Sequence(..), Step(..), Timing(..), base, color, details, equalState, transitionSplines, visit
+    , Checkpoint, Oscillator(..), Point, Sequence(..), Step(..), Timing(..), base, color, details, equalState, getIterationCssString, getPeriodDuration, sequenceToPeriod, sequenceToSplines, transitionSplines, visit
     )
 
 {-|
@@ -45,6 +45,104 @@ type Sequence value
 type Step value
     = Step Duration.Duration Transition.Transition value
     | Wait Duration.Duration
+
+
+sequenceToSplines : Time.Absolute -> Float -> Sequence Float -> List Bezier.Spline
+sequenceToSplines startTime current seq =
+    case seq of
+        Repeat n steps ->
+            stepsToSplines startTime current steps []
+
+
+stepsToSplines time current steps splines =
+    case steps of
+        [] ->
+            splines
+
+        (Wait dur) :: remain ->
+            let
+                newTime =
+                    time |> Time.advanceBy dur
+            in
+            stepsToSplines newTime
+                current
+                remain
+                (Bezier.horizontal
+                    (Time.inMilliseconds time)
+                    (Time.inMilliseconds newTime)
+                    current
+                    :: splines
+                )
+
+        (Step dur trans value) :: remain ->
+            let
+                newTime =
+                    time |> Time.advanceBy dur
+
+                newSplines =
+                    Transition.splines
+                        { start =
+                            { x = Time.inMilliseconds time
+                            , y = current
+                            }
+                        , end =
+                            { x = Time.inMilliseconds newTime
+                            , y = value
+                            }
+                        }
+                        0
+                        0
+                        trans
+            in
+            stepsToSplines
+                (time |> Time.advanceBy dur)
+                current
+                remain
+                (newSplines ++ splines)
+
+
+sequenceToPeriod : Sequence value -> Timeline.Period
+sequenceToPeriod seq =
+    case seq of
+        Repeat n _ ->
+            if n == -1 then
+                Timeline.Loop (getPeriodDuration seq)
+
+            else
+                Timeline.Repeat n (getPeriodDuration seq)
+
+
+getIterationCssString : Sequence value -> String
+getIterationCssString seq =
+    case seq of
+        Repeat 1 _ ->
+            "1"
+
+        Repeat n _ ->
+            if n == -1 then
+                "infinite"
+
+            else
+                String.fromInt n
+
+
+getPeriodDuration : Sequence value -> Duration.Duration
+getPeriodDuration seq =
+    case seq of
+        Repeat _ steps ->
+            sumStepDuration steps Time.zeroDuration
+
+
+sumStepDuration steps dur =
+    case steps of
+        [] ->
+            dur
+
+        (Step d _ _) :: remain ->
+            sumStepDuration remain (Time.expand d dur)
+
+        (Wait d) :: remain ->
+            sumStepDuration remain (Time.expand d dur)
 
 
 {-| @deprecated
@@ -235,7 +333,7 @@ visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeL
         --     Debug.log "DWELL TIME" ( now, start, eventEnd )
     in
     -- Debug.log "   <-" <|
-    if Time.zeroDuration dwellTime then
+    if Time.isZeroDuration dwellTime then
         { position =
             case lookup event of
                 Pos _ x _ ->

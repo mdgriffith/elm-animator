@@ -428,8 +428,8 @@ scaleTo q v =
 
 
 {-| -}
-hash : Float -> Float -> Float -> Float -> Float -> Transition -> String
-hash start startVelocity end endVelocity t transition =
+hash : Float -> Float -> Float -> Float -> Transition -> String
+hash start startVelocity end endVelocity transition =
     case transition of
         Transition spline ->
             Bezier.hash spline

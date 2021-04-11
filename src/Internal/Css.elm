@@ -54,7 +54,8 @@ type Prop
       -- they are only really necessary for `transforms`
       -- props defined by the user use the prop name for identity
       Prop Id String Interpolate.Movement Internal.Css.Props.Format
-    | ColorProp ColorPropDetails
+      -- | ColorProp ColorPropDetails
+    | ColorProp String Interpolate.Movement Color.Color
 
 
 applyToMovement : (Interpolate.Movement -> Interpolate.Movement) -> Prop -> Prop
@@ -63,8 +64,8 @@ applyToMovement fn prop =
         Prop id name m format ->
             Prop id name (fn m) format
 
-        ColorProp details ->
-            ColorProp details
+        ColorProp name movement clr ->
+            ColorProp name (fn movement) clr
 
 
 type alias ColorPropDetails =
@@ -115,24 +116,24 @@ add new existingProps names ids =
                     (Set.insert name names)
                     ids
 
-        ((ColorProp details) as prop) :: remain ->
-            if Set.member details.name names then
+        ((ColorProp name movement clr) as prop) :: remain ->
+            if Set.member name names then
                 add remain existingProps names ids
 
             else
                 add remain
                     (prop :: existingProps)
-                    (Set.insert details.name names)
+                    (Set.insert name names)
                     ids
 
 
-sortProps : Prop -> Int
-sortProps prop =
+propOrder : Prop -> Int
+propOrder prop =
     case prop of
         Prop id _ _ _ ->
             id
 
-        ColorProp details ->
+        ColorProp _ _ _ ->
             Internal.Css.Props.noId
 
 
@@ -167,7 +168,11 @@ cssFromProps timeline lookup =
         present =
             Timeline.foldpAll lookup scanProps timeline
                 |> .props
-                |> List.sortBy sortProps
+                |> List.sortBy propOrder
+
+        one =
+            Timeline.foldpAll lookup oneShot timeline
+                |> .css
 
         renderedProps =
             Timeline.foldpAll lookup (toPropCurves present) timeline
@@ -1078,7 +1083,7 @@ startProps only props maybeTransform rendered =
                     CompoundProp cmpd
                         :: rendered
 
-        (ColorProp details) :: remain ->
+        (ColorProp name movement clr) :: remain ->
             rendered
 
         (Prop onlyId onlyName onlyMove onlyFormat) :: remain ->
@@ -1121,6 +1126,210 @@ startProps only props maybeTransform rendered =
                             }
                 in
                 startProps remain props maybeTransform (new :: rendered)
+
+
+oneShot :
+    Timeline.Interp state
+        (List Prop)
+        { css : CssAnim
+        , states : List ( String, Interpolate.State )
+        , previous : Maybe (Timeline.Occurring state)
+        }
+oneShot =
+    { start =
+        \props ->
+            { css = emptyAnim
+            , states =
+                props
+                    |> List.sortBy propOrder
+                    |> List.map
+                        (\p ->
+                            case p of
+                                Prop id name m format ->
+                                    ( name, Interpolate.moving.start m )
+
+                                ColorProp name m clr ->
+                                    ( name, Interpolate.moving.start m )
+                        )
+            , previous = Nothing
+            }
+    , visit =
+        \lookup target targetTime maybeLookAhead data ->
+            let
+                {-
+                    domain =
+                        { start =
+                            { x = Time.inMilliseconds prevEndTime
+                            , y = Pixels.inPixels state.position
+                            }
+                        , end =
+                            { x = Time.inMilliseconds targetTime
+                            , y = targetPos
+                            }
+                        }
+
+                   scalars ->
+                       Transition.keyframes domain introVelocity targetVelocity (\f -> propName ++ format f) transition
+                       Transition.hash start startVelocity end endVelocity transition
+                       animation?
+
+                    colors ->
+                        Same as scalars, but target toggles between 0 and 1 and renders that value to a different color depending.
+
+                    transform ->
+                        Transition.compoundKeyframes :
+                            (\transforms -> "transform: " ++ String.join " " transforms)
+                            -> List ( Float -> String, Transition ) -> String
+                        Transition.compoundHash : List ( Float -> String, Transition ) -> String
+                        animation?
+
+
+                -}
+                new =
+                    List.foldl
+                        (\( id, state ) cursor ->
+                            -- let
+                            --     targetPos =
+                            --         case target of
+                            --             Pos _ x _ ->
+                            --                 x
+                            --     targetVelocity =
+                            --         newVelocityAtTarget target targetTime maybeLookAhead
+                            --             |> Pixels.inPixelsPerSecond
+                            -- in
+                            -- Transition.splines
+                            -- { start =
+                            --     { x = Time.inMilliseconds prevEndTime
+                            --     , y = Pixels.inPixels state.position
+                            --     }
+                            -- , end =
+                            --     { x = Time.inMilliseconds targetTime
+                            --     , y = targetPos
+                            --     }
+                            -- }
+                            --     (Pixels.inPixelsPerSecond state.velocity * 1000)
+                            --     (targetVelocity * 1000)
+                            --     (case target of
+                            --         Pos trans _ _ ->
+                            --             trans
+                            --     )
+                            let
+                                propLookup s =
+                                    lookup s
+                                        |> stateOrDefaultByName id
+
+                                maybePropLookAhead =
+                                    Maybe.map
+                                        (Timeline.mapLookAhead
+                                            (stateOrDefaultByName id)
+                                        )
+                                        maybeLookAhead
+                            in
+                            { states =
+                                ( id
+                                , Interpolate.moving.visit
+                                    propLookup
+                                    target
+                                    targetTime
+                                    maybePropLookAhead
+                                    state
+                                )
+                                    :: cursor.states
+                            }
+                        )
+                        { states = []
+                        }
+                        data.states
+            in
+            { css = emptyAnim
+            , states =
+                List.reverse new.states
+            , previous = Just target
+            }
+    , transition =
+        \prevEndTime prev target targetTime interruptedAt maybeLookAhead data ->
+            { css = emptyAnim
+            , states =
+                List.map
+                    (\( id, state ) ->
+                        --     splines =
+                        -- Interpolate.transitionSplines
+                        --     interruptedAt
+                        --     prevState
+                        --     targetState
+                        --     targetTime
+                        --     lookAheadState
+                        --     state
+                        -- transitionSplines prevEndTime prev target targetTime maybeLookAhead state =
+                        --     let
+                        --         targetPos =
+                        --             case target of
+                        --                 Pos _ x _ ->
+                        --                     x
+                        --         targetVelocity =
+                        --             newVelocityAtTarget target targetTime maybeLookAhead
+                        --                 |> Pixels.inPixelsPerSecond
+                        --     in
+                        --     Transition.splines
+                        --         { start =
+                        --             { x = Time.inMilliseconds prevEndTime
+                        --             , y = Pixels.inPixels state.position
+                        --             }
+                        --         , end =
+                        --             { x = Time.inMilliseconds targetTime
+                        --             , y = targetPos
+                        --             }
+                        --         }
+                        --         (Pixels.inPixelsPerSecond state.velocity * 1000)
+                        --         (targetVelocity * 1000)
+                        --         (case target of
+                        --             Pos trans _ _ ->
+                        --                 trans
+                        --         )
+                        -- new =
+                        -- case keyframes of
+                        --     [] ->
+                        --         { keyframes =
+                        --             List.map
+                        --                 (splineToKeyframe id)
+                        --                 splines
+                        --         , conflicting = conflicted
+                        --         }
+                        --     _ ->
+                        --         mergeIntoKeyframes conflicted
+                        --             id
+                        --             splines
+                        --             []
+                        --             keyframes
+                        let
+                            previousProp =
+                                stateOrDefaultByName id prev
+
+                            targetProp =
+                                stateOrDefaultByName id target
+
+                            lookAheadProp =
+                                Maybe.map
+                                    (Timeline.mapLookAhead
+                                        (stateOrDefaultByName id)
+                                    )
+                                    maybeLookAhead
+                        in
+                        ( id
+                        , Interpolate.moving.transition
+                            prevEndTime
+                            previousProp
+                            targetProp
+                            targetTime
+                            interruptedAt
+                            lookAheadProp
+                            state
+                        )
+                    )
+                    data.states
+            , previous = Nothing
+            }
+    }
 
 
 {-| -}
@@ -1369,6 +1578,28 @@ toPropCurves only =
 
 
 {-| -}
+stateOrDefaultByName : String -> List Prop -> Interpolate.Movement
+stateOrDefaultByName targetName props =
+    case props of
+        [] ->
+            Internal.Css.Props.zero
+
+        (Prop _ propName move _) :: remain ->
+            if propName == targetName then
+                move
+
+            else
+                stateOrDefaultByName targetName remain
+
+        (ColorProp propName movement clr) :: remain ->
+            if propName == targetName then
+                movement
+
+            else
+                stateOrDefaultByName targetName remain
+
+
+{-| -}
 stateOrDefault : Id -> List Prop -> Interpolate.Movement
 stateOrDefault targetId props =
     case props of
@@ -1382,23 +1613,23 @@ stateOrDefault targetId props =
             else
                 stateOrDefault targetId remain
 
-        (ColorProp details) :: remain ->
+        (ColorProp name movement clr) :: remain ->
             stateOrDefault targetId remain
 
 
 {-| -}
 colorOrDefault : String -> Color.Color -> List Prop -> Color.Color
-colorOrDefault name default props =
+colorOrDefault targetName default props =
     case props of
         [] ->
             default
 
         (Prop id _ move _) :: remain ->
-            colorOrDefault name default remain
+            colorOrDefault targetName default remain
 
-        (ColorProp details) :: remain ->
-            if details.name == name then
-                details.color
+        (ColorProp name movement clr) :: remain ->
+            if targetName == name then
+                clr
 
             else
                 colorOrDefault name default remain
@@ -1410,7 +1641,7 @@ matchForMovement onlyId onlyName props =
         [] ->
             Nothing
 
-        (ColorProp details) :: remain ->
+        (ColorProp name move clr) :: remain ->
             matchForMovement onlyId onlyName remain
 
         ((Prop id name movement _) as top) :: remain ->
@@ -2538,27 +2769,15 @@ dwellSplines lookup target startTime existing =
         Interpolate.Pos _ _ Nothing ->
             existing
 
-        Interpolate.Pos _ _ (Just seq) ->
-            --  Interpolate.Osc personality startPos period checkpoints ->
-            -- Section
-            --     { start = startTime
-            --     , period =
-            --         period
-            --     , splines =
-            --         List.filterMap
-            --             (\point ->
-            --                 case point.timing of
-            --                     Interpolate.Linear ->
-            --                         -- TODO: DO THIS ONE!
-            --                         Nothing
-            --                     Interpolate.Bezier spline ->
-            --                         Just (Bezier.addX (Time.inMilliseconds startTime) spline)
-            --             )
-            --             checkpoints
-            --     }
-            --     :: existing
-            -- existing
-            Debug.todo "dwell splines!"
+        Interpolate.Pos _ val (Just seq) ->
+            Section
+                { start = startTime
+                , period =
+                    Interpolate.sequenceToPeriod seq
+                , splines =
+                    Interpolate.sequenceToSplines startTime val seq
+                }
+                :: existing
 
 
 {-| From this we need to render css @keyframes
@@ -2760,22 +2979,35 @@ toCss now name renderValue toMotion =
                             , state = state
                             }
                     in
-                    addDwell lookup
-                        name
-                        renderValue
-                        target
-                        targetTime
-                        now
-                        state
-                        { css =
-                            final
-                                |> finalize name renderValue now
-                                |> combine data.css
-                        , stackStart = targetTime
-                        , stackEnd = targetTime
-                        , stack = []
-                        , state = state
+                    -- previousl we'd add a dwell here
+                    -- addDwell lookup
+                    --     name
+                    --     renderValue
+                    --     target
+                    --     targetTime
+                    --     now
+                    --     state
+                    --     { css =
+                    --         final
+                    --             |> finalize name renderValue now
+                    --             |> combine data.css
+                    --     , stackStart = targetTime
+                    --     , stackEnd = targetTime
+                    --     , stack = []
+                    --     , state = state
+                    --     }
+                    { css =
+                        data.css
+                    , stackStart = data.stackStart
+                    , stackEnd = data.stackEnd
+                    , stack =
+                        { time = Time.inMilliseconds targetTime
+                        , value = Pixels.inPixels state.position
+                        , timing = Interpolate.Linear
                         }
+                            :: data.stack
+                    , state = state
+                    }
 
                 Just lookAhead ->
                     -- capture
@@ -2854,91 +3086,6 @@ toCheckpoint duration ((Bezier.Spline c0 c1 c2 c3) as spline) =
     , timing = Interpolate.Bezier (Bezier.normalize spline)
     , time = c3.x
     }
-
-
-addDwell :
-    (state -> Interpolate.Movement)
-    -> String
-    -> (Float -> String)
-    -> Timeline.Occurring state
-    -> Time.Absolute
-    -> Time.Absolute
-    -> Interpolate.State
-    ->
-        { css : CssAnim
-        , stackStart : Time.Absolute
-        , stackEnd : Time.Absolute
-        , stack : List Interpolate.Checkpoint
-        , state : Interpolate.State
-        }
-    ->
-        { css : CssAnim
-        , stackStart : Time.Absolute
-        , stackEnd : Time.Absolute
-        , stack : List Interpolate.Checkpoint
-        , state : Interpolate.State
-        }
-addDwell lookup name renderValue target startTime now state details =
-    case lookup (Timeline.getEvent target) of
-        Interpolate.Pos _ _ (Just seq) ->
-            -- Interpolate.Osc personality startPos period checkpoints ->
-            -- let
-            --     animationName =
-            --         name ++ "-dwell"
-            --     durationStr =
-            --         String.fromFloat (Duration.inMilliseconds duration) ++ "ms"
-            --     duration =
-            --         case period of
-            --             Timeline.Loop dur ->
-            --                 dur
-            --             Timeline.Repeat n dur ->
-            --                 dur
-            --     delay =
-            --         Time.duration now startTime
-            --             |> Duration.inMilliseconds
-            --             |> String.fromFloat
-            --             |> (\s -> s ++ "ms")
-            --     iterationCount =
-            --         case period of
-            --             Timeline.Loop dur ->
-            --                 "infinite"
-            --             Timeline.Repeat n dur ->
-            --                 String.fromInt n
-            --     -- @keyframes duration | easing-function | delay |
-            --     --      iteration-count | direction | fill-mode | play-state | name */
-            --     -- animation: 3s ease-in 1s 2 reverse both paused slidein;
-            --     animation =
-            --         (durationStr ++ " ")
-            --             -- we specify an easing function here because it we have to
-            --             -- , but it is overridden by the one in keyframes
-            --             ++ "linear "
-            --             ++ (delay ++ " ")
-            --             ++ iterationCount
-            --             ++ " normal forwards running "
-            --             ++ animationName
-            --     keyframes =
-            --         "@keyframes "
-            --             ++ animationName
-            --             ++ "{"
-            --             ++ checkpointKeyframes name
-            --                 renderValue
-            --                 checkpoints
-            --                 ""
-            --             ++ "}"
-            --     new =
-            --         { hash = animationName
-            --         , animation = animation
-            --         , keyframes = keyframes
-            --         }
-            -- in
-            -- { details
-            --     | css =
-            --         combine details.css new
-            -- }
-            Debug.todo "addDwell"
-
-        Interpolate.Pos _ _ Nothing ->
-            details
 
 
 checkpointHash : (Float -> String) -> List Interpolate.Checkpoint -> String -> String

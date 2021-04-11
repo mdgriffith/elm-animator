@@ -2494,7 +2494,7 @@ status ((Timeline details) as timeline) =
                             _ ->
                                 Time.duration start (Time.earliest now eventEnd)
                 in
-                if Time.zeroDuration dwellTime then
+                if Time.isZeroDuration dwellTime then
                     Transitioning 1
 
                 else
