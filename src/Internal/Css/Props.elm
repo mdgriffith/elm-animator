@@ -2,7 +2,7 @@ module Internal.Css.Props exposing
     ( Id, ids, hash, default
     , isTransformId
     , Format, format, float, int, px
-    , colorHash, name, noId, toStr, transparent
+    , colorHash, name, noId, toStr, transparent, zero
     )
 
 {-|
