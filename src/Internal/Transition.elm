@@ -1,6 +1,6 @@
 module Internal.Transition exposing
     ( Transition
-    , standard
+    , linear, standard, wobble
     , initialVelocity, atX
     , split, before
     , hash, keyframes, compoundKeyframes
@@ -11,7 +11,7 @@ module Internal.Transition exposing
 
 @docs Transition
 
-@docs standard
+@docs linear, standard, wobble
 
 @docs initialVelocity, atX
 
@@ -97,6 +97,12 @@ type Transition
     | Wobble Float
 
 
+{-| -}
+wobble : Float -> Transition
+wobble w =
+    Wobble (clamp 0 1 w)
+
+
 {-| Ideally we'd store a bezier
 
 Standard flutter transition:
@@ -127,6 +133,24 @@ standard =
             }
 
 
+linear : Transition
+linear =
+    Transition <|
+        Bezier.Spline
+            { x = 0
+            , y = 0
+            }
+            { x = 0.2
+            , y = 0.2
+            }
+            { x = 0.8
+            , y = 0.8
+            }
+            { x = 1
+            , y = 1
+            }
+
+
 {-| -}
 atX :
     Float
@@ -141,20 +165,27 @@ atX :
 atX progress domain introVelocity exitVelocity transition =
     case transition of
         Transition spline ->
-            spline
-                |> toDomain domain introVelocity exitVelocity
-                |> posVel progress
+            if domain.start.x == domain.end.x then
+                { position = domain.end.y
+                , velocity =
+                    exitVelocity
+                }
+
+            else
+                spline
+                    |> toDomain domain introVelocity exitVelocity
+                    |> posVel progress
 
         Trail trail ->
             onTrail progress domain introVelocity exitVelocity trail
 
-        Wobble wobble ->
+        Wobble wob ->
             let
                 totalX =
                     domain.end.x - domain.start.x
 
                 params =
-                    Spring.select wobble
+                    Spring.select wob
                         (Quantity.Quantity totalX)
             in
             Spring.analytical params
@@ -246,7 +277,7 @@ initialVelocity transition =
                     else
                         firstDeriv.y / firstDeriv.x
 
-        Wobble wobble ->
+        Wobble wob ->
             zeroVelocity
 
 
@@ -266,10 +297,10 @@ splines domain introVelocity exitVelocity transition =
         Trail trail ->
             trailSplines domain introVelocity exitVelocity trail []
 
-        Wobble wobble ->
+        Wobble wob ->
             let
                 params =
-                    Spring.select wobble
+                    Spring.select wob
                         (Quantity.Quantity (domain.end.x - domain.start.x))
             in
             Spring.segments params
@@ -469,10 +500,10 @@ keyframes domain introVelocity exitVelocity toString transition =
         Trail trail ->
             renderTrailKeyframes domain introVelocity exitVelocity toString trail ""
 
-        Wobble wobble ->
+        Wobble wob ->
             let
                 params =
-                    Spring.select wobble
+                    Spring.select wob
                         (Quantity.Quantity (domain.end.x - domain.start.x))
 
                 trail =
