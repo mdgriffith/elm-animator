@@ -2,6 +2,7 @@ module Internal.Css.Props exposing
     ( Id, ids, hash, default
     , isTransformId
     , Format, format, float, int, px
+    , roundFloat, floatToString
     , colorHash, name, noId, toStr, transparent, zero
     )
 
@@ -13,11 +14,23 @@ module Internal.Css.Props exposing
 
 @docs Format, format, float, int, px
 
+@docs roundFloat, floatToString
+
 -}
 
 import Color
 import Internal.Interpolate as Interpolate
 import Internal.Transition as Transition
+
+
+roundFloat : Float -> Float
+roundFloat f =
+    toFloat (round (f * 100)) / 100
+
+
+floatToString : Float -> String
+floatToString f =
+    String.fromFloat (roundFloat f)
 
 
 transparent : Color.Color
@@ -29,7 +42,7 @@ format : Format -> Float -> String
 format form num =
     case form of
         AsFloat ->
-            String.fromFloat num
+            String.fromFloat (roundFloat num)
 
         AsInt ->
             String.fromInt (round num)
