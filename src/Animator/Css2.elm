@@ -5,6 +5,7 @@ module Animator.Css2 exposing
     , withWobble, withImpulse, withCurve, withDelay
     , div, node
     , Css, css
+    , watching
     , Attribute
     )
 
@@ -27,9 +28,11 @@ module Animator.Css2 exposing
 
 @docs Css, css
 
+@docs watching
+
 -}
 
-import Animator exposing (Movement, Timeline)
+import Animator exposing (Animator, Movement, Timeline)
 import Color
 import Html exposing (Html)
 import Html.Attributes as Attr
@@ -37,6 +40,8 @@ import Internal.Bezier as Bezier
 import Internal.Css as Css
 import Internal.Css.Props
 import Internal.Interpolate as Interpolate
+import Internal.Timeline as Timeline
+import Internal.Transition as Transition
 
 
 type Attribute
@@ -101,7 +106,7 @@ opacity o =
     Css.Prop
         Internal.Css.Props.ids.opacity
         "opacity"
-        (Interpolate.Pos Interpolate.standardDefault o Nothing)
+        (Interpolate.Pos Transition.standard o Nothing)
         Internal.Css.Props.float
 
 
@@ -111,7 +116,7 @@ scale s =
     Css.Prop
         Internal.Css.Props.ids.scale
         ""
-        (Interpolate.Pos Interpolate.standardDefault s Nothing)
+        (Interpolate.Pos Transition.standard s Nothing)
         Internal.Css.Props.float
 
 
@@ -121,7 +126,7 @@ scaleX s =
     Css.Prop
         Internal.Css.Props.ids.scaleX
         ""
-        (Interpolate.Pos Interpolate.standardDefault s Nothing)
+        (Interpolate.Pos Transition.standard s Nothing)
         Internal.Css.Props.float
 
 
@@ -131,7 +136,7 @@ scaleY s =
     Css.Prop
         Internal.Css.Props.ids.scaleY
         ""
-        (Interpolate.Pos Interpolate.standardDefault s Nothing)
+        (Interpolate.Pos Transition.standard s Nothing)
         Internal.Css.Props.float
 
 
@@ -141,7 +146,7 @@ rotation n =
     Css.Prop
         Internal.Css.Props.ids.rotation
         ""
-        (Interpolate.Pos Interpolate.standardDefault n Nothing)
+        (Interpolate.Pos Transition.standard n Nothing)
         Internal.Css.Props.float
 
 
@@ -151,7 +156,7 @@ x n =
     Css.Prop
         Internal.Css.Props.ids.x
         ""
-        (Interpolate.Pos Interpolate.standardDefault n Nothing)
+        (Interpolate.Pos Transition.standard n Nothing)
         Internal.Css.Props.float
 
 
@@ -161,7 +166,7 @@ y n =
     Css.Prop
         Internal.Css.Props.ids.y
         ""
-        (Interpolate.Pos Interpolate.standardDefault n Nothing)
+        (Interpolate.Pos Transition.standard n Nothing)
         Internal.Css.Props.float
 
 
@@ -170,12 +175,9 @@ withWobble : Float -> Property -> Property
 withWobble wob prop =
     prop
         |> Css.applyToMovement
-            (Interpolate.mapPersonality
+            (Interpolate.mapTransition
                 (\personality ->
-                    { personality
-                        | wobbliness =
-                            clamp 0 1 wob
-                    }
+                    Transition.wobble wob
                 )
             )
 
@@ -185,12 +187,9 @@ withImpulse : Float -> Property -> Property
 withImpulse impulse prop =
     prop
         |> Css.applyToMovement
-            (Interpolate.mapPersonality
+            (Interpolate.mapTransition
                 (\personality ->
-                    { personality
-                        | impulse =
-                            impulse
-                    }
+                    Debug.todo "where to store impulse?"
                 )
             )
 
@@ -241,7 +240,7 @@ px name n =
     Css.Prop
         Internal.Css.Props.noId
         name
-        (Interpolate.Pos Interpolate.standardDefault n Nothing)
+        (Interpolate.Pos Transition.standard n Nothing)
         Internal.Css.Props.px
 
 
@@ -251,7 +250,7 @@ int name n =
     Css.Prop
         Internal.Css.Props.noId
         name
-        (Interpolate.Pos Interpolate.standardDefault n Nothing)
+        (Interpolate.Pos Transition.standard n Nothing)
         Internal.Css.Props.int
 
 
@@ -261,17 +260,16 @@ float name n =
     Css.Prop
         Internal.Css.Props.noId
         name
-        (Interpolate.Pos Interpolate.standardDefault n Nothing)
+        (Interpolate.Pos Transition.standard n Nothing)
         Internal.Css.Props.float
 
 
 {-| -}
 color : String -> Color.Color -> Property
 color name colorValue =
-    Css.ColorProp
-        { name = name
-        , color = colorValue
-        }
+    Css.ColorProp name
+        (Interpolate.Pos Transition.standard 1 Nothing)
+        colorValue
 
 
 {--}
@@ -331,3 +329,39 @@ stylesheet str =
         []
         [ Html.text str
         ]
+
+
+{--}
+{- ANIMATOR -}
+
+
+{-| `Animator.Css.watching` is different from `Animator.watching` in that it will only ask for one frame when an animation is updated.
+
+In that one frame, we render the **entire CSS animation**, which can run without `Elm` needing to do a full rerender.
+
+-}
+watching :
+    (model -> Timeline state)
+    -> (Timeline state -> model -> model)
+    -> Animator model
+    -> Animator model
+watching get set (Timeline.Animator isRunning updateModel) =
+    Timeline.Animator
+        (\model ->
+            if isRunning model then
+                True
+
+            else
+                let
+                    tl =
+                        get model
+                in
+                Timeline.hasChanged tl || Timeline.justInitialized tl
+        )
+        (\now model ->
+            let
+                newModel =
+                    updateModel now model
+            in
+            set (Timeline.update now (get newModel)) newModel
+        )
