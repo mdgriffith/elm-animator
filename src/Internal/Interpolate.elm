@@ -1,7 +1,7 @@
 module Internal.Interpolate exposing
     ( Move(..), Movement, State, derivativeOfEasing
     , coloring, moving, mapTransition
-    , Checkpoint, Oscillator(..), Point, Sequence(..), Step(..), Timing(..), base, color, details, equalState, getIterationCssString, getPeriodDuration, sequenceToPeriod, sequenceToSplines, transitionSplines, visit
+    , Checkpoint, Oscillator(..), Point, Sequence(..), Step(..), Timing(..), base, color, details, equalState, getIterationCssString, getPeriodDuration, newVelocityAtTarget, sequenceToPeriod, sequenceToSplines, transitionSplines, velocityAtTarget, visit
     )
 
 {-|
@@ -360,8 +360,8 @@ type alias Milliseconds =
     Float
 
 
-transitionSplines : Time.Absolute -> Movement -> Movement -> Time.Absolute -> Maybe (Timeline.LookAhead Movement) -> State -> List Bezier.Spline
-transitionSplines prevEndTime prev target targetTime maybeLookAhead state =
+transitionSplines : Time.Absolute -> Movement -> Time.Absolute -> Maybe (Timeline.LookAhead Movement) -> State -> List Bezier.Spline
+transitionSplines prevEndTime target targetTime maybeLookAhead state =
     let
         _ =
             Debug.log "    -> SPLINES"
@@ -403,7 +403,7 @@ transitionSplines prevEndTime prev target targetTime maybeLookAhead state =
 
 
 transition : Time.Absolute -> Movement -> Movement -> Time.Absolute -> Time.Absolute -> Maybe (Timeline.LookAhead Movement) -> State -> State
-transition startTime prev target targetTime now maybeLookAhead state =
+transition startTime prev2 target targetTime now maybeLookAhead state =
     let
         _ =
             Debug.log "DOMAIN POSITION"
@@ -842,6 +842,54 @@ newVelocityAtTarget target targetTime maybeLookAhead =
                             targetTime
                             (Pixels.pixels aheadPosition)
                             lookAhead.time
+
+
+{-| -}
+velocityAtTarget :
+    (state -> Movement)
+    -> Timeline.Occurring state
+    -> List (Timeline.Occurring state)
+    -> PixelsPerSecond
+velocityAtTarget lookup target future =
+    let
+        movement =
+            lookup (Timeline.getEvent target)
+    in
+    case future of
+        [] ->
+            case movement of
+                Pos _ _ Nothing ->
+                    zeroVelocity
+
+                Pos _ _ (Just seq) ->
+                    initialSequenceVelocity seq
+
+        next :: _ ->
+            let
+                targetPosition =
+                    case movement of
+                        Pos _ x _ ->
+                            Pixels.pixels x
+            in
+            case lookup (Timeline.getEvent next) of
+                Pos _ aheadPosition Nothing ->
+                    -- our target velocity is the linear velocity between target and lookahead
+                    velocityBetween
+                        targetPosition
+                        (Timeline.endTime target)
+                        (Pixels.pixels aheadPosition)
+                        (Timeline.startTime next)
+
+                Pos _ aheadPosition (Just seq) ->
+                    if Timeline.isResting target then
+                        initialSequenceVelocity seq
+
+                    else
+                        velocityBetween
+                            targetPosition
+                            (Timeline.endTime target)
+                            (Pixels.pixels aheadPosition)
+                            (Timeline.startTime next)
 
 
 zeroPoint : Point

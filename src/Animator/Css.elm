@@ -1558,8 +1558,9 @@ renderOsc period oscillator =
             at f
 
         Interpolate.Oscillator x checkpoints ->
-            Interpolate.Osc
-                Interpolate.standardDefault
-                x
-                period
-                checkpoints
+            -- Interpolate.Osc
+            --     Interpolate.standardDefault
+            --     x
+            --     period
+            --     checkpoints
+            at x

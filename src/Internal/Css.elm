@@ -171,8 +171,10 @@ cssFromProps timeline lookup =
                 |> List.sortBy propOrder
 
         renderedProps =
-            Timeline.foldpAll lookup (toPropCurves present) timeline
-                |> .rendered
+            -- Timeline.foldpAll lookup (toPropCurves present) timeline
+            --     |> .rendered
+            -- |> Debug.log "RENDERED"
+            Timeline.foldpAll2 lookup (startProps present) (toPropCurves2 present) timeline
     in
     renderCss (Timeline.getCurrentTime timeline) renderers renderedProps
 
@@ -1120,10 +1122,18 @@ renderCssHelper now renderer props cssAnim =
 startProps :
     List Prop
     -> List Prop
+    -> List RenderedProp
+startProps only props =
+    startPropsHelper only props Nothing []
+
+
+startPropsHelper :
+    List Prop
+    -> List Prop
     -> Maybe Compound
     -> List RenderedProp
     -> List RenderedProp
-startProps only props maybeTransform rendered =
+startPropsHelper only props maybeTransform rendered =
     case only of
         [] ->
             case maybeTransform of
@@ -1157,10 +1167,10 @@ startProps only props maybeTransform rendered =
                                 , states = [ ( onlyId, state ) ]
                                 }
                         in
-                        startProps remain props (Just new) rendered
+                        startPropsHelper remain props (Just new) rendered
 
                     Just cmpd ->
-                        startProps remain
+                        startPropsHelper remain
                             props
                             (Just { cmpd | states = ( onlyId, state ) :: cmpd.states })
                             rendered
@@ -1176,7 +1186,7 @@ startProps only props maybeTransform rendered =
                             , state = state
                             }
                 in
-                startProps remain props maybeTransform (new :: rendered)
+                startPropsHelper remain props maybeTransform (new :: rendered)
 
 
 oneShot :
@@ -1442,6 +1452,166 @@ oneShot now =
 
 
 {-| -}
+toPropCurves2 : List Prop -> Timeline.Transition state (List Prop) (List RenderedProp)
+toPropCurves2 only =
+    \lookup prev target now future cursor ->
+        let
+            _ =
+                Debug.log "TRANSITION" target
+
+            targetTime =
+                Timeline.startTime target
+
+            startTime =
+                Timeline.endTime prev
+        in
+        List.map
+            (\prop ->
+                case prop of
+                    RenderedColorProp details ->
+                        let
+                            previousColor =
+                                colorOrDefault details.name
+                                    Internal.Css.Props.transparent
+                                    (lookup (Timeline.getEvent prev))
+
+                            newColor =
+                                colorOrDefault details.name
+                                    Internal.Css.Props.transparent
+                                    (lookup (Timeline.getEvent target))
+                        in
+                        RenderedColorProp
+                            { details
+                                | color = newColor
+                                , sections =
+                                    { start = targetTime
+                                    , duration =
+                                        Time.duration startTime targetTime
+                                    , steps =
+                                        [ { percent = 0
+                                          , color = previousColor
+                                          }
+                                        , { percent = 50
+                                          , color = Interpolate.color 0.5 previousColor newColor
+                                          }
+                                        , { percent = 100
+                                          , color = newColor
+                                          }
+                                        ]
+                                    }
+                                        :: details.sections
+                            }
+
+                    RenderedProp rendered ->
+                        let
+                            propLookup : Timeline.Occurring state -> Interpolate.Movement
+                            propLookup occur =
+                                stateOrDefault rendered.id rendered.name (lookup (Timeline.getEvent occur))
+
+                            lookupState s =
+                                stateOrDefault rendered.id rendered.name (lookup s)
+
+                            targetProp =
+                                propLookup target
+
+                            domain =
+                                { start =
+                                    { x = startTime
+                                    , y = rendered.state.position
+                                    }
+                                , end =
+                                    { x = targetTime
+                                    , y = targetPosition
+                                    }
+                                }
+
+                            targetVelocity =
+                                Interpolate.velocityAtTarget lookupState target future
+
+                            progress =
+                                Time.progress startTime targetTime now
+                                    |> Debug.log "PROGRESS"
+
+                            targetPosition =
+                                case targetProp of
+                                    Interpolate.Pos _ x _ ->
+                                        Pixels.pixels x
+
+                            targetTransition =
+                                case targetProp of
+                                    Interpolate.Pos trans _ _ ->
+                                        trans
+                        in
+                        RenderedProp
+                            { id = rendered.id
+                            , name = rendered.name
+                            , format = rendered.format
+                            , sections =
+                                let
+                                    transitionSplines =
+                                        Transition.splines
+                                            domain
+                                            (Pixels.inPixelsPerSecond rendered.state.velocity * 1000)
+                                            (targetVelocity * 1000)
+                                            targetTransition
+
+                                    dur =
+                                        Time.duration startTime targetTime
+
+                                    sliced =
+                                        -- if interruptedAt == targetTime then
+                                        -- NOTE, this needs to be checked!!
+                                        if Time.thisBeforeThat now targetTime && Time.thisAfterThat now startTime then
+                                            Bezier.takeBefore (Time.inMilliseconds now) transitionSplines
+
+                                        else
+                                            transitionSplines
+                                in
+                                Section
+                                    { start = startTime
+                                    , period = once dur
+                                    , splines = sliced
+                                    }
+                                    :: rendered.sections
+                            , state =
+                                Transition.atX
+                                    progress
+                                    domain
+                                    rendered.state.velocity
+                                    targetVelocity
+                                    targetTransition
+                            }
+
+                    CompoundProp details ->
+                        -- let
+                        --     ( newCompound, newStates ) =
+                        --         lerpCurvesCompound
+                        --             details.states
+                        --             prevEndTime
+                        --             prev
+                        --             target
+                        --             targetTime
+                        --             interruptedAt
+                        --             maybeLookAhead
+                        -- in
+                        -- CompoundProp
+                        --     { slices =
+                        --         case details.slices of
+                        --             [] ->
+                        --                 [ newCompound ]
+                        --             last :: remain ->
+                        --                 if isCombineableCompoundSections newCompound last then
+                        --                     combineCompound newCompound last :: remain
+                        --                 else
+                        --                     newCompound :: details.slices
+                        --     , states = newStates
+                        --     }
+                        prop
+            )
+            cursor
+
+
+{-| -}
 toPropCurves :
     List Prop
     ->
@@ -1454,11 +1624,15 @@ toPropCurves only =
     { start =
         \props ->
             { rendered =
-                startProps only props Nothing []
+                startProps only props
             , previous = Nothing
             }
     , visit =
         \lookup target targetTime maybeLookAhead data ->
+            let
+                _ =
+                    Debug.log "VISIT" target
+            in
             { rendered =
                 case data.previous of
                     Nothing ->
@@ -1565,6 +1739,7 @@ toPropCurves only =
                                                     target
                                                     targetTime
                                                     maybeLookAhead
+                                                    |> Debug.log "VISITED COMPOUND"
                                         in
                                         CompoundProp
                                             { slices =
@@ -1586,6 +1761,10 @@ toPropCurves only =
             }
     , transition =
         \prevEndTime prev target targetTime interruptedAt maybeLookAhead data ->
+            let
+                _ =
+                    Debug.log "TRANSITION" target
+            in
             { rendered =
                 List.map
                     (\prop ->
@@ -1656,7 +1835,6 @@ toPropCurves only =
                                     , sections =
                                         toCurvesLerp
                                             prevEndTime
-                                            previousProp
                                             targetProp
                                             targetTime
                                             interruptedAt
@@ -2262,7 +2440,6 @@ toCurves =
             { curves =
                 toCurvesLerp
                     prevEndTime
-                    prev
                     target
                     targetTime
                     interruptedAt
@@ -2445,7 +2622,6 @@ lerpCurvesCompoundHelper remainingStates prevEndTime prev target targetTime inte
                 splines =
                     Interpolate.transitionSplines
                         prevEndTime
-                        prevState
                         targetState
                         targetTime
                         lookAheadState
@@ -2695,7 +2871,6 @@ visitCurvesCompoundHelper remainingStates lookup previous target targetTime mayb
                     -- to resolve to stationary
                     Interpolate.transitionSplines
                         (Timeline.endTime previous)
-                        previousMovement
                         targetMovement
                         targetTime
                         (Maybe.map
@@ -2795,7 +2970,6 @@ toCurvesVisit lookup target targetTime maybePrevious maybeLookAhead state existi
                     Debug.log "SPLINES" <|
                         Interpolate.transitionSplines
                             (Timeline.endTime prev)
-                            (lookup (Timeline.getEvent prev))
                             (lookup (Timeline.getEvent target))
                             targetTime
                             maybeLookAhead
@@ -2850,14 +3024,13 @@ once =
 toCurvesLerp :
     Time.Absolute
     -> Interpolate.Movement
-    -> Interpolate.Movement
     -> Time.Absolute
     -> Time.Absolute
     -> Maybe (Timeline.LookAhead Interpolate.Movement)
     -> Interpolate.State
     -> List Section
     -> List Section
-toCurvesLerp prevEndTime prev target targetTime interruptedAt maybeLookAhead state existingSections =
+toCurvesLerp prevEndTime target targetTime interruptedAt maybeLookAhead state existingSections =
     -- finalize current stack
     -- create and finalizeTransition stack for the interruption
     -- (but use the special transition finalizer which embeds timing outside of keyframes)
@@ -2882,7 +3055,6 @@ toCurvesLerp prevEndTime prev target targetTime interruptedAt maybeLookAhead sta
             -- Debug.log "LERP SPLINES" <|
             Interpolate.transitionSplines
                 prevEndTime
-                prev
                 target
                 targetTime
                 maybeLookAhead
@@ -3190,7 +3362,6 @@ toCss now name renderValue toMotion =
                 transitionSplines =
                     Interpolate.transitionSplines
                         prevEndTime
-                        prev
                         target
                         targetTime
                         maybeLookAhead

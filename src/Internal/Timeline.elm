@@ -2,13 +2,13 @@ module Internal.Timeline exposing
     ( Timeline(..), TimelineDetails, Occurring(..), getEvents
     , Schedule(..), Event(..)
     , update, needsUpdate
-    , startTime, endTime, getEvent, extendEventDwell, hasDwell
+    , startTime, endTime, getEvent, extendEventDwell, hasDwell, isResting
     , addToDwell
     , progress, dwellingTime
     , current, arrivedAt, arrived, previous, upcoming
     , Line(..), Timetable(..)
-    , foldp, captureTimeline
-    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), atTime, foldpAll, foldpOld, gc, getCurrentTime, hasChanged, isDuring, isOnce, justInitialized, linearDefault, linesAreActive, mapLookAhead, periodDuration, previousEndTime, previousStartTime, reduceIterations, updateWith
+    , foldp, foldpAll2, captureTimeline
+    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), Transition, atTime, foldpAll, foldpOld, gc, getCurrentTime, hasChanged, isDuring, isOnce, justInitialized, linearDefault, linesAreActive, mapLookAhead, periodDuration, previousEndTime, previousStartTime, reduceIterations, updateWith
     )
 
 {-|
@@ -19,7 +19,7 @@ module Internal.Timeline exposing
 
 @docs update, needsUpdate
 
-@docs startTime, endTime, getEvent, extendEventDwell, hasDwell
+@docs startTime, endTime, getEvent, extendEventDwell, hasDwell, isResting
 
 @docs addToDwell
 
@@ -29,7 +29,7 @@ module Internal.Timeline exposing
 
 @docs Line, Timetable
 
-@docs foldp, captureTimeline
+@docs foldp, foldpAll2, captureTimeline
 
 -}
 
@@ -181,6 +181,21 @@ type alias Interp state anchor motion =
     }
 
 
+type alias Transition state anchor motion =
+    (state -> anchor)
+    -- previous event
+    -> Occurring state
+    -- target event
+    -> Occurring state
+    -- now
+    -> Time.Absolute
+    -- the future, but we can only look 1 deep
+    -- this should be a maybe, but dont want to allocate it.
+    -> List (Occurring state)
+    -> motion
+    -> motion
+
+
 type alias Visit state anchor motion =
     (state -> anchor)
     -> Occurring state
@@ -292,6 +307,11 @@ hasDwell (Occurring _ (Quantity.Quantity start) (Quantity.Quantity end)) =
     (start - end) /= 0
 
 
+isResting : Occurring event -> Bool
+isResting (Occurring _ (Quantity.Quantity start) (Quantity.Quantity end)) =
+    (end - start) == 0
+
+
 startTime : Occurring event -> Time.Absolute
 startTime (Occurring _ time _) =
     time
@@ -352,6 +372,10 @@ getCurrentTime (Timeline timeline) =
     Time.rollbackBy timeline.delay timeline.now
 
 
+cutoff =
+    Time.millis 1618490321242
+
+
 update : Time.Posix -> Timeline event -> Timeline event
 update =
     updateWith True
@@ -367,6 +391,7 @@ updateWith withGC possiblyNow (Timeline timeline) =
         -- to allow scrubbing a timeline.
         now =
             Quantity.max (Time.absolute possiblyNow) timeline.now
+                |> Quantity.minus cutoff
     in
     if timeline.events == Timetable [] then
         { timeline
@@ -1158,6 +1183,9 @@ foldpAll lookup fn (Timeline timelineDetails) =
 
                         (Line lineStart firstEvent remain) :: _ ->
                             Occurring timelineDetails.initial lineStart lineStart
+
+                _ =
+                    Debug.log "      -----    start foldpAll" timelineDetails.now
             in
             visitAll
                 False
@@ -1181,12 +1209,8 @@ visitAll :
     -> List (Line state)
     -> motion
     -> motion
-visitAll transitionOngoing toAnchor interp details prev states future state =
-    -- let
-    --     _ =
-    --         log "------NEW - ALL" ""
-    -- in
-    case states of
+visitAll transitionOngoing toAnchor interp details prev events future state =
+    case events of
         [] ->
             case future of
                 [] ->
@@ -1196,21 +1220,30 @@ visitAll transitionOngoing toAnchor interp details prev states future state =
                     -- lerp to `next`
                     -- then start the next line
                     let
+                        -- _ =
+                        --     Debug.log "start one" ( prev, futureEvent )
                         lerped =
                             state
-                                |> interp.transition
-                                    (endTime prev)
-                                    (toAnchor (getEvent prev))
-                                    (toAnchor (getEvent futureEvent))
-                                    (startTime futureEvent)
-                                    (startTime futureEvent)
-                                    (case futureRemain of
-                                        [] ->
-                                            Nothing
+                                -- this skips the very first transition
+                                -- which is generally a transition from A->A in 0 time anyway.
+                                |> (if startTime prev == startTime futureEvent then
+                                        identity
 
-                                        next :: _ ->
-                                            Just (lookAhead toAnchor next)
-                                    )
+                                    else
+                                        interp.transition
+                                            (endTime prev)
+                                            (toAnchor (getEvent prev))
+                                            (toAnchor (getEvent futureEvent))
+                                            (startTime futureEvent)
+                                            (startTime futureEvent)
+                                            (case futureRemain of
+                                                [] ->
+                                                    Nothing
+
+                                                next :: _ ->
+                                                    Just (lookAhead toAnchor next)
+                                            )
+                                   )
                                 |> interp.visit toAnchor
                                     futureEvent
                                     (endTime futureEvent)
@@ -1261,11 +1294,19 @@ visitAll transitionOngoing toAnchor interp details prev states future state =
                 (Line futureStart futureEvent futureRemain) :: restOfFuture ->
                     if Time.thisBeforeThat futureStart (endTime top) then
                         -- enroute to `top`, we are interrupted
-                        -- so we lerp to top (stopping at the interruption point)
-                        -- then continue on to the next line
+                        -- so we transition to top (stopping at the interruption point)
+                        -- then make another transition from where we were interrupted to
+                        -- our new destination
                         let
                             lerped =
                                 state
+                                    |> (\w ->
+                                            let
+                                                _ =
+                                                    Debug.log "DOUBLE TRANSITION STARTING"
+                                            in
+                                            w
+                                       )
                                     |> interp.transition
                                         (endTime prev)
                                         (toAnchor (getEvent prev))
@@ -1321,6 +1362,164 @@ visitAll transitionOngoing toAnchor interp details prev states future state =
                         visitAll False
                             toAnchor
                             interp
+                            details
+                            top
+                            remain
+                            future
+                            visited
+
+
+foldpAll2 :
+    (state -> anchor)
+    -> (anchor -> motion)
+    -> Transition state anchor motion
+    -> Timeline state
+    -> motion
+foldpAll2 lookup toStart transitionTo (Timeline timelineDetails) =
+    case timelineDetails.events of
+        Timetable timetable ->
+            let
+                start =
+                    toStart (lookup timelineDetails.initial)
+
+                beginning =
+                    case timetable of
+                        [] ->
+                            Occurring timelineDetails.initial timelineDetails.now timelineDetails.now
+
+                        (Line lineStart firstEvent remain) :: _ ->
+                            Occurring timelineDetails.initial lineStart lineStart
+
+                _ =
+                    Debug.log "      -----    start foldpAll2" timelineDetails.now
+            in
+            visitAll2
+                lookup
+                transitionTo
+                timelineDetails
+                beginning
+                []
+                timetable
+                start
+
+
+{-| -}
+visitAll2 :
+    (state -> anchor)
+    -> Transition state anchor motion
+    -> TimelineDetails state
+    -> Occurring state
+    -> List (Occurring state)
+    -> List (Line state)
+    -> motion
+    -> motion
+visitAll2 toAnchor transitionTo details prev queue future state =
+    case queue of
+        [] ->
+            case future of
+                [] ->
+                    state
+
+                (Line futureStart futureEvent futureRemain) :: restOfFuture ->
+                    let
+                        lerped =
+                            state
+                                |> transitionTo
+                                    toAnchor
+                                    prev
+                                    futureEvent
+                                    details.now
+                                    futureRemain
+                    in
+                    visitAll2
+                        toAnchor
+                        transitionTo
+                        details
+                        futureEvent
+                        futureRemain
+                        restOfFuture
+                        lerped
+
+        top :: remain ->
+            case future of
+                [] ->
+                    let
+                        visited =
+                            transitionTo toAnchor
+                                prev
+                                top
+                                details.now
+                                remain
+                                state
+                    in
+                    visitAll2
+                        toAnchor
+                        transitionTo
+                        details
+                        top
+                        remain
+                        future
+                        visited
+
+                (Line futureStart futureEvent futureRemain) :: restOfFuture ->
+                    if Time.thisBeforeThat futureStart (endTime top) then
+                        -- enroute to `top`, we are interrupted
+                        -- so we transition to top (stopping at the interruption point)
+                        -- then make another transition from where we were interrupted to
+                        -- our new destination
+                        let
+                            lerped =
+                                state
+                                    |> transitionTo toAnchor prev top futureStart remain
+                                    |> transitionTo toAnchor prev futureEvent details.now futureRemain
+
+                            -- |> interp.transition
+                            --     (endTime prev)
+                            --     (toAnchor (getEvent prev))
+                            --     (toAnchor (getEvent top))
+                            --     (startTime top)
+                            --     futureStart
+                            --     (case remain of
+                            --         [] ->
+                            --             Nothing
+                            --         next :: _ ->
+                            --             Just (lookAhead toAnchor next)
+                            --     )
+                            -- |> interp.transition
+                            --     futureStart
+                            --     (toAnchor (getEvent prev))
+                            --     (toAnchor (getEvent futureEvent))
+                            --     (startTime futureEvent)
+                            --     (startTime futureEvent)
+                            --     (case futureRemain of
+                            --         [] ->
+                            --             Nothing
+                            --         next :: _ ->
+                            --             Just (lookAhead toAnchor next)
+                            --     )
+                        in
+                        visitAll2
+                            toAnchor
+                            transitionTo
+                            details
+                            prev
+                            futureRemain
+                            restOfFuture
+                            lerped
+
+                    else
+                        let
+                            visited =
+                                transitionTo toAnchor
+                                    prev
+                                    top
+                                    details.now
+                                    remain
+                                    state
+                        in
+                        visitAll2
+                            toAnchor
+                            transitionTo
                             details
                             top
                             remain

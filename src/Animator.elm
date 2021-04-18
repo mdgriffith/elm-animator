@@ -12,11 +12,10 @@ module Animator exposing
     , color
     , Movement, at, move, xy, xyz
     , linear
-    , leaveSmoothly, arriveSmoothly
     , withWobble, withImpulse
     , Oscillator, wave, wrap, zigzag
     , loop, once, repeat
-    , step
+    , frames
     , Frames, frame, hold, walk, framesWith
     , Resting, FramesPerSecond, fps, cycle, cycleN
     )
@@ -133,8 +132,6 @@ If we're at a state of `True` and go to any other state, we're going to leave `T
 
 **Note** — These adjustments all take a `Float` between `0` and `1`. Behind the scenes they will be clamped at those values.
 
-@docs leaveSmoothly, arriveSmoothly
-
 @docs withWobble, withImpulse
 
 
@@ -179,7 +176,7 @@ Like Mario! In fact we have a [Mario example](https://github.com/mdgriffith/elm-
 
 Here's an abreviated example of what the code looks like:
 
-    Animator.step model.mario <|
+    Animator.frames model.mario <|
         \(Mario action) ->
             case action of
                 Walking ->
@@ -210,7 +207,7 @@ Here's an abreviated example of what the code looks like:
                 Standing ->
                     sprite.tail.stand
 
-@docs step
+@docs frames
 
 @docs Frames, frame, hold, walk, framesWith
 
@@ -224,6 +221,7 @@ import Duration
 import Internal.Interpolate as Interpolate
 import Internal.Time as Time
 import Internal.Timeline as Timeline
+import Internal.Transition as Transition
 import Quantity
 import Time
 
@@ -739,16 +737,20 @@ type alias Movement =
 
 {-| -}
 at : Float -> Movement
-at =
+at f =
     Interpolate.Pos
-        Interpolate.standardDefault
+        Transition.standard
+        f
+        Nothing
 
 
 {-| -}
 linear : Float -> Movement
-linear =
+linear f =
     Interpolate.Pos
-        Interpolate.linearDefault
+        Transition.linear
+        f
+        Nothing
 
 
 
@@ -786,9 +788,9 @@ linear =
 
 -}
 withWobble : Float -> Movement -> Movement
-withWobble p movement =
-    Interpolate.mapPersonality
-        (\personality -> { personality | wobbliness = clamp 0 1 p })
+withWobble w movement =
+    Interpolate.mapTransition
+        (\personality -> Transition.wobble w)
         movement
 
 
@@ -803,8 +805,8 @@ This is given as a velocity (as value/second). Usually this is pixels per second
 -}
 withImpulse : Float -> Movement -> Movement
 withImpulse p movement =
-    Interpolate.mapPersonality
-        (\personality -> { personality | impulse = clamp 0 1 p })
+    Interpolate.mapTransition
+        (\personality -> Debug.todo "Where do we store impulse?")
         movement
 
 
@@ -835,37 +837,29 @@ withImpulse p movement =
 -- arriveEarly : Float -> Movement -> Movement
 -- arriveEarly p movement =
 --     applyOption (\def -> { def | arriveEarly = Interpolate.Specified (clamp 0 1 p) }) movement
-
-
-{-| Underneath the hood this library uses [Bézier curves](https://en.wikipedia.org/wiki/B%C3%A9zier_curve) to model motion.
-Because of this you can adjust the "smoothness" of the curve that's ultimately used.
-
-  - `leaveSmoothly 0` is essentially linear animation.
-  - `leaveSmoothly 1` means the animation will start slowly and smoothly begin to accelerate.
-    Here's a general diagram of what's going on:
-    ![](https://mdgriffith.github.io/elm-animator/images/default-personality.png)
-    **Note** — The values in the above diagram are the built in defaults for most movements in `elm-animator`. They come from [`Material Design`](https://material.io/design/motion/speed.html#easing).
-    **Note 2** — An [interactive version of the above diagram](https://ellie-app.com/8s2yjQzQmZda1) is also available.
-
--}
-leaveSmoothly : Float -> Movement -> Movement
-leaveSmoothly s movement =
-    Interpolate.mapPersonality
-        (\personality -> { personality | departSlowly = clamp 0 1 s })
-        movement
-
-
-{-| We can also smooth out our arrival.
-
-  - `arriveSmoothly 0` means no smoothing, which means more of a linear animation.
-  - `arriveSmoothly 1` means the animation will "ease out" or "arrive slowly".
-
--}
-arriveSmoothly : Float -> Movement -> Movement
-arriveSmoothly s movement =
-    Interpolate.mapPersonality
-        (\personality -> { personality | arriveSlowly = clamp 0 1 s })
-        movement
+-- {-| Underneath the hood this library uses [Bézier curves](https://en.wikipedia.org/wiki/B%C3%A9zier_curve) to model motion.
+-- Because of this you can adjust the "smoothness" of the curve that's ultimately used.
+--   - `leaveSmoothly 0` is essentially linear animation.
+--   - `leaveSmoothly 1` means the animation will start slowly and smoothly begin to accelerate.
+--     Here's a general diagram of what's going on:
+--     ![](https://mdgriffith.github.io/elm-animator/images/default-personality.png)
+--     **Note** — The values in the above diagram are the built in defaults for most movements in `elm-animator`. They come from [`Material Design`](https://material.io/design/motion/speed.html#easing).
+--     **Note 2** — An [interactive version of the above diagram](https://ellie-app.com/8s2yjQzQmZda1) is also available.
+-- -}
+-- leaveSmoothly : Float -> Movement -> Movement
+-- leaveSmoothly s movement =
+--     Interpolate.mapTransition
+--         (\personality -> { personality | departSlowly = clamp 0 1 s })
+--         movement
+-- {-| We can also smooth out our arrival.
+--   - `arriveSmoothly 0` means no smoothing, which means more of a linear animation.
+--   - `arriveSmoothly 1` means the animation will "ease out" or "arrive slowly".
+-- -}
+-- arriveSmoothly : Float -> Movement -> Movement
+-- arriveSmoothly s movement =
+--     Interpolate.mapTransition
+--         (\personality -> { personality | arriveSlowly = clamp 0 1 s })
+--         movement
 
 
 {-| -}
@@ -888,46 +882,50 @@ within tolerance anchor val =
 {-| -}
 once : Duration -> Oscillator -> Movement
 once activeDuration osc =
-    case osc of
-        Interpolate.Resting i ->
-            at i
-
-        Interpolate.Oscillator start points ->
-            Interpolate.Osc
-                Interpolate.standardDefault
-                start
-                (Timeline.Repeat 1 activeDuration)
-                points
+    -- case osc of
+    --     Interpolate.Resting i ->
+    --         at i
+    --     Interpolate.Oscillator start points ->
+    --         Interpolate.Pos
+    --             Interpolate.standardDefault
+    --             start
+    --             (Just
+    --                 (Interpolate.Repeat 1)
+    --             )
+    --             (Timeline.Repeat 1 activeDuration)
+    --             points
+    Debug.todo "once"
 
 
 {-| -}
 loop : Duration -> Oscillator -> Movement
 loop activeDuration osc =
-    case osc of
-        Interpolate.Resting i ->
-            at i
-
-        Interpolate.Oscillator start points ->
-            Interpolate.Osc
-                Interpolate.standardDefault
-                start
-                (Timeline.Loop activeDuration)
-                points
+    -- case osc of
+    --     Interpolate.Resting i ->
+    --         at i
+    --     Interpolate.Oscillator start points ->
+    --         Interpolate.Pos
+    --             Interpolate.standardDefault
+    --             start
+    --             -- (Timeline.Loop activeDuration)
+    --             -- points
+    --             (Interpolate.Loop)
+    Debug.todo "loop"
 
 
 {-| -}
 repeat : Int -> Duration -> Oscillator -> Movement
 repeat n activeDuration osc =
-    case osc of
-        Interpolate.Resting i ->
-            at i
-
-        Interpolate.Oscillator start points ->
-            Interpolate.Osc
-                Interpolate.standardDefault
-                start
-                (Timeline.Repeat n activeDuration)
-                points
+    -- case osc of
+    --     Interpolate.Resting i ->
+    --         at i
+    --     Interpolate.Oscillator start points ->
+    --         Interpolate.Osc
+    --             Interpolate.standardDefault
+    --             start
+    --             (Timeline.Repeat n activeDuration)
+    --             points
+    Debug.todo "repeat"
 
 
 
@@ -976,12 +974,13 @@ wrap start end =
         total =
             end - start
     in
-    Interpolate.Oscillator start
-        [ { value = end
-          , timing = Interpolate.Linear
-          , time = 1
-          }
-        ]
+    -- Interpolate.Oscillator start
+    --     [ { value = end
+    --       , timing = Interpolate.Linear
+    --       , time = 1
+    --       }
+    --     ]
+    Debug.todo "wrap"
 
 
 {-| This is basically a sine wave! It will "wave" between the two numbers you give it.
@@ -998,48 +997,50 @@ wave start end =
         total =
             top - bottom
     in
-    Interpolate.Oscillator start
-        -- TODO! What are the bezier control points for a sin wave?
-        -- (\u ->
-        --     let
-        --         normalized =
-        --             (cos (turns (0.5 + u)) + 1) / 2
-        --     in
-        --     start + total * normalized
-        -- )
-        [ { value = end
-          , timing =
-                -- Interpolate.Bezier (Interpolate.Spline 0 0.2 0.8 1)
-                Interpolate.Linear
-          , time = 0.5
-          }
-        , { value = start
-          , timing =
-                -- Interpolate.Bezier (Interpolate.Spline 0 0.2 0.8 1)
-                Interpolate.Linear
-          , time = 1
-          }
-        ]
+    -- Interpolate.Oscillator start
+    -- TODO! What are the bezier control points for a sin wave?
+    -- (\u ->
+    --     let
+    --         normalized =
+    --             (cos (turns (0.5 + u)) + 1) / 2
+    --     in
+    --     start + total * normalized
+    -- )
+    -- [ { value = end
+    --   , timing =
+    --         -- Interpolate.Bezier (Interpolate.Spline 0 0.2 0.8 1)
+    --         Interpolate.Linear
+    --   , time = 0.5
+    --   }
+    -- , { value = start
+    --   , timing =
+    --         -- Interpolate.Bezier (Interpolate.Spline 0 0.2 0.8 1)
+    --         Interpolate.Linear
+    --   , time = 1
+    --   }
+    -- ]
+    Debug.todo "wave"
 
 
 {-| Start at one number, move linearly to another, and then linearly back.
 -}
 zigzag : Float -> Float -> Oscillator
 zigzag start end =
-    let
-        total =
-            end - start
-    in
-    Interpolate.Oscillator start
-        [ { value = end
-          , timing = Interpolate.Linear
-          , time = 0.5
-          }
-        , { value = start
-          , timing = Interpolate.Linear
-          , time = 1
-          }
-        ]
+    -- let
+    --     total =
+    --         end - start
+    -- in
+    -- Interpolate.Oscillator start
+    --     [ { value = end
+    --       , timing = Interpolate.Linear
+    --       , time = 0.5
+    --       }
+    --     , { value = start
+    --       , timing = Interpolate.Linear
+    --       , time = 1
+    --       }
+    --     ]
+    Debug.todo ""
 
 
 
@@ -1107,28 +1108,28 @@ fps =
 {-| While we're at this specific state, `cycle` through a list of frames at this `fps`.
 -}
 cycle : FramesPerSecond -> List (Frames sprite) -> Resting sprite
-cycle (FramesPerSecond framesPerSecond) frames =
+cycle (FramesPerSecond framesPerSecond) steps =
     let
         duration =
-            Duration.seconds (toFloat (List.length frames) / framesPerSecond)
+            Duration.seconds (toFloat (List.length steps) / framesPerSecond)
     in
-    Timeline.Cycle (Timeline.Loop duration) frames
+    Timeline.Cycle (Timeline.Loop duration) steps
 
 
 {-| Same as `cycle`, but only for `n` number of times.
 -}
 cycleN : Int -> FramesPerSecond -> List (Frames sprite) -> Resting sprite
-cycleN n (FramesPerSecond framesPerSecond) frames =
+cycleN n (FramesPerSecond framesPerSecond) steps =
     let
         duration =
-            Duration.seconds (toFloat (List.length frames) / framesPerSecond)
+            Duration.seconds (toFloat (List.length steps) / framesPerSecond)
     in
-    Timeline.Cycle (Timeline.Repeat n duration) frames
+    Timeline.Cycle (Timeline.Repeat n duration) steps
 
 
 {-| -}
-step : Timeline state -> (state -> Frames sprite) -> sprite
-step timeline lookup =
+frames : Timeline state -> (state -> Frames sprite) -> sprite
+frames timeline lookup =
     let
         progress =
             Timeline.progress timeline
@@ -1223,8 +1224,8 @@ stepFrames currentFrameSet progress =
 
 
 totalFrames : List (Frames item) -> Int
-totalFrames frames =
-    List.foldl (\frm total -> total + frameSize frm) 0 frames
+totalFrames steps =
+    List.foldl (\frm total -> total + frameSize frm) 0 steps
 
 
 frameSize : Frames item -> Int
@@ -1236,8 +1237,8 @@ frameSize myFrame =
         Timeline.Hold i _ ->
             i
 
-        Timeline.Walk i frames ->
-            List.foldl (\frm total -> total + frameSize frm) 0 frames
+        Timeline.Walk i steps ->
+            List.foldl (\frm total -> total + frameSize frm) 0 steps
 
         Timeline.WithRest _ newFrameSet ->
             frameSize newFrameSet
@@ -1276,13 +1277,13 @@ getItemAtIndex targetIndex transitionFrame currentIndex cycleList =
                     else
                         getItemAtIndex targetIndex transitionFrame (currentIndex + frameCount) remain
 
-                Timeline.WithRest _ frames ->
+                Timeline.WithRest _ frameList ->
                     let
                         frameCount =
-                            frameSize frames
+                            frameSize frameList
                     in
                     if targetIndex < currentIndex + frameCount then
-                        getItemAtIndex targetIndex transitionFrame currentIndex [ frames ]
+                        getItemAtIndex targetIndex transitionFrame currentIndex [ frameList ]
 
                     else
                         getItemAtIndex targetIndex transitionFrame (currentIndex + frameCount) remain
@@ -1304,8 +1305,8 @@ lastFrame myFrame =
                 Just last ->
                     lastFrame last
 
-        Timeline.WithRest _ frames ->
-            lastFrame frames
+        Timeline.WithRest _ frmeeList ->
+            lastFrame frmeeList
 
 
 {-| An `Animator` knows how to read and write all the `Timelines` within your `Model`.
