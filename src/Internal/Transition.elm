@@ -65,6 +65,8 @@ Goals:
 import Internal.Bezier as Bezier
 import Internal.Bits as Bits
 import Internal.Spring as Spring
+import Internal.Time as Time
+import Internal.Units as Units
 import Pixels
 import Quantity
 
@@ -151,16 +153,28 @@ linear =
             }
 
 
+type alias TimeDomain =
+    { start : PointInTime
+    , end : PointInTime
+    }
+
+
+type alias PointInTime =
+    { x : Time.Absolute
+    , y : Units.Pixels
+    }
+
+
 {-| -}
 atX :
     Float
-    -> Domain
-    -> Float
-    -> Float
+    -> TimeDomain
+    -> Units.PixelsPerSecond
+    -> Units.PixelsPerSecond
     -> Transition
     ->
-        { position : Float
-        , velocity : Float
+        { position : Units.Pixels
+        , velocity : Units.PixelsPerSecond
         }
 atX progress domain introVelocity exitVelocity transition =
     case transition of
@@ -173,8 +187,8 @@ atX progress domain introVelocity exitVelocity transition =
 
             else
                 spline
-                    |> toDomain domain introVelocity exitVelocity
-                    |> posVel progress
+                    |> inTimeDomain domain introVelocity exitVelocity
+                    |> posVel (toTimeProgress domain progress)
 
         Trail trail ->
             onTrail progress domain introVelocity exitVelocity trail
@@ -182,7 +196,7 @@ atX progress domain introVelocity exitVelocity transition =
         Wobble wob ->
             let
                 totalX =
-                    domain.end.x - domain.start.x
+                    Time.inMilliseconds domain.end.x - Time.inMilliseconds domain.start.x
 
                 params =
                     Spring.select wob
@@ -190,10 +204,30 @@ atX progress domain introVelocity exitVelocity transition =
             in
             Spring.analytical params
                 (Quantity.Quantity (totalX * progress))
-                domain.end.y
-                { position = domain.start.y
-                , velocity = introVelocity
+                (Units.inPixels domain.end.y)
+                { position = Units.inPixels domain.start.y
+                , velocity = Units.inPixelsPerMs introVelocity
                 }
+                |> wrapUnits
+
+
+toTimeProgress domain factor =
+    let
+        start =
+            Time.inMilliseconds domain.start.x
+
+        end =
+            Time.inMilliseconds domain.end.x
+    in
+    ((end - start) * factor) + start
+
+
+wrapUnits state =
+    { position =
+        Pixels.pixels state.position
+    , velocity =
+        Pixels.pixelsPerSecond (state.velocity * 1000)
+    }
 
 
 posVel progress spline =
@@ -205,34 +239,34 @@ posVel progress spline =
             Bezier.firstDerivative spline current.t
     in
     { position =
-        current.point.y
+        Pixels.pixels current.point.y
     , velocity =
-        firstDeriv.y / firstDeriv.x
+        Pixels.pixelsPerSecond ((firstDeriv.y / firstDeriv.x) * 1000)
     }
 
 
 onTrail :
     Float
-    -> Domain
-    -> Float
-    -> Float
+    -> TimeDomain
+    -> Units.PixelsPerSecond
+    -> Units.PixelsPerSecond
     -> List Bezier.Spline
     ->
-        { position : Float
-        , velocity : Float
+        { position : Units.Pixels
+        , velocity : Units.PixelsPerSecond
         }
 onTrail progress domain introVelocity exitVelocity trail =
     case trail of
         [] ->
             { position = domain.end.y
-            , velocity = 0
+            , velocity = Units.zero
             }
 
         spline :: remain ->
             if Bezier.firstX spline <= progress then
                 spline
-                    |> toDomain domain introVelocity exitVelocity
-                    |> posVel progress
+                    |> inTimeDomain domain introVelocity exitVelocity
+                    |> posVel (toTimeProgress domain progress)
 
             else
                 onTrail progress domain introVelocity exitVelocity remain
@@ -388,6 +422,65 @@ toDomain domain introVelocity exitVelocity (Bezier.Spline one two three four) =
         ctrl1
         ctrl2
         domain.end
+
+
+inTimeDomain : TimeDomain -> Units.PixelsPerSecond -> Units.PixelsPerSecond -> Bezier.Spline -> Bezier.Spline
+inTimeDomain domain introVelocity exitVelocity (Bezier.Spline one two three four) =
+    let
+        totalX =
+            Time.inMilliseconds domain.end.x - Time.inMilliseconds domain.start.x
+
+        totalY =
+            Units.inPixels domain.end.y - Units.inPixels domain.start.y
+
+        ctrl1 =
+            let
+                angle =
+                    atan2 (Units.inPixelsPerMs introVelocity) 1
+            in
+            { x =
+                (totalX * two.x) + Time.inMilliseconds domain.start.x
+            , y =
+                (totalY * two.y) + Units.inPixels domain.start.y
+            }
+                |> rotateAroundTimePoint angle domain.start
+
+        ctrl2 =
+            let
+                angle =
+                    atan2 (Units.inPixelsPerMs exitVelocity) 1
+            in
+            { x =
+                (totalX * three.x) + Time.inMilliseconds domain.start.x
+            , y =
+                (totalY * three.y) + Units.inPixels domain.start.y
+            }
+                |> rotateAroundTimePoint angle domain.end
+    in
+    Bezier.Spline
+        { x = Time.inMilliseconds domain.start.x
+        , y = Units.inPixels domain.start.y
+        }
+        ctrl1
+        ctrl2
+        { x = Time.inMilliseconds domain.end.x
+        , y = Units.inPixels domain.end.y
+        }
+
+
+{-| -}
+rotateAroundTimePoint : Float -> PointInTime -> Bezier.Point -> Bezier.Point
+rotateAroundTimePoint radians center point =
+    let
+        centerX =
+            Time.inMilliseconds center.x
+
+        centerY =
+            Units.inPixels center.y
+    in
+    { x = cos radians * (point.x - centerX) - sin radians * (point.y - centerY) + centerX
+    , y = sin radians * (point.x - centerX) + cos radians * (point.y - centerY) + centerY
+    }
 
 
 {-| -}

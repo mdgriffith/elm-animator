@@ -1,6 +1,6 @@
 module Internal.Interpolate exposing
     ( Move(..), Movement, State, derivativeOfEasing
-    , coloring, moving, mapPersonality
+    , coloring, moving, mapTransition
     , Checkpoint, Oscillator(..), Point, Sequence(..), Step(..), Timing(..), base, color, details, equalState, getIterationCssString, getPeriodDuration, sequenceToPeriod, sequenceToSplines, transitionSplines, visit
     )
 
@@ -12,7 +12,7 @@ module Internal.Interpolate exposing
 
 @docs startMoving
 
-@docs coloring, moving, mapPersonality
+@docs coloring, moving, mapTransition
 
 -}
 
@@ -24,6 +24,7 @@ import Internal.Spring as Spring
 import Internal.Time as Time
 import Internal.Timeline as Timeline exposing (Period(..))
 import Internal.Transition as Transition
+import Internal.Units as Units
 import Pixels
 import Quantity
 
@@ -180,7 +181,7 @@ base (Pos _ f _) =
     f
 
 
-mapPersonality fn movement =
+mapTransition fn movement =
     case movement of
         Pos p f seq ->
             Pos (fn p) f seq
@@ -362,6 +363,18 @@ type alias Milliseconds =
 transitionSplines : Time.Absolute -> Movement -> Movement -> Time.Absolute -> Maybe (Timeline.LookAhead Movement) -> State -> List Bezier.Spline
 transitionSplines prevEndTime prev target targetTime maybeLookAhead state =
     let
+        _ =
+            Debug.log "    -> SPLINES"
+                { start =
+                    { x = Time.inMilliseconds prevEndTime
+                    , y = Pixels.inPixels state.position
+                    }
+                , end =
+                    { x = Time.inMilliseconds targetTime
+                    , y = targetPos
+                    }
+                }
+
         targetPos =
             case target of
                 Pos _ x _ ->
@@ -392,12 +405,24 @@ transitionSplines prevEndTime prev target targetTime maybeLookAhead state =
 transition : Time.Absolute -> Movement -> Movement -> Time.Absolute -> Time.Absolute -> Maybe (Timeline.LookAhead Movement) -> State -> State
 transition startTime prev target targetTime now maybeLookAhead state =
     let
+        _ =
+            Debug.log "DOMAIN POSITION"
+                { start =
+                    { x = Time.inMilliseconds startTime
+                    , y = Pixels.inPixels state.position
+                    }
+                , end =
+                    { x = Time.inMilliseconds targetTime
+                    , y = Pixels.inPixels targetPosition
+                    }
+                }
+
         targetVelocity =
-            Pixels.inPixelsPerSecond
-                (newVelocityAtTarget target targetTime maybeLookAhead)
+            newVelocityAtTarget target targetTime maybeLookAhead
 
         progress =
             Time.progress startTime targetTime now
+                |> Debug.log "PROGRESS"
 
         targetPosition =
             case target of
@@ -407,27 +432,20 @@ transition startTime prev target targetTime now maybeLookAhead state =
     Transition.atX
         progress
         { start =
-            { x = Time.inMilliseconds startTime
-            , y = Pixels.inPixels state.position
+            { x = startTime
+            , y = state.position
             }
         , end =
-            { x = Time.inMilliseconds targetTime
-            , y = Pixels.inPixels targetPosition
+            { x = targetTime
+            , y = targetPosition
             }
         }
-        (1000 * Pixels.inPixelsPerSecond state.velocity)
-        (1000 * targetVelocity)
+        state.velocity
+        targetVelocity
         (case target of
             Pos trans _ _ ->
                 trans
         )
-        |> wrapState
-
-
-wrapState val =
-    { position = Pixels.pixels val.position
-    , velocity = Pixels.pixelsPerSecond (val.velocity * 1000)
-    }
 
 
 
@@ -589,18 +607,17 @@ sequenceSteps previous steps durationTillNow durationCursor =
                 Transition.atX
                     progress
                     { start =
-                        { x = 0
-                        , y = previous
+                        { x = Units.zero
+                        , y = Pixels.pixels previous
                         }
                     , end =
-                        { x = 1
-                        , y = val
+                        { x = Quantity.Quantity 1
+                        , y = Pixels.pixels val
                         }
                     }
-                    0
-                    0
+                    Units.zero
+                    Units.zero
                     trans
-                    |> wrapState
 
             else
                 sequenceSteps val remain durationTillNow newDuration

@@ -171,11 +171,16 @@ cssTimingString (Spline c0 c1 c2 c3) =
 
     else
         "cubic-bezier("
-            ++ (String.fromFloat ((c1.x - c0.x) / xDomain) ++ comma)
-            ++ (String.fromFloat ((c1.y - c0.y) / yDomain) ++ comma)
-            ++ (String.fromFloat ((c2.x - c0.x) / xDomain) ++ comma)
-            ++ String.fromFloat ((c2.y - c0.y) / yDomain)
+            ++ (String.fromFloat (roundFloat ((c1.x - c0.x) / xDomain)) ++ comma)
+            ++ (String.fromFloat (roundFloat ((c1.y - c0.y) / yDomain)) ++ comma)
+            ++ (String.fromFloat (roundFloat ((c2.x - c0.x) / xDomain)) ++ comma)
+            ++ String.fromFloat (roundFloat ((c2.y - c0.y) / yDomain))
             ++ ")"
+
+
+roundFloat : Float -> Float
+roundFloat f =
+    toFloat (round (f * 100)) / 100
 
 
 comma : String
