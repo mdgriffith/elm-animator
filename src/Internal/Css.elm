@@ -1551,8 +1551,8 @@ toPropCurves2 only =
                                     transitionSplines =
                                         Transition.splines
                                             domain
-                                            (Pixels.inPixelsPerSecond rendered.state.velocity * 1000)
-                                            (targetVelocity * 1000)
+                                            rendered.state.velocity
+                                            targetVelocity
                                             targetTransition
 
                                     dur =

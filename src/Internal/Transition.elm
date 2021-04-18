@@ -322,43 +322,57 @@ type alias Domain =
 
 
 {-| -}
-splines : Domain -> Float -> Float -> Transition -> List Bezier.Spline
+splines :
+    TimeDomain
+    -> Units.PixelsPerSecond
+    -> Units.PixelsPerSecond
+    -> Transition
+    -> List Bezier.Spline
 splines domain introVelocity exitVelocity transition =
     case transition of
         Transition spline ->
-            [ toDomain domain introVelocity exitVelocity spline ]
+            [ inTimeDomain domain introVelocity exitVelocity spline ]
 
         Trail trail ->
             trailSplines domain introVelocity exitVelocity trail []
 
         Wobble wob ->
             let
+                totalX =
+                    Time.inMilliseconds domain.end.x - Time.inMilliseconds domain.start.x
+
                 params =
                     Spring.select wob
-                        (Quantity.Quantity (domain.end.x - domain.start.x))
+                        (Quantity.Quantity totalX)
             in
             Spring.segments params
-                { position = domain.start.y
-                , velocity = introVelocity
+                { position = Units.inPixels domain.start.y
+                , velocity = Units.inPixelsPerMs introVelocity
                 }
-                domain.end.y
+                (Units.inPixels domain.end.y)
 
 
-trailSplines : Domain -> Float -> Float -> List Bezier.Spline -> List Bezier.Spline -> List Bezier.Spline
+trailSplines :
+    TimeDomain
+    -> Units.PixelsPerSecond
+    -> Units.PixelsPerSecond
+    -> List Bezier.Spline
+    -> List Bezier.Spline
+    -> List Bezier.Spline
 trailSplines domain introVelocity exitVelocity trail captured =
     case trail of
         [] ->
             captured
 
         spline :: [] ->
-            toDomain domain introVelocity exitVelocity spline :: captured
+            inTimeDomain domain introVelocity exitVelocity spline :: captured
 
         spline :: remain ->
             trailSplines domain
-                0
+                Units.zero
                 exitVelocity
                 remain
-                (toDomain domain introVelocity 0 spline
+                (inTimeDomain domain introVelocity Units.zero spline
                     :: captured
                 )
 

@@ -83,16 +83,16 @@ stepsToSplines time current steps splines =
                 newSplines =
                     Transition.splines
                         { start =
-                            { x = Time.inMilliseconds time
-                            , y = current
+                            { x = time
+                            , y = Pixels.pixels current
                             }
                         , end =
-                            { x = Time.inMilliseconds newTime
-                            , y = value
+                            { x = newTime
+                            , y = Pixels.pixels value
                             }
                         }
-                        0
-                        0
+                        Units.zero
+                        Units.zero
                         trans
             in
             stepsToSplines
@@ -382,20 +382,19 @@ transitionSplines prevEndTime target targetTime maybeLookAhead state =
 
         targetVelocity =
             newVelocityAtTarget target targetTime maybeLookAhead
-                |> Pixels.inPixelsPerSecond
     in
     Transition.splines
         { start =
-            { x = Time.inMilliseconds prevEndTime
-            , y = Pixels.inPixels state.position
+            { x = prevEndTime
+            , y = state.position
             }
         , end =
-            { x = Time.inMilliseconds targetTime
-            , y = targetPos
+            { x = targetTime
+            , y = Pixels.pixels targetPos
             }
         }
-        (Pixels.inPixelsPerSecond state.velocity * 1000)
-        (targetVelocity * 1000)
+        state.velocity
+        targetVelocity
         (case target of
             Pos trans _ _ ->
                 trans
