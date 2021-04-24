@@ -98,23 +98,23 @@ add new existingProps names ids =
 
         ((Prop id name _ _) as prop) :: remain ->
             if (id - Internal.Css.Props.noId) == 0 then
-                if Set.member id ids then
+                if Set.member name names then
                     add remain existingProps names ids
 
                 else
                     add remain
                         (prop :: existingProps)
-                        names
-                        (Set.insert id ids)
+                        (Set.insert name names)
+                        ids
 
-            else if Set.member name names then
+            else if Set.member id ids then
                 add remain existingProps names ids
 
             else
                 add remain
                     (prop :: existingProps)
-                    (Set.insert name names)
-                    ids
+                    names
+                    (Set.insert id ids)
 
         ((ColorProp name movement clr) as prop) :: remain ->
             if Set.member name names then
@@ -147,13 +147,15 @@ cssFromProps timeline lookup =
                 )
                 (\get prev target now future cursor ->
                     let
+                        -- _ = Debug.log get (Timeline.getEvent prev)
                         new =
-                            case cursor.props of
-                                [] ->
-                                    get (Timeline.getEvent target) ++ get (Timeline.getEvent prev)
+                            Debug.log "NEW" <|
+                                case cursor.props of
+                                    [] ->
+                                        get (Timeline.getEvent target) ++ get (Timeline.getEvent prev)
 
-                                _ ->
-                                    get (Timeline.getEvent target)
+                                    _ ->
+                                        get (Timeline.getEvent target)
                     in
                     add new
                         cursor.props
@@ -167,6 +169,7 @@ cssFromProps timeline lookup =
 
         renderedProps =
             Timeline.foldpAll2 lookup (startProps present) (toPropCurves2 present) timeline
+                |> Debug.log "RENDERED PROPS"
     in
     renderCss (Timeline.getCurrentTime timeline) renderers renderedProps
         |> Debug.log "CSS"
@@ -364,7 +367,7 @@ transform now renderedProps =
                 rendered =
                     renderCompoundSections now comp.slices emptyAnim
             in
-            if Debug.log "empty anim!" <| isEmptyAnim rendered then
+            if isEmptyAnim rendered then
                 Just
                     ( { props = [ ( "transform", renderTransformProp comp.states "" ) ]
                       , keyframes = ""
@@ -386,7 +389,7 @@ transform now renderedProps =
 
 renderCompoundSections : Time.Absolute -> List CompoundSection -> CssAnim -> CssAnim
 renderCompoundSections now sections anim =
-    case Debug.log "SECTIONS" sections of
+    case sections of
         [] ->
             anim
 
