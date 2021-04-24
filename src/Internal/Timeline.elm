@@ -1422,7 +1422,7 @@ visitAll2 toAnchor transitionTo details prev queue future state =
 
                 (Line futureStart futureEvent futureRemain) :: restOfFuture ->
                     let
-                        lerped =
+                        new =
                             state
                                 |> transitionTo
                                     toAnchor
@@ -1438,13 +1438,13 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                         futureEvent
                         futureRemain
                         restOfFuture
-                        lerped
+                        new
 
         top :: remain ->
             case future of
                 [] ->
                     let
-                        visited =
+                        new =
                             transitionTo toAnchor
                                 prev
                                 top
@@ -1459,44 +1459,19 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                         top
                         remain
                         future
-                        visited
+                        new
 
                 (Line futureStart futureEvent futureRemain) :: restOfFuture ->
-                    if Time.thisBeforeThat futureStart (endTime top) then
+                    if Debug.log "INterrupted" <| Time.thisBeforeThat futureStart (endTime top) then
                         -- enroute to `top`, we are interrupted
                         -- so we transition to top (stopping at the interruption point)
                         -- then make another transition from where we were interrupted to
                         -- our new destination
                         let
-                            lerped =
+                            new =
                                 state
                                     |> transitionTo toAnchor prev top futureStart remain
                                     |> transitionTo toAnchor prev futureEvent details.now futureRemain
-
-                            -- |> interp.transition
-                            --     (endTime prev)
-                            --     (toAnchor (getEvent prev))
-                            --     (toAnchor (getEvent top))
-                            --     (startTime top)
-                            --     futureStart
-                            --     (case remain of
-                            --         [] ->
-                            --             Nothing
-                            --         next :: _ ->
-                            --             Just (lookAhead toAnchor next)
-                            --     )
-                            -- |> interp.transition
-                            --     futureStart
-                            --     (toAnchor (getEvent prev))
-                            --     (toAnchor (getEvent futureEvent))
-                            --     (startTime futureEvent)
-                            --     (startTime futureEvent)
-                            --     (case futureRemain of
-                            --         [] ->
-                            --             Nothing
-                            --         next :: _ ->
-                            --             Just (lookAhead toAnchor next)
-                            --     )
                         in
                         visitAll2
                             toAnchor
@@ -1505,11 +1480,11 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                             prev
                             futureRemain
                             restOfFuture
-                            lerped
+                            new
 
                     else
                         let
-                            visited =
+                            new =
                                 transitionTo toAnchor
                                     prev
                                     top
@@ -1524,7 +1499,7 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                             top
                             remain
                             future
-                            visited
+                            new
 
 
 log x y =

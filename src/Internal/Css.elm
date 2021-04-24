@@ -167,7 +167,6 @@ cssFromProps timeline lookup =
 
         renderedProps =
             Timeline.foldpAll2 lookup (startProps present) (toPropCurves2 present) timeline
-                |> Debug.log "RENDERED"
     in
     renderCss (Timeline.getCurrentTime timeline) renderers renderedProps
         |> Debug.log "CSS"
@@ -189,14 +188,14 @@ renderers =
 
 colors : Renderer
 colors now renderedProps =
-    case Debug.log "COLOR" renderedProps of
+    case renderedProps of
         [] ->
             Nothing
 
         (RenderedColorProp details) :: remain ->
             let
                 rendered =
-                    renderColorSection now details.name details.sections emptyAnim
+                    renderColorSection now details.name details.color details.sections emptyAnim
             in
             case colors now remain of
                 Nothing ->
@@ -213,11 +212,15 @@ colors now renderedProps =
 
 
 {-| -}
-renderColorSection : Time.Absolute -> String -> List ColorSection -> CssAnim -> CssAnim
-renderColorSection now name sections anim =
+renderColorSection : Time.Absolute -> String -> Color.Color -> List ColorSection -> CssAnim -> CssAnim
+renderColorSection now name backup sections anim =
     case sections of
         [] ->
-            anim
+            if isEmptyAnim anim then
+                { anim | props = ( name, Color.toCssString backup ) :: anim.props }
+
+            else
+                anim
 
         top :: remain ->
             let
@@ -229,6 +232,7 @@ renderColorSection now name sections anim =
                 renderColorSection
                     now
                     name
+                    backup
                     remain
                     anim
 
@@ -238,6 +242,7 @@ renderColorSection now name sections anim =
                         renderColorSection
                             now
                             name
+                            backup
                             remain
                             (combine anim
                                 (renderColorSectionToCss now name after)
@@ -247,6 +252,7 @@ renderColorSection now name sections anim =
                 renderColorSection
                     now
                     name
+                    backup
                     remain
                     (combine anim
                         (renderColorSectionToCss now name top)
@@ -300,6 +306,7 @@ renderColorSectionToCss now name section =
     { hash = animationName
     , animation = animation
     , keyframes = keyframes
+    , props = []
     }
 
 
@@ -354,10 +361,24 @@ transform now renderedProps =
 
         (CompoundProp comp) :: remain ->
             let
-                cssAnim =
+                rendered =
                     renderCompoundSections now comp.slices emptyAnim
             in
-            Just ( cssAnim, remain )
+            if Debug.log "empty anim!" <| isEmptyAnim rendered then
+                Just
+                    ( { props = [ ( "transform", renderTransformProp comp.states "" ) ]
+                      , keyframes = ""
+                      , hash = ""
+                      , animation = ""
+                      }
+                    , remain
+                    )
+
+            else
+                Just
+                    ( rendered
+                    , remain
+                    )
 
         _ ->
             Nothing
@@ -413,7 +434,7 @@ renderCompoundSections now sections anim =
                             ( targetSection, tail )
 
                     _ =
-                        Debug.log "FRAMES" section.frames
+                        List.map (Debug.log "FRAMES") section.frames
 
                     new =
                         if section.conflicting then
@@ -490,6 +511,7 @@ renderCompoundSections now sections anim =
                                 ++ " {\n"
                                 ++ new.keyframes
                                 ++ "\n}"
+                        , props = []
                         }
                         anim
                     )
@@ -725,6 +747,21 @@ renderPointAt now props rendered =
             renderPointAt now remain new
 
 
+renderTransformProp : List ( Id, Interpolate.State ) -> String -> String
+renderTransformProp states rendered =
+    case states of
+        [] ->
+            rendered
+
+        ( id, state ) :: remain ->
+            renderTransformProp remain
+                (rendered
+                    ++ " "
+                    ++ Internal.Css.Props.toStr id
+                        (Pixels.inPixels state.position)
+                )
+
+
 renderFirstPoint :
     List
         { id : Internal.Css.Props.Id
@@ -806,7 +843,10 @@ scalarHelper now renderedProps anim =
         (RenderedProp details) :: remain ->
             scalarHelper now
                 remain
-                (propToCssHelper now details.id details.name details.format details.sections emptyAnim
+                (propToCssHelper now
+                    details
+                    details.sections
+                    emptyAnim
                     |> combine anim
                 )
 
@@ -819,21 +859,34 @@ scalarHelper now renderedProps anim =
             scalarHelper now remain anim
 
 
-propToCssHelper : Time.Absolute -> Internal.Css.Props.Id -> String -> Internal.Css.Props.Format -> List Section -> CssAnim -> CssAnim
-propToCssHelper now id name format sections anim =
+propToCssHelper : Time.Absolute -> RenderedPropDetails -> List Section -> CssAnim -> CssAnim
+propToCssHelper now details sections anim =
     case sections of
         [] ->
-            anim
+            if isEmptyAnim anim then
+                let
+                    value =
+                        Pixels.inPixels details.state.position
+                            |> Internal.Css.Props.format details.format
+                in
+                { anim
+                    | props =
+                        ( details.name
+                        , value
+                        )
+                            :: anim.props
+                }
+
+            else
+                anim
 
         top :: remain ->
             propToCssHelper now
-                id
-                name
-                format
+                details
                 remain
                 (combine
                     anim
-                    (sectionCss now id name format top)
+                    (sectionCss now details.id details.name details.format top)
                 )
 
 
@@ -961,6 +1014,7 @@ sectionToCss now id name format (Section section) =
     { hash = animationName
     , animation = animation
     , keyframes = keyframes
+    , props = []
     }
 
 
@@ -1072,11 +1126,22 @@ renderCss now renderFns props =
         emptyAnim
 
 
+isEmptyAnim : { css | keyframes : String } -> Bool
+isEmptyAnim anim =
+    case anim.keyframes of
+        "" ->
+            True
+
+        _ ->
+            False
+
+
 emptyAnim : CssAnim
 emptyAnim =
     { hash = ""
     , animation = ""
     , keyframes = ""
+    , props = []
     }
 
 
@@ -1092,7 +1157,7 @@ renderCssHelper now renderer props cssAnim =
                     cssAnim
 
                 _ ->
-                    case Debug.log "PROP RESULT" <| render now props of
+                    case Debug.log "  <- " <| render now props of
                         Nothing ->
                             renderCssHelper now
                                 remain
@@ -1188,15 +1253,34 @@ startPropsHelper only props maybeTransform rendered =
 toPropCurves2 : List Prop -> Timeline.Transition state (List Prop) (List RenderedProp)
 toPropCurves2 only =
     \lookup prev target now future cursor ->
+        {-
+           1. always track `state`
+           2. only start to record sections if they're not done
+           3. If there are
+
+
+        -}
         let
             _ =
-                Debug.log "TRANSITION" target
+                Debug.log "     TRANSITION"
+                    { prev = prev
+                    , target = target
+                    }
+
+            _ =
+                Debug.log "     -> "
+                    { prev = lookup (Timeline.getEvent prev)
+                    , target = lookup (Timeline.getEvent target)
+                    }
 
             targetTime =
                 Timeline.startTime target
 
             startTime =
                 Timeline.endTime prev
+
+            finished =
+                Time.thisAfterOrEqualThat now (Timeline.endTime target)
         in
         List.map
             (\prop ->
@@ -1217,22 +1301,26 @@ toPropCurves2 only =
                             { details
                                 | color = newColor
                                 , sections =
-                                    { start = startTime
-                                    , duration =
-                                        Time.duration startTime targetTime
-                                    , steps =
-                                        [ { percent = 0
-                                          , color = previousColor
-                                          }
-                                        , { percent = 50
-                                          , color = Interpolate.color 0.5 previousColor newColor
-                                          }
-                                        , { percent = 100
-                                          , color = newColor
-                                          }
-                                        ]
-                                    }
-                                        :: details.sections
+                                    if finished then
+                                        details.sections
+
+                                    else
+                                        { start = startTime
+                                        , duration =
+                                            Time.duration startTime targetTime
+                                        , steps =
+                                            [ { percent = 0
+                                              , color = previousColor
+                                              }
+                                            , { percent = 50
+                                              , color = Interpolate.color 0.5 previousColor newColor
+                                              }
+                                            , { percent = 100
+                                              , color = newColor
+                                              }
+                                            ]
+                                        }
+                                            :: details.sections
                             }
 
                     RenderedProp rendered ->
@@ -1279,32 +1367,36 @@ toPropCurves2 only =
                             , name = rendered.name
                             , format = rendered.format
                             , sections =
-                                let
-                                    transitionSplines =
-                                        Transition.splines
-                                            domain
-                                            rendered.state.velocity
-                                            targetVelocity
-                                            targetTransition
+                                if finished then
+                                    rendered.sections
 
-                                    dur =
-                                        Time.duration startTime targetTime
+                                else
+                                    let
+                                        transitionSplines =
+                                            Transition.splines
+                                                domain
+                                                rendered.state.velocity
+                                                targetVelocity
+                                                targetTransition
 
-                                    sliced =
-                                        -- if interruptedAt == targetTime then
-                                        -- NOTE, this needs to be checked!!
-                                        if Time.thisBeforeThat now targetTime && Time.thisAfterThat now startTime then
-                                            Bezier.takeBefore (Time.inMilliseconds now) transitionSplines
+                                        dur =
+                                            Time.duration startTime targetTime
 
-                                        else
-                                            transitionSplines
-                                in
-                                Section
-                                    { start = startTime
-                                    , period = once dur
-                                    , splines = sliced
-                                    }
-                                    :: rendered.sections
+                                        sliced =
+                                            -- if interruptedAt == targetTime then
+                                            -- NOTE, this needs to be checked!!
+                                            if Time.thisBeforeThat now targetTime && Time.thisAfterThat now startTime then
+                                                Bezier.takeBefore (Time.inMilliseconds now) transitionSplines
+
+                                            else
+                                                transitionSplines
+                                    in
+                                    Section
+                                        { start = startTime
+                                        , period = once dur
+                                        , splines = sliced
+                                        }
+                                        :: rendered.sections
                             , state =
                                 Transition.atX
                                     progress
@@ -1327,30 +1419,71 @@ toPropCurves2 only =
                                     False
                                     []
                                     []
-
-                            newCompound =
-                                { start = startTime
-                                , period = once (Time.duration startTime targetTime)
-                                , conflicting = new.conflicting
-                                , frames = new.keyframes
-                                }
                         in
                         CompoundProp
                             { slices =
-                                case details.slices of
-                                    [] ->
-                                        [ newCompound ]
+                                if finished then
+                                    details.slices
 
-                                    last :: remain ->
-                                        if isCombineableCompoundSections newCompound last then
-                                            combineCompound newCompound last :: remain
+                                else
+                                    let
+                                        newCompound =
+                                            { start = startTime
+                                            , period = once (Time.duration startTime targetTime)
+                                            , conflicting = new.conflicting
+                                            , frames = new.keyframes
+                                            }
+                                    in
+                                    case details.slices of
+                                        [] ->
+                                            [ newCompound ]
 
-                                        else
-                                            newCompound :: details.slices
+                                        last :: remain ->
+                                            if isCombineableCompoundSections newCompound last then
+                                                combineCompound newCompound last :: remain
+
+                                            else
+                                                newCompound :: details.slices
                             , states = new.states
                             }
             )
             cursor
+
+
+
+-- transition =
+--      let
+--         propLookup : Timeline.Occurring state -> Interpolate.Movement
+--         propLookup occur =
+--             stateOrDefault rendered.id rendered.name (lookup (Timeline.getEvent occur))
+--         lookupState s =
+--             stateOrDefault rendered.id rendered.name (lookup s)
+--         targetProp =
+--             propLookup target
+--         domain =
+--             { start =
+--                 { x = startTime
+--                 , y = rendered.state.position
+--                 }
+--             , end =
+--                 { x = targetTime
+--                 , y = targetPosition
+--                 }
+--             }
+--         targetVelocity =
+--             Interpolate.velocityAtTarget lookupState target future
+--         progress =
+--             Time.progress startTime targetTime now
+--         targetPosition =
+--             case targetProp of
+--                 Interpolate.Pos _ x _ ->
+--                     Pixels.pixels x
+--         targetTransition =
+--             case targetProp of
+--                 Interpolate.Pos trans _ _ ->
+--                     trans
+--     in
+--     {}
 
 
 {-| -}
@@ -2425,17 +2558,17 @@ lerpCurvesCompoundHelper2 remainingStates lookup prev target now future conflict
 
         ( id, state ) :: remain ->
             let
-                targetTime =
-                    Timeline.startTime target
-
                 startTime =
                     Timeline.endTime prev
 
+                targetTime =
+                    Timeline.startTime target
+
                 prevState =
-                    stateOrDefault id "" (lookup (Timeline.getEvent prev))
+                    lookupState (Timeline.getEvent prev)
 
                 targetState =
-                    stateOrDefault id "" (lookup (Timeline.getEvent target))
+                    lookupState (Timeline.getEvent target)
 
                 lookupState s =
                     stateOrDefault id "" (lookup s)
@@ -3015,6 +3148,7 @@ finalize name renderValue now stack =
             { hash = ""
             , animation = ""
             , keyframes = ""
+            , props = []
             }
 
         _ ->
@@ -3064,6 +3198,7 @@ finalize name renderValue now stack =
             { hash = animationName
             , animation = animation
             , keyframes = keyframes
+            , props = []
             }
 
 
@@ -3082,6 +3217,7 @@ finalizeTransition name renderValue now splines start totalDuration =
     -- https://developer.mozilla.org/en-US/docs/Web/CSS/animation
     , animation = ""
     , keyframes = ""
+    , props = []
     }
 
 
@@ -3109,11 +3245,7 @@ toCss :
 toCss now name renderValue toMotion =
     { start =
         \motion ->
-            { css =
-                { hash = ""
-                , animation = ""
-                , keyframes = ""
-                }
+            { css = emptyAnim
             , stackStart = now
             , stackEnd = now
             , stack = []
@@ -3339,7 +3471,9 @@ renderTiming timing =
             Bezier.cssTimingString spline
 
 
-{-| -}
+{-| Slightly different than CssAnim in that we can also have style properties
+This is for when a property has not changed and so a full animation is not necessary
+-}
 type alias CssAnim =
     { hash : String
 
@@ -3347,19 +3481,25 @@ type alias CssAnim =
     -- https://developer.mozilla.org/en-US/docs/Web/CSS/animation
     , animation : String
     , keyframes : String
+
+    -- These are generally used as backups
+    -- its possible a prop wont be animated this transition,
+    -- so it's easy enough to just say "background-color" "blue" in that case
+    , props : List ( String, String )
     }
 
 
 combine : CssAnim -> CssAnim -> CssAnim
 combine one two =
-    if String.isEmpty one.hash then
+    if String.isEmpty one.hash && List.isEmpty one.props then
         two
 
-    else if String.isEmpty two.hash then
+    else if String.isEmpty two.hash && List.isEmpty two.props then
         one
 
     else
         { hash = one.hash ++ two.hash
         , animation = two.animation ++ ", " ++ one.animation
         , keyframes = one.keyframes ++ "\n" ++ two.keyframes
+        , props = one.props ++ two.props
         }

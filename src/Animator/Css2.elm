@@ -295,11 +295,13 @@ node name timeline toProps attrs children =
     let
         rendered =
             css timeline toProps
+
+        styles =
+            List.map (\( propName, val ) -> Attr.style propName val)
+                (( "animation", rendered.animation ) :: rendered.props)
     in
     Html.node name
-        (Attr.style "animation" rendered.animation
-            :: attrs
-        )
+        (styles ++ attrs)
         (stylesheet rendered.keyframes
             :: children
         )
@@ -313,6 +315,7 @@ type alias Css =
     -- https://developer.mozilla.org/en-US/docs/Web/CSS/animation
     , animation : String
     , keyframes : String
+    , props : List ( String, String )
     }
 
 
