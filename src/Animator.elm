@@ -7,7 +7,7 @@ module Animator exposing
     , updateTimeline
     , go
     , Duration, immediately, veryQuickly, quickly, slowly, verySlowly, millis, seconds
-    , Step, wait, event
+    , Step, wait, transitionTo
     , interrupt, queue
     , color
     , Movement, at, move, xy, xyz
@@ -78,15 +78,15 @@ In some more **advanced** cases you might want to define a _series_ of states to
         -- after waiting 300 milliseconds,
         -- start transitioning to a new state, Griffyndor
         -- Take 1 whole second to make the transition
-        , Animator.event (Animator.seconds 1) Griffyndor
+        , Animator.transitionTo (Animator.seconds 1) Griffyndor
 
         -- Once we've arrived at Griffyndor,
         -- immediately start transitioning to Slytherin
         -- and take half a second to make the transition
-        , Animator.event (Animator.seconds 0.5) Slytherin
+        , Animator.transitionTo (Animator.seconds 0.5) Slytherin
         ]
 
-@docs Step, wait, event
+@docs Step, wait, transitionTo
 
 @docs interrupt, queue
 
@@ -446,8 +446,8 @@ type Step state
 
 
 {-| -}
-event : Duration -> state -> Step state
-event =
+transitionTo : Duration -> state -> Step state
+transitionTo =
     TransitionTo
 
 
@@ -507,7 +507,7 @@ You'll need to specify a `Duration` as well. Try starting with `Animator.quickly
 -}
 go : Duration -> state -> Timeline state -> Timeline state
 go duration ev timeline =
-    interrupt [ event duration ev ] timeline
+    interrupt [ transitionTo duration ev ] timeline
 
 
 {-| _400ms_.
@@ -741,7 +741,7 @@ at f =
     Interpolate.Pos
         Transition.standard
         f
-        Nothing
+        []
 
 
 {-| -}
@@ -750,7 +750,7 @@ linear f =
     Interpolate.Pos
         Transition.linear
         f
-        Nothing
+        []
 
 
 
