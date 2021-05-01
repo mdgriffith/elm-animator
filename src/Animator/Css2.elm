@@ -106,7 +106,7 @@ opacity o =
     Css.Prop
         Internal.Css.Props.ids.opacity
         "opacity"
-        (Interpolate.Pos Transition.standard o Nothing)
+        (Interpolate.Pos Transition.standard o [])
         Internal.Css.Props.float
 
 
@@ -116,7 +116,7 @@ scale s =
     Css.Prop
         Internal.Css.Props.ids.scale
         ""
-        (Interpolate.Pos Transition.standard s Nothing)
+        (Interpolate.Pos Transition.standard s [])
         Internal.Css.Props.float
 
 
@@ -126,7 +126,7 @@ scaleX s =
     Css.Prop
         Internal.Css.Props.ids.scaleX
         ""
-        (Interpolate.Pos Transition.standard s Nothing)
+        (Interpolate.Pos Transition.standard s [])
         Internal.Css.Props.float
 
 
@@ -136,7 +136,7 @@ scaleY s =
     Css.Prop
         Internal.Css.Props.ids.scaleY
         ""
-        (Interpolate.Pos Transition.standard s Nothing)
+        (Interpolate.Pos Transition.standard s [])
         Internal.Css.Props.float
 
 
@@ -146,7 +146,7 @@ rotation n =
     Css.Prop
         Internal.Css.Props.ids.rotation
         ""
-        (Interpolate.Pos Transition.standard n Nothing)
+        (Interpolate.Pos Transition.standard n [])
         Internal.Css.Props.float
 
 
@@ -156,7 +156,7 @@ x n =
     Css.Prop
         Internal.Css.Props.ids.x
         ""
-        (Interpolate.Pos Transition.standard n Nothing)
+        (Interpolate.Pos Transition.standard n [])
         Internal.Css.Props.float
 
 
@@ -166,7 +166,7 @@ y n =
     Css.Prop
         Internal.Css.Props.ids.y
         ""
-        (Interpolate.Pos Transition.standard n Nothing)
+        (Interpolate.Pos Transition.standard n [])
         Internal.Css.Props.float
 
 
@@ -240,7 +240,7 @@ px name n =
     Css.Prop
         Internal.Css.Props.noId
         name
-        (Interpolate.Pos Transition.standard n Nothing)
+        (Interpolate.Pos Transition.standard n [])
         Internal.Css.Props.px
 
 
@@ -250,7 +250,7 @@ int name n =
     Css.Prop
         Internal.Css.Props.noId
         name
-        (Interpolate.Pos Transition.standard n Nothing)
+        (Interpolate.Pos Transition.standard n [])
         Internal.Css.Props.int
 
 
@@ -260,7 +260,7 @@ float name n =
     Css.Prop
         Internal.Css.Props.noId
         name
-        (Interpolate.Pos Transition.standard n Nothing)
+        (Interpolate.Pos Transition.standard n [])
         Internal.Css.Props.float
 
 
@@ -268,7 +268,7 @@ float name n =
 color : String -> Color.Color -> Property
 color name colorValue =
     Css.ColorProp name
-        (Interpolate.Pos Transition.standard 1 Nothing)
+        (Interpolate.Pos Transition.standard 1 [])
         colorValue
 
 

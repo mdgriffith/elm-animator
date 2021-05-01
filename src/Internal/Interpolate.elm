@@ -1,7 +1,7 @@
 module Internal.Interpolate exposing
     ( Move(..), Movement, State, derivativeOfEasing
     , coloring, moving, mapTransition
-    , Checkpoint, Oscillator(..), Point, Sequence(..), Step(..), Timing(..), base, color, details, equalState, getIterationCssString, getPeriodDuration, newVelocityAtTarget, sequenceToPeriod, sequenceToSplines, transitionSplines, velocityAtTarget, visit
+    , Checkpoint, Oscillator(..), Point, Sequence(..), Step(..), Timing(..), color, details, equalState, getIterationCssString, getPeriodDuration, newVelocityAtTarget, sequenceToPeriod, sequenceToSplines, transitionSplines, velocityAtTarget, visit
     )
 
 {-|
@@ -20,6 +20,7 @@ import Color
 import Duration
 import Html.Events exposing (preventDefaultOn)
 import Internal.Bezier as Bezier
+import Internal.Move as Move
 import Internal.Spring as Spring
 import Internal.Time as Time
 import Internal.Timeline as Timeline exposing (Period(..))
@@ -35,7 +36,7 @@ type alias Movement =
 
 {-| -}
 type Move value
-    = Pos Transition.Transition value (Maybe (Sequence value))
+    = Pos Transition.Transition value (List (Sequence value))
 
 
 {-| -}
@@ -174,11 +175,6 @@ type Oscillator
 -}
 type alias Proportion =
     Float
-
-
-base : Movement -> Float
-base (Pos _ f _) =
-    f
 
 
 mapTransition fn movement =
@@ -347,12 +343,12 @@ visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeL
 
     else
         case lookup event of
-            Pos _ pos Nothing ->
+            Pos _ pos [] ->
                 { position = Pixels.pixels pos
                 , velocity = Pixels.pixelsPerSecond 0
                 }
 
-            Pos _ pos (Just seq) ->
+            Pos _ pos (seq :: _) ->
                 sequence pos seq dwellTime
 
 
@@ -622,20 +618,6 @@ sequenceSteps previous steps durationTillNow durationCursor =
                 sequenceSteps val remain durationTillNow newDuration
 
 
-{-| -}
-sequenceProgress :
-    value
-    -> Sequence value
-    -> Duration.Duration
-    ->
-        { progress : Float
-        , before : value
-        , after : value
-        }
-sequenceProgress start seq duration =
-    Debug.todo "Not sure when I need this :thinking:"
-
-
 
 {- OSCILLATOR INTERPOLATION
 
@@ -809,10 +791,10 @@ newVelocityAtTarget target targetTime maybeLookAhead =
     case maybeLookAhead of
         Nothing ->
             case target of
-                Pos _ _ Nothing ->
+                Pos _ _ [] ->
                     zeroVelocity
 
-                Pos _ _ (Just seq) ->
+                Pos _ _ (seq :: _) ->
                     initialSequenceVelocity seq
 
         Just lookAhead ->
@@ -823,7 +805,7 @@ newVelocityAtTarget target targetTime maybeLookAhead =
                             Pixels.pixels x
             in
             case lookAhead.anchor of
-                Pos _ aheadPosition Nothing ->
+                Pos _ aheadPosition [] ->
                     -- our target velocity is the linear velocity between target and lookahead
                     velocityBetween
                         targetPosition
@@ -831,7 +813,7 @@ newVelocityAtTarget target targetTime maybeLookAhead =
                         (Pixels.pixels aheadPosition)
                         lookAhead.time
 
-                Pos _ aheadPosition (Just seq) ->
+                Pos _ aheadPosition (seq :: _) ->
                     if lookAhead.resting then
                         initialSequenceVelocity seq
 
@@ -857,10 +839,10 @@ velocityAtTarget lookup target future =
     case future of
         [] ->
             case movement of
-                Pos _ _ Nothing ->
+                Pos _ _ [] ->
                     zeroVelocity
 
-                Pos _ _ (Just seq) ->
+                Pos _ _ (seq :: _) ->
                     initialSequenceVelocity seq
 
         next :: _ ->
@@ -871,7 +853,7 @@ velocityAtTarget lookup target future =
                             Pixels.pixels x
             in
             case lookup (Timeline.getEvent next) of
-                Pos _ aheadPosition Nothing ->
+                Pos _ aheadPosition [] ->
                     -- our target velocity is the linear velocity between target and lookahead
                     velocityBetween
                         targetPosition
@@ -879,7 +861,7 @@ velocityAtTarget lookup target future =
                         (Pixels.pixels aheadPosition)
                         (Timeline.startTime next)
 
-                Pos _ aheadPosition (Just seq) ->
+                Pos _ aheadPosition (seq :: _) ->
                     if Timeline.isResting target then
                         initialSequenceVelocity seq
 
@@ -976,125 +958,6 @@ distanceFrom p1 p2 =
 componentIn : Point -> Point -> Float
 componentIn d v =
     v.x * d.x + v.y * d.y
-
-
-
--- createSpline :
---     { start : Point
---     , startVelocity : Point
---     , departure : Personality
---     , end : Point
---     , endVelocity : Point
---     , arrival : Personality
---     }
---     -> Bezier.Spline
--- createSpline config =
---     let
---         totalX =
---             config.end.x - config.start.x
---         startVelScale =
---             1 / (config.startVelocity.x / totalX)
---         endVelScale =
---             1 / (config.endVelocity.x / totalX)
---         startVelocity =
---             if config.departure.departSlowly == 0 then
---                 -- this is linear,
---                 -- we don't care how fast we were going previously.
---                 { x = 0
---                 , y = 0
---                 }
---             else if
---                 ((config.startVelocity.x - zeroPoint.x) == 0)
---                     && ((config.startVelocity.y - zeroPoint.y) == 0)
---             then
---                 -- scaleBy (config.departure.slowly * 3)
---                 { x = totalX * (config.departure.departSlowly * 3)
---                 , y = 0
---                 }
---             else
---                 let
---                     direction =
---                         { x =
---                             startVelScale
---                                 * config.startVelocity.x
---                         , y =
---                             startVelScale
---                                 * config.startVelocity.y
---                         }
---                     directedDistance =
---                         componentIn (scaleTo 1 direction)
---                             { x = config.end.x - config.start.x
---                             , y = config.end.y - config.start.y
---                             }
---                 in
---                 direction
---                     |> scaleTo (config.departure.departSlowly * directedDistance * 3)
---         endVelocity =
---             if config.arrival.arriveSlowly == 0 then
---                 -- if this is 0, this is linear,
---                 { x = 0
---                 , y = 0
---                 }
---             else if
---                 ((config.endVelocity.x - zeroPoint.x) == 0)
---                     && ((config.endVelocity.y - zeroPoint.y) == 0)
---             then
---                 -- scaleBy
---                 { x = totalX * (config.arrival.arriveSlowly * 3)
---                 , y = 0
---                 }
---             else
---                 let
---                     direction =
---                         { x =
---                             endVelScale
---                                 * config.endVelocity.x
---                         , y =
---                             endVelScale
---                                 * config.endVelocity.y
---                         }
---                     directedDistance =
---                         componentIn (scaleTo 1 direction)
---                             { x = config.end.x - config.start.x
---                             , y = config.end.y - config.start.y
---                             }
---                 in
---                 direction
---                     |> scaleTo (config.departure.arriveSlowly * directedDistance * 3)
---         maxX =
---             config.end.x - config.start.x
---         startControl =
---             { x = config.start.x + ((1 / 3) * startVelocity.x)
---             , y = config.start.y + ((1 / 3) * startVelocity.y)
---             }
---         endControl =
---             { x = config.end.x + ((-1 / 3) * endVelocity.x)
---             , y = config.end.y + ((-1 / 3) * endVelocity.y)
---             }
---     in
---     {-
---        the `fromEndpoints` definition from elm-geometry
---        fromControlPoints
---                givenStartPoint
---                (givenStartPoint |> Point2d.translateBy (Vector2d.scaleBy (1 / 3) givenStartDerivative))
---                (givenEndPoint |> Point2d.translateBy (Vector2d.scaleBy (-1 / 3) givenEndDerivative))
---                givenEndPoint
---     -}
---     Bezier.Spline
---         config.start
---         (if config.end.x - startControl.x > maxX then
---             startControl
---                 |> scaleAbout config.start (1 / ((config.start.x - startControl.x) / maxX))
---          else
---             startControl
---         )
---         (if config.end.x - endControl.x > maxX then
---             endControl
---                 |> scaleAbout config.end (1 / ((config.end.x - endControl.x) / maxX))
---          else
---             endControl
---         )
---         config.end
 
 
 within : Float -> Float -> Float -> Bool

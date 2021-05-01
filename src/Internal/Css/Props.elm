@@ -214,7 +214,7 @@ zero =
     Interpolate.Pos
         Transition.standard
         0
-        Nothing
+        []
 
 
 colorHash : Color.Color -> String

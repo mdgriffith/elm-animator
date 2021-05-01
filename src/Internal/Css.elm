@@ -8,6 +8,7 @@ import Html.Attributes exposing (id)
 import Internal.Bezier as Bezier
 import Internal.Css.Props
 import Internal.Interpolate as Interpolate
+import Internal.Move as Move
 import Internal.Time as Time
 import Internal.Timeline as Timeline
 import Internal.Transition as Transition
@@ -53,7 +54,7 @@ type Prop
     = -- binary id for comparisons
       -- they are only really necessary for `transforms`
       -- props defined by the user use the prop name for identity
-      Prop Id String Interpolate.Movement Internal.Css.Props.Format
+      Prop Id String (Interpolate.Move Float) Internal.Css.Props.Format
       -- | ColorProp ColorPropDetails
     | ColorProp String Interpolate.Movement Color.Color
 
@@ -1787,7 +1788,7 @@ stateOrDefaultByName targetName props =
 
 
 {-| -}
-stateOrDefault : Id -> String -> List Prop -> Interpolate.Movement
+stateOrDefault : Id -> String -> List Prop -> Interpolate.Move Float
 stateOrDefault targetId targetName props =
     case props of
         [] ->
@@ -1829,7 +1830,7 @@ colorOrDefault targetName default props =
                 colorOrDefault name default remain
 
 
-matchForMovement : Id -> String -> List Prop -> Maybe Interpolate.Movement
+matchForMovement : Id -> String -> List Prop -> Maybe (Interpolate.Move Float)
 matchForMovement onlyId onlyName props =
     case props of
         [] ->
@@ -3078,10 +3079,11 @@ dwellSplines :
     -> List Section
 dwellSplines lookup target startTime existing =
     case lookup (Timeline.getEvent target) of
-        Interpolate.Pos _ _ Nothing ->
+        Interpolate.Pos _ _ [] ->
             existing
 
-        Interpolate.Pos _ val (Just seq) ->
+        Interpolate.Pos _ val (seq :: _) ->
+            -- TODO: handle all the sequences!
             Section
                 { start = startTime
                 , period =
