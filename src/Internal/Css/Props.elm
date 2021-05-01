@@ -20,6 +20,7 @@ module Internal.Css.Props exposing
 
 import Color
 import Internal.Interpolate as Interpolate
+import Internal.Move as Move
 import Internal.Transition as Transition
 
 
@@ -211,10 +212,7 @@ default id =
 
 zero : Interpolate.Movement
 zero =
-    Interpolate.Pos
-        Transition.standard
-        0
-        []
+    Move.to 0
 
 
 colorHash : Color.Color -> String

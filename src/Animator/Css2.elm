@@ -40,6 +40,7 @@ import Internal.Bezier as Bezier
 import Internal.Css as Css
 import Internal.Css.Props
 import Internal.Interpolate as Interpolate
+import Internal.Move as Move
 import Internal.Timeline as Timeline
 import Internal.Transition as Transition
 
@@ -106,7 +107,7 @@ opacity o =
     Css.Prop
         Internal.Css.Props.ids.opacity
         "opacity"
-        (Interpolate.Pos Transition.standard o [])
+        (Move.to o)
         Internal.Css.Props.float
 
 
@@ -116,7 +117,7 @@ scale s =
     Css.Prop
         Internal.Css.Props.ids.scale
         ""
-        (Interpolate.Pos Transition.standard s [])
+        (Move.to s)
         Internal.Css.Props.float
 
 
@@ -126,7 +127,7 @@ scaleX s =
     Css.Prop
         Internal.Css.Props.ids.scaleX
         ""
-        (Interpolate.Pos Transition.standard s [])
+        (Move.to s)
         Internal.Css.Props.float
 
 
@@ -136,7 +137,7 @@ scaleY s =
     Css.Prop
         Internal.Css.Props.ids.scaleY
         ""
-        (Interpolate.Pos Transition.standard s [])
+        (Move.to s)
         Internal.Css.Props.float
 
 
@@ -146,7 +147,7 @@ rotation n =
     Css.Prop
         Internal.Css.Props.ids.rotation
         ""
-        (Interpolate.Pos Transition.standard n [])
+        (Move.to n)
         Internal.Css.Props.float
 
 
@@ -156,7 +157,7 @@ x n =
     Css.Prop
         Internal.Css.Props.ids.x
         ""
-        (Interpolate.Pos Transition.standard n [])
+        (Move.to n)
         Internal.Css.Props.float
 
 
@@ -166,32 +167,20 @@ y n =
     Css.Prop
         Internal.Css.Props.ids.y
         ""
-        (Interpolate.Pos Transition.standard n [])
+        (Move.to n)
         Internal.Css.Props.float
 
 
 {-| -}
 withWobble : Float -> Property -> Property
 withWobble wob prop =
-    prop
-        |> Css.applyToMovement
-            (Interpolate.mapTransition
-                (\personality ->
-                    Transition.wobble wob
-                )
-            )
+    Debug.todo "wobble"
 
 
 {-| -}
 withImpulse : Float -> Property -> Property
 withImpulse impulse prop =
-    prop
-        |> Css.applyToMovement
-            (Interpolate.mapTransition
-                (\personality ->
-                    Debug.todo "where to store impulse?"
-                )
-            )
+    Debug.todo "wobble"
 
 
 {-| -}
@@ -240,7 +229,7 @@ px name n =
     Css.Prop
         Internal.Css.Props.noId
         name
-        (Interpolate.Pos Transition.standard n [])
+        (Move.to n)
         Internal.Css.Props.px
 
 
@@ -250,7 +239,7 @@ int name n =
     Css.Prop
         Internal.Css.Props.noId
         name
-        (Interpolate.Pos Transition.standard n [])
+        (Move.to n)
         Internal.Css.Props.int
 
 
@@ -260,7 +249,7 @@ float name n =
     Css.Prop
         Internal.Css.Props.noId
         name
-        (Interpolate.Pos Transition.standard n [])
+        (Move.to n)
         Internal.Css.Props.float
 
 
@@ -268,7 +257,7 @@ float name n =
 color : String -> Color.Color -> Property
 color name colorValue =
     Css.ColorProp name
-        (Interpolate.Pos Transition.standard 1 [])
+        (Move.to 1)
         colorValue
 
 

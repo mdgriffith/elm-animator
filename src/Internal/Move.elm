@@ -1,12 +1,17 @@
 module Internal.Move exposing
-    ( Move, Sequence
+    ( Move(..), to
+    , Sequence
     , Step, step, stepWith, set
     , sequences, goto, continuingSplines, continue
+    , css
+    , initialSequenceVelocity, mapTransition
     )
 
 {-|
 
-@docs Move, Sequence
+@docs Move, to
+
+@docs Sequence
 @docs Step, step, stepWith, set
 
 @docs sequences, goto, continuingSplines, continue
@@ -49,6 +54,8 @@ module Internal.Move exposing
             -> Move Float
                 State
 
+@docs css
+
 -}
 
 import Duration
@@ -63,6 +70,18 @@ import Quantity
 {-| -}
 type Move value
     = Pos Transition.Transition value (List (Sequence value))
+
+
+{-| -}
+to : value -> Move value
+to v =
+    Pos Transition.standard v []
+
+
+{-| -}
+toWith : Transition.Transition -> value -> Move value
+toWith t v =
+    Pos t v []
 
 
 {-| A sequence is something that can be easily
@@ -424,3 +443,139 @@ push top stack =
 
         nonMergable ->
             nonMergable :: stack
+
+
+mapTransition fn movement =
+    case movement of
+        Pos p f seq ->
+            Pos (fn p) f seq
+
+
+initialSequenceVelocity : Sequence value -> PixelsPerSecond
+initialSequenceVelocity seq =
+    case seq of
+        Sequence 0 _ _ ->
+            zeroVelocity
+
+        Sequence _ _ [] ->
+            zeroVelocity
+
+        Sequence n _ ((Step dur trans _) :: _) ->
+            Transition.initialVelocity trans
+                |> (*) 1000
+                |> Pixels.pixelsPerSecond
+
+
+keyframes : String -> (Float -> String) -> Sequence Float -> String
+keyframes name toString seq =
+    ""
+
+
+hash : String -> Sequence Float -> String
+hash name seq =
+    ""
+
+
+css delay name toString seq =
+    let
+        animationName =
+            hash name seq
+
+        n =
+            case seq of
+                Sequence i _ _ ->
+                    if i <= 0 then
+                        "1"
+
+                    else if isInfinite (toFloat i) then
+                        "infinite"
+
+                    else
+                        String.fromInt i
+
+        durationStr =
+            case seq of
+                Sequence _ dur _ ->
+                    dur
+                        |> Duration.inMilliseconds
+                        |> round
+                        |> String.fromInt
+                        |> (\s -> s ++ "ms")
+
+        delayStr =
+            delay
+                |> Duration.inMilliseconds
+                |> round
+                |> String.fromInt
+                |> (\s -> s ++ "ms")
+    in
+    { hash = animationName
+    , animation =
+        (durationStr ++ " ")
+            -- we specify an easing function here because it we have to
+            -- , but it is overridden by the one in keyframes
+            ++ "linear "
+            ++ delayStr
+            ++ " "
+            ++ n
+            ++ " normal forwards running "
+            ++ animationName
+    , keyframes =
+        ("@keyframes " ++ animationName ++ " {\n")
+            ++ keyframes name toString seq
+            ++ "\n}"
+    , props = []
+    }
+
+
+
+-- {-| -}
+-- sequence :
+--     Float
+--     -> Sequence Float
+--     -> Duration.Duration
+--     -> State
+-- sequence start seq durationTillNow =
+--     let
+--         sequencePeriodDuration =
+--             case seq of
+--                 Repeat _ steps ->
+--                     sumDurations steps zeroDuration
+--         normalizedDurationTillNow =
+--             case seq of
+--                 Repeat n _ ->
+--                     if n == 0 then
+--                         durationTillNow
+--                     else if n < 0 then
+--                         -- this means infinite
+--                         let
+--                             iterations =
+--                                 Duration.inMilliseconds durationTillNow
+--                                     / Duration.inMilliseconds sequencePeriodDuration
+--                         in
+--                         durationTillNow
+--                             |> Quantity.minus
+--                                 (Quantity.multiplyBy iterations sequencePeriodDuration)
+--                     else
+--                         Duration.inMilliseconds durationTillNow
+--                             |> round
+--                             |> modBy (round (Duration.inMilliseconds sequencePeriodDuration))
+--                             |> toFloat
+--                             |> Duration.milliseconds
+--     in
+--     case seq of
+--         Repeat _ [] ->
+--             { position = Pixels.pixels start
+--             , velocity = Pixels.pixelsPerSecond 0
+--             }
+--         Repeat 0 _ ->
+--             { position = Pixels.pixels start
+--             , velocity = Pixels.pixelsPerSecond 0
+--             }
+--         Repeat n steps ->
+--             if n < 1 then
+--                 { position = Pixels.pixels start
+--                 , velocity = Pixels.pixelsPerSecond 0
+--                 }
+--             else
+--                 sequenceSteps start steps normalizedDurationTillNow zeroDuration

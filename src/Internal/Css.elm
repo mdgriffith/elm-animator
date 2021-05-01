@@ -54,12 +54,12 @@ type Prop
     = -- binary id for comparisons
       -- they are only really necessary for `transforms`
       -- props defined by the user use the prop name for identity
-      Prop Id String (Interpolate.Move Float) Internal.Css.Props.Format
+      Prop Id String (Move.Move Float) Internal.Css.Props.Format
       -- | ColorProp ColorPropDetails
-    | ColorProp String Interpolate.Movement Color.Color
+    | ColorProp String (Move.Move Float) Color.Color
 
 
-applyToMovement : (Interpolate.Movement -> Interpolate.Movement) -> Prop -> Prop
+applyToMovement : (Move.Move Float -> Move.Move Float) -> Prop -> Prop
 applyToMovement fn prop =
     case prop of
         Prop id name m format ->
@@ -863,7 +863,7 @@ scalarHelper now renderedProps anim =
             scalarHelper now remain anim
 
 
-propToCssHelper : Time.Absolute -> RenderedPropDetails -> List Section -> CssAnim -> CssAnim
+propToCssHelper : Time.Absolute -> RenderedPropDetails -> List (Move.Sequence Float) -> CssAnim -> CssAnim
 propToCssHelper now details sections anim =
     case sections of
         [] ->
@@ -890,8 +890,22 @@ propToCssHelper now details sections anim =
                 remain
                 (combine
                     anim
-                    (sectionCss now details.id details.name details.format top)
+                    (sequenceCss now details.id details.name details.format top)
                 )
+
+
+sequenceCss :
+    Time.Absolute
+    -> Id
+    -> String
+    -> Internal.Css.Props.Format
+    -> Move.Sequence Float
+    -> CssAnim
+sequenceCss now id name format sequence =
+    Move.css (Debug.todo "DELAY")
+        name
+        (Internal.Css.Props.format format)
+        sequence
 
 
 sectionCss : Time.Absolute -> Id -> String -> Internal.Css.Props.Format -> Section -> CssAnim
@@ -1329,7 +1343,7 @@ toPropCurves2 only =
 
                     RenderedProp rendered ->
                         let
-                            propLookup : Timeline.Occurring state -> Interpolate.Movement
+                            propLookup : Timeline.Occurring state -> Move.Move Float
                             propLookup occur =
                                 stateOrDefault rendered.id rendered.name (lookup (Timeline.getEvent occur))
 
@@ -1358,12 +1372,12 @@ toPropCurves2 only =
 
                             targetPosition =
                                 case targetProp of
-                                    Interpolate.Pos _ x _ ->
+                                    Move.Pos _ x _ ->
                                         Pixels.pixels x
 
                             targetTransition =
                                 case targetProp of
-                                    Interpolate.Pos trans _ _ ->
+                                    Move.Pos trans _ _ ->
                                         trans
                         in
                         RenderedProp
@@ -1395,12 +1409,14 @@ toPropCurves2 only =
                                             else
                                                 transitionSplines
                                     in
-                                    Section
-                                        { start = startTime
-                                        , period = once dur
-                                        , splines = sliced
-                                        }
-                                        :: rendered.sections
+                                    -- Section
+                                    --     { start = startTime
+                                    --     , period = once dur
+                                    --     , splines = sliced
+                                    --     }
+                                    --     ::
+                                    -- TODO:: ADD A MOVE>SEQUENCE instead of
+                                    rendered.sections
                             , state =
                                 Transition.atX
                                     progress
@@ -1457,7 +1473,7 @@ toPropCurves2 only =
 
 -- transition =
 --      let
---         propLookup : Timeline.Occurring state -> Interpolate.Movement
+--         propLookup : Timeline.Occurring state -> (Move.Move Float)
 --         propLookup occur =
 --             stateOrDefault rendered.id rendered.name (lookup (Timeline.getEvent occur))
 --         lookupState s =
@@ -1480,293 +1496,273 @@ toPropCurves2 only =
 --             Time.progress startTime targetTime now
 --         targetPosition =
 --             case targetProp of
---                 Interpolate.Pos _ x _ ->
+--                 Move.Pos _ x _ ->
 --                     Pixels.pixels x
 --         targetTransition =
 --             case targetProp of
---                 Interpolate.Pos trans _ _ ->
+--                 Move.Pos trans _ _ ->
 --                     trans
 --     in
 --     {}
+-- {-| -}
+-- toPropCurves :
+--     List Prop
+--     ->
+--         Timeline.Interp state
+--             (List Prop)
+--             { rendered : List RenderedProp
+--             , previous : Maybe (Timeline.Occurring state)
+--             }
+-- toPropCurves only =
+--     { start =
+--         \props ->
+--             { rendered =
+--                 startProps only props
+--             , previous = Nothing
+--             }
+--     , visit =
+--         \lookup target targetTime maybeLookAhead data ->
+--             let
+--                 _ =
+--                     Debug.log "VISIT" target
+--             in
+--             { rendered =
+--                 case data.previous of
+--                     Nothing ->
+--                         data.rendered
+--                     Just prev ->
+--                         List.map
+--                             (\prop ->
+--                                 case prop of
+--                                     RenderedColorProp details ->
+--                                         let
+--                                             previousTime =
+--                                                 case data.previous of
+--                                                     Nothing ->
+--                                                         targetTime
+--                                                     Just prevEvent ->
+--                                                         Timeline.endTime prevEvent
+--                                             newColor =
+--                                                 lookup (Timeline.getEvent target)
+--                                                     |> colorOrDefault details.name
+--                                                         Internal.Css.Props.transparent
+--                                             new =
+--                                                 { details
+--                                                     | color = newColor
+--                                                     , sections =
+--                                                         { start = targetTime
+--                                                         , duration =
+--                                                             Time.duration previousTime targetTime
+--                                                         , steps =
+--                                                             [ { percent = 0
+--                                                               , color = details.color
+--                                                               }
+--                                                             , { percent = 50
+--                                                               , color = Interpolate.color 0.5 details.color newColor
+--                                                               }
+--                                                             , { percent = 100
+--                                                               , color = newColor
+--                                                               }
+--                                                             ]
+--                                                         }
+--                                                             :: details.sections
+--                                                 }
+--                                         in
+--                                         RenderedColorProp new
+--                                     RenderedProp rendered ->
+--                                         let
+--                                             propLookup state =
+--                                                 let
+--                                                     found =
+--                                                         lookup state
+--                                                             |> stateOrDefault rendered.id rendered.name
+--                                                     -- _ =
+--                                                     --     Debug.log "    ->"
+--                                                     --         { rendered = rendered
+--                                                     --         , found = found
+--                                                     --         -- lookup target
+--                                                     --         --     |> stateOrDefault rendered.id rendered.name
+--                                                     --         -- propLookup target
+--                                                     --         }
+--                                                 in
+--                                                 found
+--                                             maybePropLookAhead =
+--                                                 Maybe.map
+--                                                     (Timeline.mapLookAhead
+--                                                         (stateOrDefault rendered.id rendered.name)
+--                                                     )
+--                                                     maybeLookAhead
+--                                         in
+--                                         RenderedProp
+--                                             { id = rendered.id
+--                                             , name = rendered.name
+--                                             , format = rendered.format
+--                                             , sections =
+--                                                 toCurvesVisit
+--                                                     propLookup
+--                                                     target
+--                                                     targetTime
+--                                                     data.previous
+--                                                     maybePropLookAhead
+--                                                     rendered.state
+--                                                     rendered.sections
+--                                             , state =
+--                                                 Interpolate.moving.visit
+--                                                     propLookup
+--                                                     target
+--                                                     targetTime
+--                                                     maybePropLookAhead
+--                                                     rendered.state
+--                                             }
+--                                     CompoundProp details ->
+--                                         let
+--                                             ( newCompound, newStates ) =
+--                                                 visitCurvesCompound
+--                                                     details.states
+--                                                     lookup
+--                                                     prev
+--                                                     target
+--                                                     targetTime
+--                                                     maybeLookAhead
+--                                                     |> Debug.log "VISITED COMPOUND"
+--                                         in
+--                                         CompoundProp
+--                                             { slices =
+--                                                 case details.slices of
+--                                                     [] ->
+--                                                         [ newCompound ]
+--                                                     last :: remain ->
+--                                                         if isCombineableCompoundSections newCompound last then
+--                                                             combineCompound newCompound last :: remain
+--                                                         else
+--                                                             newCompound :: details.slices
+--                                             , states = newStates
+--                                             }
+--                             )
+--                             data.rendered
+--             , previous = Just target
+--             }
+--     , transition =
+--         \prevEndTime prev target targetTime interruptedAt maybeLookAhead data ->
+--             let
+--                 _ =
+--                     Debug.log "TRANSITION" target
+--             in
+--             { rendered =
+--                 List.map
+--                     (\prop ->
+--                         case prop of
+--                             RenderedColorProp details ->
+--                                 let
+--                                     previousColor =
+--                                         colorOrDefault details.name
+--                                             Internal.Css.Props.transparent
+--                                             prev
+--                                     newColor =
+--                                         colorOrDefault details.name
+--                                             Internal.Css.Props.transparent
+--                                             target
+--                                     new =
+--                                         { details
+--                                             | color = newColor
+--                                             , sections =
+--                                                 { start = targetTime
+--                                                 , duration =
+--                                                     Time.duration prevEndTime targetTime
+--                                                 , steps =
+--                                                     [ { percent = 0
+--                                                       , color = previousColor
+--                                                       }
+--                                                     , { percent = 50
+--                                                       , color = Interpolate.color 0.5 previousColor newColor
+--                                                       }
+--                                                     , { percent = 100
+--                                                       , color = newColor
+--                                                       }
+--                                                     ]
+--                                                 }
+--                                                     :: details.sections
+--                                         }
+--                                 in
+--                                 RenderedColorProp new
+--                             RenderedProp rendered ->
+--                                 let
+--                                     -- _ =
+--                                     --     Debug.log "    ->"
+--                                     --         { rendered = rendered.name
+--                                     --         , found = Interpolate.base targetProp
+--                                     --         -- lookup target
+--                                     --         --     |> stateOrDefault rendered.id rendered.name
+--                                     --         -- propLookup target
+--                                     --         }
+--                                     previousProp =
+--                                         stateOrDefault rendered.id rendered.name prev
+--                                     targetProp =
+--                                         stateOrDefault rendered.id rendered.name target
+--                                     lookAheadProp =
+--                                         Maybe.map
+--                                             (Timeline.mapLookAhead
+--                                                 (stateOrDefault rendered.id rendered.name)
+--                                             )
+--                                             maybeLookAhead
+--                                 in
+--                                 RenderedProp
+--                                     { id = rendered.id
+--                                     , name = rendered.name
+--                                     , format = rendered.format
+--                                     , sections =
+--                                         toCurvesLerp
+--                                             prevEndTime
+--                                             targetProp
+--                                             targetTime
+--                                             interruptedAt
+--                                             lookAheadProp
+--                                             rendered.state
+--                                             rendered.sections
+--                                     , state =
+--                                         Interpolate.moving.transition
+--                                             prevEndTime
+--                                             previousProp
+--                                             targetProp
+--                                             targetTime
+--                                             interruptedAt
+--                                             lookAheadProp
+--                                             (Debug.log "    INCOMING" rendered.state)
+--                                             |> Debug.log "     NEW STATE"
+--                                     }
+--                             CompoundProp details ->
+--                                 let
+--                                     ( newCompound, newStates ) =
+--                                         lerpCurvesCompound
+--                                             details.states
+--                                             prevEndTime
+--                                             prev
+--                                             target
+--                                             targetTime
+--                                             interruptedAt
+--                                             maybeLookAhead
+--                                 in
+--                                 CompoundProp
+--                                     { slices =
+--                                         case details.slices of
+--                                             [] ->
+--                                                 [ newCompound ]
+--                                             last :: remain ->
+--                                                 if isCombineableCompoundSections newCompound last then
+--                                                     combineCompound newCompound last :: remain
+--                                                 else
+--                                                     newCompound :: details.slices
+--                                     , states = newStates
+--                                     }
+--                     )
+--                     data.rendered
+--             , previous = Nothing
+--             }
+--     }
 
 
 {-| -}
-toPropCurves :
-    List Prop
-    ->
-        Timeline.Interp state
-            (List Prop)
-            { rendered : List RenderedProp
-            , previous : Maybe (Timeline.Occurring state)
-            }
-toPropCurves only =
-    { start =
-        \props ->
-            { rendered =
-                startProps only props
-            , previous = Nothing
-            }
-    , visit =
-        \lookup target targetTime maybeLookAhead data ->
-            let
-                _ =
-                    Debug.log "VISIT" target
-            in
-            { rendered =
-                case data.previous of
-                    Nothing ->
-                        data.rendered
-
-                    Just prev ->
-                        List.map
-                            (\prop ->
-                                case prop of
-                                    RenderedColorProp details ->
-                                        let
-                                            previousTime =
-                                                case data.previous of
-                                                    Nothing ->
-                                                        targetTime
-
-                                                    Just prevEvent ->
-                                                        Timeline.endTime prevEvent
-
-                                            newColor =
-                                                lookup (Timeline.getEvent target)
-                                                    |> colorOrDefault details.name
-                                                        Internal.Css.Props.transparent
-
-                                            new =
-                                                { details
-                                                    | color = newColor
-                                                    , sections =
-                                                        { start = targetTime
-                                                        , duration =
-                                                            Time.duration previousTime targetTime
-                                                        , steps =
-                                                            [ { percent = 0
-                                                              , color = details.color
-                                                              }
-                                                            , { percent = 50
-                                                              , color = Interpolate.color 0.5 details.color newColor
-                                                              }
-                                                            , { percent = 100
-                                                              , color = newColor
-                                                              }
-                                                            ]
-                                                        }
-                                                            :: details.sections
-                                                }
-                                        in
-                                        RenderedColorProp new
-
-                                    RenderedProp rendered ->
-                                        let
-                                            propLookup state =
-                                                let
-                                                    found =
-                                                        lookup state
-                                                            |> stateOrDefault rendered.id rendered.name
-
-                                                    -- _ =
-                                                    --     Debug.log "    ->"
-                                                    --         { rendered = rendered
-                                                    --         , found = found
-                                                    --         -- lookup target
-                                                    --         --     |> stateOrDefault rendered.id rendered.name
-                                                    --         -- propLookup target
-                                                    --         }
-                                                in
-                                                found
-
-                                            maybePropLookAhead =
-                                                Maybe.map
-                                                    (Timeline.mapLookAhead
-                                                        (stateOrDefault rendered.id rendered.name)
-                                                    )
-                                                    maybeLookAhead
-                                        in
-                                        RenderedProp
-                                            { id = rendered.id
-                                            , name = rendered.name
-                                            , format = rendered.format
-                                            , sections =
-                                                toCurvesVisit
-                                                    propLookup
-                                                    target
-                                                    targetTime
-                                                    data.previous
-                                                    maybePropLookAhead
-                                                    rendered.state
-                                                    rendered.sections
-                                            , state =
-                                                Interpolate.moving.visit
-                                                    propLookup
-                                                    target
-                                                    targetTime
-                                                    maybePropLookAhead
-                                                    rendered.state
-                                            }
-
-                                    CompoundProp details ->
-                                        let
-                                            ( newCompound, newStates ) =
-                                                visitCurvesCompound
-                                                    details.states
-                                                    lookup
-                                                    prev
-                                                    target
-                                                    targetTime
-                                                    maybeLookAhead
-                                                    |> Debug.log "VISITED COMPOUND"
-                                        in
-                                        CompoundProp
-                                            { slices =
-                                                case details.slices of
-                                                    [] ->
-                                                        [ newCompound ]
-
-                                                    last :: remain ->
-                                                        if isCombineableCompoundSections newCompound last then
-                                                            combineCompound newCompound last :: remain
-
-                                                        else
-                                                            newCompound :: details.slices
-                                            , states = newStates
-                                            }
-                            )
-                            data.rendered
-            , previous = Just target
-            }
-    , transition =
-        \prevEndTime prev target targetTime interruptedAt maybeLookAhead data ->
-            let
-                _ =
-                    Debug.log "TRANSITION" target
-            in
-            { rendered =
-                List.map
-                    (\prop ->
-                        case prop of
-                            RenderedColorProp details ->
-                                let
-                                    previousColor =
-                                        colorOrDefault details.name
-                                            Internal.Css.Props.transparent
-                                            prev
-
-                                    newColor =
-                                        colorOrDefault details.name
-                                            Internal.Css.Props.transparent
-                                            target
-
-                                    new =
-                                        { details
-                                            | color = newColor
-                                            , sections =
-                                                { start = targetTime
-                                                , duration =
-                                                    Time.duration prevEndTime targetTime
-                                                , steps =
-                                                    [ { percent = 0
-                                                      , color = previousColor
-                                                      }
-                                                    , { percent = 50
-                                                      , color = Interpolate.color 0.5 previousColor newColor
-                                                      }
-                                                    , { percent = 100
-                                                      , color = newColor
-                                                      }
-                                                    ]
-                                                }
-                                                    :: details.sections
-                                        }
-                                in
-                                RenderedColorProp new
-
-                            RenderedProp rendered ->
-                                let
-                                    -- _ =
-                                    --     Debug.log "    ->"
-                                    --         { rendered = rendered.name
-                                    --         , found = Interpolate.base targetProp
-                                    --         -- lookup target
-                                    --         --     |> stateOrDefault rendered.id rendered.name
-                                    --         -- propLookup target
-                                    --         }
-                                    previousProp =
-                                        stateOrDefault rendered.id rendered.name prev
-
-                                    targetProp =
-                                        stateOrDefault rendered.id rendered.name target
-
-                                    lookAheadProp =
-                                        Maybe.map
-                                            (Timeline.mapLookAhead
-                                                (stateOrDefault rendered.id rendered.name)
-                                            )
-                                            maybeLookAhead
-                                in
-                                RenderedProp
-                                    { id = rendered.id
-                                    , name = rendered.name
-                                    , format = rendered.format
-                                    , sections =
-                                        toCurvesLerp
-                                            prevEndTime
-                                            targetProp
-                                            targetTime
-                                            interruptedAt
-                                            lookAheadProp
-                                            rendered.state
-                                            rendered.sections
-                                    , state =
-                                        Interpolate.moving.transition
-                                            prevEndTime
-                                            previousProp
-                                            targetProp
-                                            targetTime
-                                            interruptedAt
-                                            lookAheadProp
-                                            (Debug.log "    INCOMING" rendered.state)
-                                            |> Debug.log "     NEW STATE"
-                                    }
-
-                            CompoundProp details ->
-                                let
-                                    ( newCompound, newStates ) =
-                                        lerpCurvesCompound
-                                            details.states
-                                            prevEndTime
-                                            prev
-                                            target
-                                            targetTime
-                                            interruptedAt
-                                            maybeLookAhead
-                                in
-                                CompoundProp
-                                    { slices =
-                                        case details.slices of
-                                            [] ->
-                                                [ newCompound ]
-
-                                            last :: remain ->
-                                                if isCombineableCompoundSections newCompound last then
-                                                    combineCompound newCompound last :: remain
-
-                                                else
-                                                    newCompound :: details.slices
-                                    , states = newStates
-                                    }
-                    )
-                    data.rendered
-            , previous = Nothing
-            }
-    }
-
-
-{-| -}
-stateOrDefaultByName : String -> List Prop -> Interpolate.Movement
+stateOrDefaultByName : String -> List Prop -> Move.Move Float
 stateOrDefaultByName targetName props =
     case props of
         [] ->
@@ -1788,7 +1784,7 @@ stateOrDefaultByName targetName props =
 
 
 {-| -}
-stateOrDefault : Id -> String -> List Prop -> Interpolate.Move Float
+stateOrDefault : Id -> String -> List Prop -> Move.Move Float
 stateOrDefault targetId targetName props =
     case props of
         [] ->
@@ -1830,7 +1826,7 @@ colorOrDefault targetName default props =
                 colorOrDefault name default remain
 
 
-matchForMovement : Id -> String -> List Prop -> Maybe (Interpolate.Move Float)
+matchForMovement : Id -> String -> List Prop -> Maybe (Move.Move Float)
 matchForMovement onlyId onlyName props =
     case props of
         [] ->
@@ -1887,7 +1883,7 @@ type alias RenderedPropDetails =
     { id : Id
     , name : String
     , format : Internal.Css.Props.Format
-    , sections : List Section
+    , sections : List (Move.Sequence Float)
     , state : Interpolate.State
     }
 
@@ -2264,158 +2260,6 @@ type CapturedMovement
     | Stationary Float
 
 
-curves :
-    (state -> Interpolate.Movement)
-    -> Timeline.Timeline state
-    -> List Section
-curves lookup timeline =
-    Timeline.foldpAll lookup toCurves timeline
-        |> .curves
-
-
-
-{- TO CURVES -}
-
-
-{-| -}
-toCurves :
-    Timeline.Interp state
-        Interpolate.Movement
-        { curves : List Section
-        , previous : Maybe (Timeline.Occurring state)
-        , state : Interpolate.State
-        }
-toCurves =
-    { start =
-        \motion ->
-            { curves = []
-            , previous = Nothing
-            , state =
-                Interpolate.moving.start
-                    motion
-            }
-    , visit =
-        \lookup target targetTime maybeLookAhead data ->
-            { curves =
-                toCurvesVisit
-                    lookup
-                    target
-                    targetTime
-                    data.previous
-                    maybeLookAhead
-                    data.state
-                    data.curves
-            , previous = Just target
-            , state =
-                Interpolate.moving.visit
-                    lookup
-                    target
-                    targetTime
-                    maybeLookAhead
-                    data.state
-            }
-    , transition =
-        \prevEndTime prev target targetTime interruptedAt maybeLookAhead data ->
-            { curves =
-                toCurvesLerp
-                    prevEndTime
-                    target
-                    targetTime
-                    interruptedAt
-                    maybeLookAhead
-                    data.state
-                    data.curves
-            , previous = Nothing
-            , state =
-                Interpolate.moving.transition
-                    prevEndTime
-                    prev
-                    target
-                    targetTime
-                    interruptedAt
-                    maybeLookAhead
-                    data.state
-            }
-    }
-
-
-lerpCurvesCompound :
-    List ( Id, Interpolate.State )
-    -- previous end time
-    -> Time.Absolute
-    -- prev
-    -> List Prop
-    -- target
-    -> List Prop
-    -- target time
-    -> Time.Absolute
-    -- interrupted at
-    -> Time.Absolute
-    -> Maybe (Timeline.LookAhead (List Prop))
-    -> ( CompoundSection, List ( Id, Interpolate.State ) )
-lerpCurvesCompound states prevEndTime previous target targetTime interruptedAt maybeLookahead =
-    let
-        -- _ =
-        --     Debug.log "LERP" ( prevEndTime, interruptedAt, targetTime )
-        new =
-            lerpCurvesCompoundHelper
-                states
-                prevEndTime
-                previous
-                target
-                targetTime
-                interruptedAt
-                maybeLookahead
-                False
-                []
-                []
-    in
-    ( { start = prevEndTime
-      , period = once (Time.duration prevEndTime targetTime)
-      , conflicting = new.conflicting
-      , frames = new.keyframes
-      }
-    , new.states
-    )
-
-
-
-{-
-   We have
-
-       List
-           { id : Id
-           , movement : CapturedMovement: (List Spline)
-           }
-
-
-   We want
-
-       List Keyframe
-
-
-
-
-
-   Every iteration we have a
-
-        List Spline
-
-        We then want to merge these into the current `List Keyframe`
-
-        We do this by putting each Spline in a separate Keyframe
-
-        If they match times, everything works out (common case)
-
-        If they do not match, split existing keyframes, mark sections as conflicting
-
-
-
-
-
--}
-
-
 {-| A Keyframe are all the properties necesasry to render a single keyframe.
 -}
 type alias Keyframe =
@@ -2431,109 +2275,6 @@ type alias Keyframe =
             , spline : Bezier.Spline
             }
     }
-
-
-{-| -}
-lerpCurvesCompoundHelper :
-    List ( Id, Interpolate.State )
-    -- previous end time
-    -> Time.Absolute
-    -- prev
-    -> List Prop
-    -- target
-    -> List Prop
-    -- target time
-    -> Time.Absolute
-    -- interrupted at
-    -> Time.Absolute
-    -> Maybe (Timeline.LookAhead (List Prop))
-    -> Bool
-    -> List Keyframe
-    -> List ( Id, Interpolate.State )
-    ->
-        { keyframes : List Keyframe
-        , conflicting : Bool
-        , states : List ( Id, Interpolate.State )
-        }
-lerpCurvesCompoundHelper remainingStates prevEndTime prev target targetTime interruptedAt maybeLookAhead conflicted keyframes updatedStates =
-    case remainingStates of
-        [] ->
-            { states = List.reverse updatedStates
-            , keyframes = keyframes
-            , conflicting = False
-            }
-
-        ( id, state ) :: remain ->
-            let
-                prevState =
-                    stateOrDefault id "" prev
-
-                targetState =
-                    stateOrDefault id "" target
-
-                lookAheadState =
-                    Maybe.map
-                        (Timeline.mapLookAhead
-                            (stateOrDefault id "")
-                        )
-                        maybeLookAhead
-
-                newState =
-                    Interpolate.moving.transition
-                        prevEndTime
-                        prevState
-                        targetState
-                        targetTime
-                        interruptedAt
-                        lookAheadState
-                        state
-
-                _ =
-                    Debug.log "LERP"
-                        { prevEndTime = prevEndTime
-                        , targetTime = targetTime
-                        , target = target
-                        , prev = prev
-                        , interruptedAt = interruptedAt
-                        , splines = splines
-                        }
-
-                splines =
-                    Interpolate.transitionSplines
-                        prevEndTime
-                        targetState
-                        targetTime
-                        lookAheadState
-                        state
-
-                new =
-                    case keyframes of
-                        [] ->
-                            { keyframes =
-                                List.map
-                                    (splineToKeyframe id)
-                                    splines
-                            , conflicting = conflicted
-                            }
-
-                        _ ->
-                            mergeIntoKeyframes conflicted
-                                id
-                                splines
-                                []
-                                keyframes
-            in
-            lerpCurvesCompoundHelper
-                remain
-                prevEndTime
-                prev
-                target
-                targetTime
-                interruptedAt
-                maybeLookAhead
-                new.conflicting
-                new.keyframes
-                (( id, newState ) :: updatedStates)
 
 
 {-| -}
@@ -2582,12 +2323,12 @@ lerpCurvesCompoundHelper2 remainingStates lookup prev target now future conflict
 
                 targetPosition =
                     case targetState of
-                        Interpolate.Pos _ x _ ->
+                        Move.Pos _ x _ ->
                             Pixels.pixels x
 
                 targetTransition =
                     case targetState of
-                        Interpolate.Pos trans _ _ ->
+                        Move.Pos trans _ _ ->
                             trans
 
                 domain =
@@ -2941,70 +2682,63 @@ combineCompound one two =
     }
 
 
-toCurvesVisit :
-    (state -> Interpolate.Movement)
-    -> Timeline.Occurring state
-    -> Time.Absolute
-    -> Maybe (Timeline.Occurring state)
-    -> Maybe (Timeline.LookAhead Interpolate.Movement)
-    -> Interpolate.State
-    -> List Section
-    -> List Section
-toCurvesVisit lookup target targetTime maybePrevious maybeLookAhead state existingSections =
-    case maybePrevious of
-        Nothing ->
-            existingSections
 
-        Just prev ->
-            let
-                visitSplines =
-                    Debug.log "SPLINES" <|
-                        Interpolate.transitionSplines
-                            (Timeline.endTime prev)
-                            (lookup (Timeline.getEvent target))
-                            targetTime
-                            maybeLookAhead
-                            state
-
-                sections =
-                    case existingSections of
-                        [] ->
-                            [ Section
-                                { start = Timeline.endTime prev
-                                , period = once (Time.duration (Timeline.endTime prev) targetTime)
-                                , splines = visitSplines
-                                }
-                            ]
-
-                        (Section top) :: remain ->
-                            case top.period of
-                                Timeline.Repeat 1 dur ->
-                                    Section
-                                        { start = top.start
-                                        , period = once (Time.expand dur (Time.duration (Timeline.endTime prev) targetTime))
-                                        , splines = top.splines ++ visitSplines
-                                        }
-                                        :: remain
-
-                                _ ->
-                                    existingSections
-                                        |> (::)
-                                            (Section
-                                                { start = Timeline.endTime prev
-                                                , period = once (Time.duration (Timeline.endTime prev) targetTime)
-                                                , splines = visitSplines
-                                                }
-                                            )
-            in
-            case maybeLookAhead of
-                Nothing ->
-                    dwellSplines lookup
-                        target
-                        targetTime
-                        sections
-
-                Just _ ->
-                    sections
+-- toCurvesVisit :
+--     (state -> Move.Move Float)
+--     -> Timeline.Occurring state
+--     -> Time.Absolute
+--     -> Maybe (Timeline.Occurring state)
+--     -> Maybe (Timeline.LookAhead (Move.Move Float))
+--     -> Interpolate.State
+--     -> List Section
+--     -> List Section
+-- toCurvesVisit lookup target targetTime maybePrevious maybeLookAhead state existingSections =
+--     case maybePrevious of
+--         Nothing ->
+--             existingSections
+--         Just prev ->
+--             let
+--                 visitSplines =
+--                     Debug.log "SPLINES" <|
+--                         Interpolate.transitionSplines
+--                             (Timeline.endTime prev)
+--                             (lookup (Timeline.getEvent target))
+--                             targetTime
+--                             maybeLookAhead
+--                             state
+--                 sections =
+--                     case existingSections of
+--                         [] ->
+--                             [ Section
+--                                 { start = Timeline.endTime prev
+--                                 , period = once (Time.duration (Timeline.endTime prev) targetTime)
+--                                 , splines = visitSplines
+--                                 }
+--                             ]
+--                         (Section top) :: remain ->
+--                             case top.period of
+--                                 Timeline.Repeat 1 dur ->
+--                                     Section
+--                                         { start = top.start
+--                                         , period = once (Time.expand dur (Time.duration (Timeline.endTime prev) targetTime))
+--                                         , splines = top.splines ++ visitSplines
+--                                         }
+--                                         :: remain
+--                                 _ ->
+--                                     existingSections
+--                                         |> (::)
+--                                             (Section
+--                                                 { start = Timeline.endTime prev
+--                                                 , period = once (Time.duration (Timeline.endTime prev) targetTime)
+--                                                 , splines = visitSplines
+--                                                 }
+--                                             )
+--             in
+--             case maybeLookAhead of
+--                 Nothing ->
+--                     sections
+--                 Just _ ->
+--                     sections
 
 
 once : Time.Duration -> Timeline.Period
@@ -3012,86 +2746,61 @@ once =
     Timeline.Repeat 1
 
 
-toCurvesLerp :
-    Time.Absolute
-    -> Interpolate.Movement
-    -> Time.Absolute
-    -> Time.Absolute
-    -> Maybe (Timeline.LookAhead Interpolate.Movement)
-    -> Interpolate.State
-    -> List Section
-    -> List Section
-toCurvesLerp prevEndTime target targetTime interruptedAt maybeLookAhead state existingSections =
-    -- finalize current stack
-    -- create and finalizeTransition stack for the interruption
-    -- (but use the special transition finalizer which embeds timing outside of keyframes)
-    let
-        -- _ =
-        -- Debug.log "LERP DATA"
-        --     { data = state
-        --     , interruptedAt = interruptedAt
-        --     }
-        transitionSplines =
-            -- let
-            --     _ =
-            --         Debug.log "    : "
-            --             { prevEndTime = prevEndTime
-            --             , prev = prev
-            --             , target = target
-            --             , targetTime = targetTime
-            --             , la = maybeLookAhead
-            --             , state = state
-            --             }
-            -- in
-            -- Debug.log "LERP SPLINES" <|
-            Interpolate.transitionSplines
-                prevEndTime
-                target
-                targetTime
-                maybeLookAhead
-                state
 
-        dur =
-            Time.duration prevEndTime targetTime
-
-        sliced =
-            if interruptedAt == targetTime then
-                transitionSplines
-
-            else
-                Bezier.takeBefore (Time.inMilliseconds interruptedAt) transitionSplines
-    in
-    existingSections
-        |> (::)
-            (Section
-                { start = prevEndTime
-                , period = once dur
-                , splines = sliced
-                }
-            )
-
-
-dwellSplines :
-    (state -> Interpolate.Movement)
-    -> Timeline.Occurring state
-    -> Time.Absolute
-    -> List Section
-    -> List Section
-dwellSplines lookup target startTime existing =
-    case lookup (Timeline.getEvent target) of
-        Interpolate.Pos _ _ [] ->
-            existing
-
-        Interpolate.Pos _ val (seq :: _) ->
-            -- TODO: handle all the sequences!
-            Section
-                { start = startTime
-                , period =
-                    Interpolate.sequenceToPeriod seq
-                , splines =
-                    Interpolate.sequenceToSplines startTime val seq
-                }
-                :: existing
+-- toCurvesLerp :
+--     Time.Absolute
+--     -> Move.Move Float
+--     -> Time.Absolute
+--     -> Time.Absolute
+--     -> Maybe (Timeline.LookAhead (Move.Move Float))
+--     -> Interpolate.State
+--     -> List Section
+--     -> List Section
+-- toCurvesLerp prevEndTime target targetTime interruptedAt maybeLookAhead state existingSections =
+--     -- finalize current stack
+--     -- create and finalizeTransition stack for the interruption
+--     -- (but use the special transition finalizer which embeds timing outside of keyframes)
+--     let
+--         -- _ =
+--         -- Debug.log "LERP DATA"
+--         --     { data = state
+--         --     , interruptedAt = interruptedAt
+--         --     }
+--         transitionSplines =
+--             -- let
+--             --     _ =
+--             --         Debug.log "    : "
+--             --             { prevEndTime = prevEndTime
+--             --             , prev = prev
+--             --             , target = target
+--             --             , targetTime = targetTime
+--             --             , la = maybeLookAhead
+--             --             , state = state
+--             --             }
+--             -- in
+--             -- Debug.log "LERP SPLINES" <|
+--             Interpolate.transitionSplines
+--                 prevEndTime
+--                 target
+--                 targetTime
+--                 maybeLookAhead
+--                 state
+--         dur =
+--             Time.duration prevEndTime targetTime
+--         sliced =
+--             if interruptedAt == targetTime then
+--                 transitionSplines
+--             else
+--                 Bezier.takeBefore (Time.inMilliseconds interruptedAt) transitionSplines
+--     in
+--     existingSections
+--         |> (::)
+--             (Section
+--                 { start = prevEndTime
+--                 , period = once dur
+--                 , splines = sliced
+--                 }
+--             )
 
 
 {-| From this we need to render css @keyframes
@@ -3121,7 +2830,7 @@ Example keyframes:
 css :
     String
     -> (Float -> String)
-    -> (state -> Interpolate.Movement)
+    -> (state -> Move.Move Float)
     -> Timeline.Timeline state
     -> CssAnim
 css name renderValue lookup timeline =
@@ -3237,10 +2946,10 @@ toCss :
     Time.Absolute
     -> String
     -> (Float -> String)
-    -> (state -> Interpolate.Movement)
+    -> (state -> Move.Move Float)
     ->
         Timeline.Interp state
-            Interpolate.Movement
+            (Move.Move Float)
             { css : CssAnim
             , stackStart : Time.Absolute
             , stackEnd : Time.Absolute

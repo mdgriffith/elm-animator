@@ -11,7 +11,6 @@ module Animator exposing
     , interrupt, queue
     , color
     , Movement, at, move, xy, xyz
-    , linear
     , withWobble, withImpulse
     , Oscillator, wave, wrap, zigzag
     , loop, once, repeat
@@ -108,8 +107,6 @@ Though you should also check out the 👇 [Transition Personality](#transition-p
 @docs color
 
 @docs Movement, at, move, xy, xyz
-
-@docs linear
 
 
 # Transition personality
@@ -219,6 +216,7 @@ import Browser.Events
 import Color exposing (Color)
 import Duration
 import Internal.Interpolate as Interpolate
+import Internal.Move as Move
 import Internal.Time as Time
 import Internal.Timeline as Timeline
 import Internal.Transition as Transition
@@ -737,20 +735,8 @@ type alias Movement =
 
 {-| -}
 at : Float -> Movement
-at f =
-    Interpolate.Pos
-        Transition.standard
-        f
-        []
-
-
-{-| -}
-linear : Float -> Movement
-linear f =
-    Interpolate.Pos
-        Transition.linear
-        f
-        []
+at =
+    Move.to
 
 
 
@@ -789,9 +775,7 @@ linear f =
 -}
 withWobble : Float -> Movement -> Movement
 withWobble w movement =
-    Interpolate.mapTransition
-        (\personality -> Transition.wobble w)
-        movement
+    Debug.todo "Move to Transitions"
 
 
 {-| Leave a state with some initial velocity.
@@ -805,9 +789,7 @@ This is given as a velocity (as value/second). Usually this is pixels per second
 -}
 withImpulse : Float -> Movement -> Movement
 withImpulse p movement =
-    Interpolate.mapTransition
-        (\personality -> Debug.todo "Where do we store impulse?")
-        movement
+    Debug.todo "Move to Transitions"
 
 
 

@@ -1,6 +1,6 @@
 module Internal.Interpolate exposing
-    ( Move(..), Movement, State, derivativeOfEasing
-    , coloring, moving, mapTransition
+    ( Movement, State, derivativeOfEasing
+    , coloring, moving
     , Checkpoint, Oscillator(..), Point, Sequence(..), Step(..), Timing(..), color, details, equalState, getIterationCssString, getPeriodDuration, newVelocityAtTarget, sequenceToPeriod, sequenceToSplines, transitionSplines, velocityAtTarget, visit
     )
 
@@ -35,8 +35,8 @@ type alias Movement =
 
 
 {-| -}
-type Move value
-    = Pos Transition.Transition value (List (Sequence value))
+type alias Move value =
+    Move.Move value
 
 
 {-| -}
@@ -177,12 +177,6 @@ type alias Proportion =
     Float
 
 
-mapTransition fn movement =
-    case movement of
-        Pos p f seq ->
-            Pos (fn p) f seq
-
-
 wrap : Float -> Float
 wrap x =
     if x < 0 then
@@ -243,7 +237,7 @@ startMoving : Movement -> State
 startMoving movement =
     { position =
         case movement of
-            Pos _ x _ ->
+            Move.Pos _ x _ ->
                 Pixels.pixels x
     , velocity = Pixels.pixelsPerSecond 0
     }
@@ -333,7 +327,7 @@ visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeL
     if Time.isZeroDuration dwellTime then
         { position =
             case lookup event of
-                Pos _ x _ ->
+                Move.Pos _ x _ ->
                     Pixels.pixels x
         , velocity =
             newVelocityAtTarget (lookup event)
@@ -343,13 +337,16 @@ visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeL
 
     else
         case lookup event of
-            Pos _ pos [] ->
+            Move.Pos _ pos [] ->
                 { position = Pixels.pixels pos
                 , velocity = Pixels.pixelsPerSecond 0
                 }
 
-            Pos _ pos (seq :: _) ->
-                sequence pos seq dwellTime
+            Move.Pos _ pos (seq :: _) ->
+                -- Move.goto pos seq dwellTime
+                { position = Pixels.pixels pos
+                , velocity = Pixels.pixelsPerSecond 0
+                }
 
 
 type alias Milliseconds =
@@ -373,7 +370,7 @@ transitionSplines prevEndTime target targetTime maybeLookAhead state =
 
         targetPos =
             case target of
-                Pos _ x _ ->
+                Move.Pos _ x _ ->
                     x
 
         targetVelocity =
@@ -392,7 +389,7 @@ transitionSplines prevEndTime target targetTime maybeLookAhead state =
         state.velocity
         targetVelocity
         (case target of
-            Pos trans _ _ ->
+            Move.Pos trans _ _ ->
                 trans
         )
 
@@ -421,7 +418,7 @@ transition startTime prev2 target targetTime now maybeLookAhead state =
 
         targetPosition =
             case target of
-                Pos _ x _ ->
+                Move.Pos _ x _ ->
                     Pixels.pixels x
     in
     Transition.atX
@@ -438,7 +435,7 @@ transition startTime prev2 target targetTime now maybeLookAhead state =
         state.velocity
         targetVelocity
         (case target of
-            Pos trans _ _ ->
+            Move.Pos trans _ _ ->
                 trans
         )
 
@@ -465,82 +462,6 @@ transition startTime prev2 target targetTime now maybeLookAhead state =
 zeroVelocity : PixelsPerSecond
 zeroVelocity =
     Pixels.pixelsPerSecond 0
-
-
-initialSequenceVelocity : Sequence value -> PixelsPerSecond
-initialSequenceVelocity seq =
-    case seq of
-        Repeat 0 _ ->
-            zeroVelocity
-
-        Repeat _ [] ->
-            zeroVelocity
-
-        Repeat n ((Wait _) :: _) ->
-            zeroVelocity
-
-        Repeat n ((Step dur trans _) :: _) ->
-            Transition.initialVelocity trans
-                |> (*) 1000
-                |> Pixels.pixelsPerSecond
-
-
-{-| -}
-sequence :
-    Float
-    -> Sequence Float
-    -> Duration.Duration
-    -> State
-sequence start seq durationTillNow =
-    let
-        sequencePeriodDuration =
-            case seq of
-                Repeat _ steps ->
-                    sumDurations steps zeroDuration
-
-        normalizedDurationTillNow =
-            case seq of
-                Repeat n _ ->
-                    if n == 0 then
-                        durationTillNow
-
-                    else if n < 0 then
-                        -- this means infinite
-                        let
-                            iterations =
-                                Duration.inMilliseconds durationTillNow
-                                    / Duration.inMilliseconds sequencePeriodDuration
-                        in
-                        durationTillNow
-                            |> Quantity.minus
-                                (Quantity.multiplyBy iterations sequencePeriodDuration)
-
-                    else
-                        Duration.inMilliseconds durationTillNow
-                            |> round
-                            |> modBy (round (Duration.inMilliseconds sequencePeriodDuration))
-                            |> toFloat
-                            |> Duration.milliseconds
-    in
-    case seq of
-        Repeat _ [] ->
-            { position = Pixels.pixels start
-            , velocity = Pixels.pixelsPerSecond 0
-            }
-
-        Repeat 0 _ ->
-            { position = Pixels.pixels start
-            , velocity = Pixels.pixelsPerSecond 0
-            }
-
-        Repeat n steps ->
-            if n < 1 then
-                { position = Pixels.pixels start
-                , velocity = Pixels.pixelsPerSecond 0
-                }
-
-            else
-                sequenceSteps start steps normalizedDurationTillNow zeroDuration
 
 
 sumDurations steps currentDur =
@@ -791,21 +712,21 @@ newVelocityAtTarget target targetTime maybeLookAhead =
     case maybeLookAhead of
         Nothing ->
             case target of
-                Pos _ _ [] ->
+                Move.Pos _ _ [] ->
                     zeroVelocity
 
-                Pos _ _ (seq :: _) ->
-                    initialSequenceVelocity seq
+                Move.Pos _ _ (seq :: _) ->
+                    Move.initialSequenceVelocity seq
 
         Just lookAhead ->
             let
                 targetPosition =
                     case target of
-                        Pos _ x _ ->
+                        Move.Pos _ x _ ->
                             Pixels.pixels x
             in
             case lookAhead.anchor of
-                Pos _ aheadPosition [] ->
+                Move.Pos _ aheadPosition [] ->
                     -- our target velocity is the linear velocity between target and lookahead
                     velocityBetween
                         targetPosition
@@ -813,9 +734,9 @@ newVelocityAtTarget target targetTime maybeLookAhead =
                         (Pixels.pixels aheadPosition)
                         lookAhead.time
 
-                Pos _ aheadPosition (seq :: _) ->
+                Move.Pos _ aheadPosition (seq :: _) ->
                     if lookAhead.resting then
-                        initialSequenceVelocity seq
+                        Move.initialSequenceVelocity seq
 
                     else
                         velocityBetween
@@ -839,21 +760,21 @@ velocityAtTarget lookup target future =
     case future of
         [] ->
             case movement of
-                Pos _ _ [] ->
+                Move.Pos _ _ [] ->
                     zeroVelocity
 
-                Pos _ _ (seq :: _) ->
-                    initialSequenceVelocity seq
+                Move.Pos _ _ (seq :: _) ->
+                    Move.initialSequenceVelocity seq
 
         next :: _ ->
             let
                 targetPosition =
                     case movement of
-                        Pos _ x _ ->
+                        Move.Pos _ x _ ->
                             Pixels.pixels x
             in
             case lookup (Timeline.getEvent next) of
-                Pos _ aheadPosition [] ->
+                Move.Pos _ aheadPosition [] ->
                     -- our target velocity is the linear velocity between target and lookahead
                     velocityBetween
                         targetPosition
@@ -861,9 +782,9 @@ velocityAtTarget lookup target future =
                         (Pixels.pixels aheadPosition)
                         (Timeline.startTime next)
 
-                Pos _ aheadPosition (seq :: _) ->
+                Move.Pos _ aheadPosition (seq :: _) ->
                     if Timeline.isResting target then
-                        initialSequenceVelocity seq
+                        Move.initialSequenceVelocity seq
 
                     else
                         velocityBetween
