@@ -160,21 +160,69 @@ sequences :
     -> List (Sequence Float)
     -> List (Sequence Float)
 sequences startTime targetTime now movement state existingSequence =
-    let
-        seqs =
-            case movement of
-                Pos trans value [] ->
-                    if Time.thisAfterOrEqualThat now targetTime then
-                        []
+    if Time.thisAfterThat startTime now then
+        -- We've definitely started, so we want to report the full sequence
+        case movement of
+            Pos trans value [] ->
+                let
+                    transitionDuration =
+                        Time.duration startTime targetTime
+                in
+                Sequence 1 transitionDuration [ Step transitionDuration trans value ]
+                    :: existingSequence
 
-                    else
-                        let
-                            transitionDuration =
-                                Time.duration startTime targetTime
-                        in
-                        [ Sequence 1 transitionDuration [ Step transitionDuration trans value ] ]
+            Pos trans value [ Sequence 1 dur steps ] ->
+                let
+                    stepDuration =
+                        Time.duration startTime targetTime
 
-                Pos trans value [ Sequence 1 dur steps ] ->
+                    transitionDuration =
+                        stepDuration
+                            |> Time.expand dur
+                in
+                Sequence 1 transitionDuration (Step stepDuration trans value :: steps)
+                    :: existingSequence
+
+            Pos trans value dwell ->
+                let
+                    transitionDuration =
+                        Time.duration startTime targetTime
+                in
+                Sequence 1 transitionDuration [ Step transitionDuration trans value ]
+                    :: dwell
+                    ++ existingSequence
+
+    else
+        --
+        case movement of
+            Pos trans value [] ->
+                if Time.thisAfterOrEqualThat now targetTime then
+                    []
+
+                else if Time.equal now startTime then
+                    let
+                        transitionDuration =
+                            Time.duration startTime targetTime
+                    in
+                    Sequence 1 transitionDuration [ Step transitionDuration trans value ]
+                        :: existingSequence
+
+                else
+                    let
+                        splitTime =
+                            Time.progress startTime targetTime now
+
+                        transitionDuration =
+                            Time.duration startTime targetTime
+                    in
+                    Sequence 1 transitionDuration [ Step transitionDuration trans value ]
+                        :: existingSequence
+
+            Pos trans value [ Sequence 1 dur steps ] ->
+                if Time.thisAfterOrEqualThat now (Time.advanceBy dur targetTime) then
+                    []
+
+                else
                     let
                         stepDuration =
                             Time.duration startTime targetTime
@@ -185,14 +233,14 @@ sequences startTime targetTime now movement state existingSequence =
                     in
                     [ Sequence 1 transitionDuration (Step stepDuration trans value :: steps) ]
 
-                Pos trans value dwell ->
-                    let
-                        transitionDuration =
-                            Time.duration startTime targetTime
-                    in
-                    Sequence 1 transitionDuration [ Step transitionDuration trans value ] :: dwell
-    in
-    seqs
+            Pos trans value dwell ->
+                let
+                    transitionDuration =
+                        Time.duration startTime targetTime
+                in
+                Sequence 1 transitionDuration [ Step transitionDuration trans value ]
+                    :: dwell
+                    ++ existingSequence
 
 
 {-| This is the case where we specifically are transitioning to the new state and continuing to another state.

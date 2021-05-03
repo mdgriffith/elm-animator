@@ -1,7 +1,7 @@
 module Internal.Interpolate exposing
     ( Movement, State, derivativeOfEasing
     , coloring, moving
-    , Checkpoint, Oscillator(..), Point, Sequence(..), Step(..), Timing(..), color, details, equalState, getIterationCssString, getPeriodDuration, newVelocityAtTarget, sequenceToPeriod, sequenceToSplines, transitionSplines, velocityAtTarget, visit
+    , Checkpoint, Oscillator(..), Point, Sequence(..), Step(..), Timing(..), color, details, equalState, getIterationCssString, getPeriodDuration, newVelocityAtTarget, sequenceToPeriod, transitionSplines, velocityAtTarget, visit
     )
 
 {-|
