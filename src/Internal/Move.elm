@@ -147,6 +147,9 @@ Will start providing Splines as soon as we pass `now`.
 
 We are not continuing to another state, so we will report all of our splines.
 
+    if now is after -> return nothing
+    else if during -> split & rerepeat and return top
+
 -}
 sequences :
     -- start
@@ -160,8 +163,9 @@ sequences :
     -> List (Sequence Float)
     -> List (Sequence Float)
 sequences startTime targetTime now movement state existingSequence =
-    if Time.thisAfterThat startTime now then
+    if Time.thisAfterOrEqualThat startTime now then
         -- We've definitely started, so we want to report the full sequence
+        -- mot common case will be startTime == now
         case movement of
             Pos trans value [] ->
                 let
@@ -192,55 +196,195 @@ sequences startTime targetTime now movement state existingSequence =
                     :: dwell
                     ++ existingSequence
 
+    else if after startTime targetTime now movement then
+        -- we've completely passed this state, no splines are returned
+        []
+
     else
-        --
+        -- now is during the new sequence
+        -- so let's compose the new sequence and then split it at the new time
+        -- we also know that existingSequence should be [] here
         case movement of
             Pos trans value [] ->
-                if Time.thisAfterOrEqualThat now targetTime then
-                    []
+                let
+                    splitTime =
+                        Time.progress startTime targetTime now
 
-                else if Time.equal now startTime then
-                    let
-                        transitionDuration =
-                            Time.duration startTime targetTime
-                    in
-                    Sequence 1 transitionDuration [ Step transitionDuration trans value ]
-                        :: existingSequence
+                    transitionDuration =
+                        Time.duration startTime targetTime
 
-                else
-                    let
-                        splitTime =
-                            Time.progress startTime targetTime now
+                    newSequence =
+                        Sequence 1 transitionDuration [ Step transitionDuration trans value ]
+                            |> takeAfter (Time.duration startTime now)
+                in
+                case newSequence.following of
+                    Nothing ->
+                        newSequence.base :: existingSequence
 
-                        transitionDuration =
-                            Time.duration startTime targetTime
-                    in
-                    Sequence 1 transitionDuration [ Step transitionDuration trans value ]
-                        :: existingSequence
+                    Just following ->
+                        newSequence.base :: following :: existingSequence
 
             Pos trans value [ Sequence 1 dur steps ] ->
-                if Time.thisAfterOrEqualThat now (Time.advanceBy dur targetTime) then
-                    []
+                let
+                    stepDuration =
+                        Time.duration startTime targetTime
 
-                else
-                    let
-                        stepDuration =
-                            Time.duration startTime targetTime
+                    transitionDuration =
+                        stepDuration
+                            |> Time.expand dur
 
-                        transitionDuration =
-                            stepDuration
-                                |> Time.expand dur
-                    in
-                    [ Sequence 1 transitionDuration (Step stepDuration trans value :: steps) ]
+                    new =
+                        Sequence 1 transitionDuration (Step stepDuration trans value :: steps)
+                            |> takeAfter (Time.duration startTime now)
+                in
+                case new.following of
+                    Nothing ->
+                        [ new.base ]
+
+                    Just following ->
+                        [ new.base, following ]
 
             Pos trans value dwell ->
                 let
                     transitionDuration =
                         Time.duration startTime targetTime
                 in
-                Sequence 1 transitionDuration [ Step transitionDuration trans value ]
-                    :: dwell
-                    ++ existingSequence
+                if Time.thisAfterThat now targetTime then
+                    takeAfterSequenceList (Time.duration startTime now) dwell
+
+                else
+                    let
+                        new =
+                            Sequence 1 transitionDuration [ Step transitionDuration trans value ]
+                                |> takeAfter (Time.duration startTime now)
+                    in
+                    case new.following of
+                        Nothing ->
+                            new.base :: dwell
+
+                        Just following ->
+                            new.base :: following :: dwell
+
+
+takeAfterSequenceList : Time.Duration -> List (Sequence value) -> List (Sequence value)
+takeAfterSequenceList durationToNow seqs =
+    case seqs of
+        [] ->
+            []
+
+        ((Sequence n duration steps) as top) :: remain ->
+            let
+                floatN =
+                    toFloat n
+            in
+            if isInfinite floatN then
+                if duration |> Quantity.greaterThan durationToNow then
+                    let
+                        new =
+                            takeAfter durationToNow top
+                    in
+                    case new.following of
+                        Nothing ->
+                            new.base :: remain
+
+                        Just following ->
+                            new.base :: following :: remain
+
+                else
+                    takeAfterSequenceList (durationToNow |> Quantity.minus duration) remain
+
+            else
+                let
+                    fullSeqDuration =
+                        duration |> Quantity.multiplyBy floatN
+                in
+                if fullSeqDuration |> Quantity.greaterThan durationToNow then
+                    let
+                        new =
+                            takeAfter durationToNow top
+                    in
+                    case new.following of
+                        Nothing ->
+                            new.base :: remain
+
+                        Just following ->
+                            new.base :: following :: remain
+
+                else
+                    takeAfterSequenceList (durationToNow |> Quantity.minus fullSeqDuration)
+                        remain
+
+
+takeAfter : Time.Duration -> Sequence value -> { base : Sequence value, following : Maybe (Sequence value) }
+takeAfter durationToNow ((Sequence n duration steps) as seq) =
+    if durationToNow |> Quantity.lessThanOrEqualTo zeroDuration then
+        { base = seq
+        , following = Nothing
+        }
+
+    else
+        let
+            durationToNowMs =
+                Duration.inMilliseconds durationToNow
+                    |> round
+
+            seqDurInMs =
+                Duration.inMilliseconds duration
+                    |> round
+
+            newN =
+                durationToNowMs
+                    // seqDurInMs
+
+            durationOfUnrolledSeq =
+                durationToNowMs
+                    |> modBy seqDurInMs
+                    |> toFloat
+                    |> Duration.milliseconds
+
+            durationToNewStart =
+                durationOfUnrolledSeq
+        in
+        { base =
+            Sequence 1
+                durationOfUnrolledSeq
+                (takeStepsAfter (duration |> Quantity.minus durationOfUnrolledSeq) steps)
+        , following =
+            if newN - 1 <= 0 then
+                Nothing
+
+            else
+                Just
+                    (Sequence (newN - 1)
+                        duration
+                        steps
+                    )
+        }
+
+
+takeStepsAfter durationToNow steps =
+    case steps of
+        [] ->
+            []
+
+        (Step duration transition value) :: remain ->
+            if duration |> Quantity.greaterThan durationToNow then
+                -- on this step
+                let
+                    progress =
+                        Time.progressWithin durationToNow duration
+                in
+                Step (duration |> Quantity.minus durationToNow)
+                    (Transition.takeAfter progress transition)
+                    value
+                    :: remain
+
+            else
+                takeStepsAfter (durationToNow |> Quantity.minus duration) remain
+
+
+after startTime targetTime now movement =
+    Debug.todo "Calculate after!"
 
 
 {-| This is the case where we specifically are transitioning to the new state and continuing to another state.

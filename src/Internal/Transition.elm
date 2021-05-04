@@ -5,6 +5,7 @@ module Internal.Transition exposing
     , split, before
     , hash, keyframes, compoundKeyframes
     , splines
+    , takeAfter
     )
 
 {-|
@@ -759,3 +760,8 @@ split t transition =
     { before = transition
     , after = transition
     }
+
+
+takeAfter : Float -> Transition -> Transition
+takeAfter t transition =
+    transition
