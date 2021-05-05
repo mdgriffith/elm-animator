@@ -3,7 +3,7 @@ module Internal.Bezier exposing
     , atX, pointOn
     , firstX, firstY, lastX, lastY
     , firstDerivative, secondDerivative
-    , splitAt, splitAtX, splitList, takeBefore
+    , splitAt, splitAtX, splitList, takeBefore, takeAfter
     , addX
     , doesNotMove, afterLastX
     , toPath, cssTimingString
@@ -28,7 +28,7 @@ Thanks Ian!
 
 @docs firstDerivative, secondDerivative
 
-@docs splitAt, splitAtX, splitList, takeBefore
+@docs splitAt, splitAtX, splitList, takeBefore, takeAfter
 
 @docs addX
 
@@ -601,6 +601,29 @@ splitAt parameterValue (Spline p1 p2 p3 p4) =
     ( Spline p1 q1 r1 s
     , Spline s r2 q3 p4
     )
+
+
+takeAfter : Float -> List Spline -> List Spline
+takeAfter cutoff splines =
+    takeAfterHelper cutoff splines
+
+
+takeAfterHelper : Float -> List Spline -> List Spline
+takeAfterHelper cutoff splines =
+    case splines of
+        [] ->
+            []
+
+        spline :: upcoming ->
+            if withinX cutoff spline then
+                let
+                    ( _, after ) =
+                        splitAtX cutoff spline
+                in
+                after :: upcoming
+
+            else
+                takeAfterHelper cutoff upcoming
 
 
 takeBefore : Float -> List Spline -> List Spline

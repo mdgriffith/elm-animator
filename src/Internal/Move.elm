@@ -163,6 +163,10 @@ sequences :
     -> List (Sequence Float)
     -> List (Sequence Float)
 sequences startTime targetTime now movement state existingSequence =
+    let
+        durationToNow =
+            Time.duration startTime now
+    in
     if Time.thisAfterOrEqualThat startTime now then
         -- We've definitely started, so we want to report the full sequence
         -- mot common case will be startTime == now
@@ -215,7 +219,7 @@ sequences startTime targetTime now movement state existingSequence =
 
                     newSequence =
                         Sequence 1 transitionDuration [ Step transitionDuration trans value ]
-                            |> takeAfter (Time.duration startTime now)
+                            |> takeAfter durationToNow
                 in
                 case newSequence.following of
                     Nothing ->
@@ -235,7 +239,7 @@ sequences startTime targetTime now movement state existingSequence =
 
                     new =
                         Sequence 1 transitionDuration (Step stepDuration trans value :: steps)
-                            |> takeAfter (Time.duration startTime now)
+                            |> takeAfter durationToNow
                 in
                 case new.following of
                     Nothing ->
@@ -250,13 +254,13 @@ sequences startTime targetTime now movement state existingSequence =
                         Time.duration startTime targetTime
                 in
                 if Time.thisAfterThat now targetTime then
-                    takeAfterSequenceList (Time.duration startTime now) dwell
+                    takeAfterSequenceList durationToNow dwell
 
                 else
                     let
                         new =
                             Sequence 1 transitionDuration [ Step transitionDuration trans value ]
-                                |> takeAfter (Time.duration startTime now)
+                                |> takeAfter durationToNow
                     in
                     case new.following of
                         Nothing ->
@@ -384,7 +388,48 @@ takeStepsAfter durationToNow steps =
 
 
 after startTime targetTime now movement =
-    Debug.todo "Calculate after!"
+    case movement of
+        Pos _ _ [] ->
+            Time.thisAfterThat now targetTime
+
+        Pos _ _ (seq :: remaining) ->
+            afterSequenceList (Time.duration startTime now) seq remaining
+
+
+afterSequenceList durationTillNow seq remaining =
+    if afterSequence durationTillNow seq then
+        case remaining of
+            [] ->
+                True
+
+            ((Sequence n duration steps) as top) :: rest ->
+                let
+                    durationOfUnrolledSeq =
+                        duration |> Quantity.multiplyBy (toFloat n)
+                in
+                afterSequenceList
+                    (durationTillNow |> Quantity.minus durationOfUnrolledSeq)
+                    top
+                    rest
+
+    else
+        False
+
+
+afterSequence durationTillNow (Sequence n duration steps) =
+    let
+        floatN =
+            toFloat n
+    in
+    if isInfinite floatN then
+        False
+
+    else
+        let
+            fullDuration =
+                duration |> Quantity.multiplyBy floatN
+        in
+        durationTillNow |> Quantity.greaterThanOrEqualTo fullDuration
 
 
 {-| This is the case where we specifically are transitioning to the new state and continuing to another state.

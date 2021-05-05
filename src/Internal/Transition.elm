@@ -764,4 +764,18 @@ split t transition =
 
 takeAfter : Float -> Transition -> Transition
 takeAfter t transition =
-    transition
+    case transition of
+        Transition spline ->
+            let
+                ( _, afterT ) =
+                    Bezier.splitAtX t spline
+            in
+            Transition afterT
+
+        Trail trail ->
+            -- split an existing spline
+            Trail (Bezier.takeAfter t trail)
+
+        Wobble wob ->
+            -- convert to splines and store s `Trail`
+            Debug.todo "TODO: Transition.takeAfter Wobble"
