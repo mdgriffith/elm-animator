@@ -150,13 +150,12 @@ cssFromProps timeline lookup =
                     let
                         -- _ = Debug.log get (Timeline.getEvent prev)
                         new =
-                            Debug.log "NEW" <|
-                                case cursor.props of
-                                    [] ->
-                                        get (Timeline.getEvent target) ++ get (Timeline.getEvent prev)
+                            case cursor.props of
+                                [] ->
+                                    get (Timeline.getEvent target) ++ get (Timeline.getEvent prev)
 
-                                    _ ->
-                                        get (Timeline.getEvent target)
+                                _ ->
+                                    get (Timeline.getEvent target)
                     in
                     add new
                         cursor.props
@@ -401,7 +400,6 @@ renderCompoundSections now sections anim =
                 end =
                     targetSection.start
                         |> Time.advanceBy (Timeline.periodDuration targetSection.period)
-                        |> Debug.log "END CALCULATED AS"
 
                 onlyOnce =
                     Timeline.isOnce targetSection.period
@@ -660,14 +658,13 @@ renderCompoundKeyframes start period frames hash rendered =
 
         keyframe :: remain ->
             let
-                _ =
-                    Debug.log "COMPOUND FRAME"
-                        { progress = percentage
-                        , duration = Timeline.periodDuration period
-                        , start = start
-                        , end = start |> Time.advanceBy (Timeline.periodDuration period)
-                        }
-
+                -- _ =
+                --     Debug.log "COMPOUND FRAME"
+                --         { progress = percentage
+                --         , duration = Timeline.periodDuration period
+                --         , start = start
+                --         , end = start |> Time.advanceBy (Timeline.periodDuration period)
+                --         }
                 percentage =
                     round
                         (100
@@ -848,6 +845,7 @@ scalarHelper now renderedProps anim =
             scalarHelper now
                 remain
                 (propToCssHelper now
+                    details.startPos
                     details
                     details.sections
                     emptyAnim
@@ -863,8 +861,18 @@ scalarHelper now renderedProps anim =
             scalarHelper now remain anim
 
 
-propToCssHelper : Time.Absolute -> RenderedPropDetails -> List (Move.Sequence Float) -> CssAnim -> CssAnim
-propToCssHelper now details sections anim =
+propToCssHelper :
+    Time.Absolute
+    -> Float
+    -> RenderedPropDetails
+    ->
+        List
+            { delay : Duration.Duration
+            , sequence : Move.Sequence Float
+            }
+    -> CssAnim
+    -> CssAnim
+propToCssHelper now startPos details sections anim =
     case sections of
         [] ->
             if isEmptyAnim anim then
@@ -884,28 +892,20 @@ propToCssHelper now details sections anim =
             else
                 anim
 
-        top :: remain ->
+        sequence :: remain ->
             propToCssHelper now
+                (Move.lastPosOr startPos sequence.sequence)
                 details
                 remain
                 (combine
                     anim
-                    (sequenceCss now details.id details.name details.format top)
+                    (Move.css sequence.delay
+                        startPos
+                        details.name
+                        (Internal.Css.Props.format details.format)
+                        sequence.sequence
+                    )
                 )
-
-
-sequenceCss :
-    Time.Absolute
-    -> Id
-    -> String
-    -> Internal.Css.Props.Format
-    -> Move.Sequence Float
-    -> CssAnim
-sequenceCss now id name format sequence =
-    Move.css (Debug.todo "DELAY")
-        name
-        (Internal.Css.Props.format format)
-        sequence
 
 
 sectionCss : Time.Absolute -> Id -> String -> Internal.Css.Props.Format -> Section -> CssAnim
@@ -1175,7 +1175,7 @@ renderCssHelper now renderer props cssAnim =
                     cssAnim
 
                 _ ->
-                    case Debug.log "  <- " <| render now props of
+                    case render now props of
                         Nothing ->
                             renderCssHelper now
                                 remain
@@ -1259,6 +1259,7 @@ startPropsHelper only props maybeTransform rendered =
                         RenderedProp
                             { id = onlyId
                             , name = onlyName
+                            , startPos = Pixels.inPixels state.position
                             , format = onlyFormat
                             , sections = []
                             , state = state
@@ -1279,18 +1280,16 @@ toPropCurves2 only =
 
         -}
         let
-            _ =
-                Debug.log "     TRANSITION"
-                    { prev = prev
-                    , target = target
-                    }
-
-            _ =
-                Debug.log "     -> "
-                    { prev = lookup (Timeline.getEvent prev)
-                    , target = lookup (Timeline.getEvent target)
-                    }
-
+            -- _ =
+            --     Debug.log "     TRANSITION"
+            --         { prev = prev
+            --         , target = target
+            --         }
+            -- _ =
+            --     Debug.log "     -> "
+            --         { prev = lookup (Timeline.getEvent prev)
+            --         , target = lookup (Timeline.getEvent target)
+            --         }
             targetTime =
                 Timeline.startTime target
 
@@ -1384,6 +1383,7 @@ toPropCurves2 only =
                             { id = rendered.id
                             , name = rendered.name
                             , format = rendered.format
+                            , startPos = rendered.startPos
                             , sections =
                                 if finished then
                                     rendered.sections
@@ -1447,297 +1447,6 @@ toPropCurves2 only =
                             }
             )
             cursor
-
-
-
--- transition =
---      let
---         propLookup : Timeline.Occurring state -> (Move.Move Float)
---         propLookup occur =
---             stateOrDefault rendered.id rendered.name (lookup (Timeline.getEvent occur))
---         lookupState s =
---             stateOrDefault rendered.id rendered.name (lookup s)
---         targetProp =
---             propLookup target
---         domain =
---             { start =
---                 { x = startTime
---                 , y = rendered.state.position
---                 }
---             , end =
---                 { x = targetTime
---                 , y = targetPosition
---                 }
---             }
---         targetVelocity =
---             Interpolate.velocityAtTarget lookupState target future
---         progress =
---             Time.progress startTime targetTime now
---         targetPosition =
---             case targetProp of
---                 Move.Pos _ x _ ->
---                     Pixels.pixels x
---         targetTransition =
---             case targetProp of
---                 Move.Pos trans _ _ ->
---                     trans
---     in
---     {}
--- {-| -}
--- toPropCurves :
---     List Prop
---     ->
---         Timeline.Interp state
---             (List Prop)
---             { rendered : List RenderedProp
---             , previous : Maybe (Timeline.Occurring state)
---             }
--- toPropCurves only =
---     { start =
---         \props ->
---             { rendered =
---                 startProps only props
---             , previous = Nothing
---             }
---     , visit =
---         \lookup target targetTime maybeLookAhead data ->
---             let
---                 _ =
---                     Debug.log "VISIT" target
---             in
---             { rendered =
---                 case data.previous of
---                     Nothing ->
---                         data.rendered
---                     Just prev ->
---                         List.map
---                             (\prop ->
---                                 case prop of
---                                     RenderedColorProp details ->
---                                         let
---                                             previousTime =
---                                                 case data.previous of
---                                                     Nothing ->
---                                                         targetTime
---                                                     Just prevEvent ->
---                                                         Timeline.endTime prevEvent
---                                             newColor =
---                                                 lookup (Timeline.getEvent target)
---                                                     |> colorOrDefault details.name
---                                                         Internal.Css.Props.transparent
---                                             new =
---                                                 { details
---                                                     | color = newColor
---                                                     , sections =
---                                                         { start = targetTime
---                                                         , duration =
---                                                             Time.duration previousTime targetTime
---                                                         , steps =
---                                                             [ { percent = 0
---                                                               , color = details.color
---                                                               }
---                                                             , { percent = 50
---                                                               , color = Interpolate.color 0.5 details.color newColor
---                                                               }
---                                                             , { percent = 100
---                                                               , color = newColor
---                                                               }
---                                                             ]
---                                                         }
---                                                             :: details.sections
---                                                 }
---                                         in
---                                         RenderedColorProp new
---                                     RenderedProp rendered ->
---                                         let
---                                             propLookup state =
---                                                 let
---                                                     found =
---                                                         lookup state
---                                                             |> stateOrDefault rendered.id rendered.name
---                                                     -- _ =
---                                                     --     Debug.log "    ->"
---                                                     --         { rendered = rendered
---                                                     --         , found = found
---                                                     --         -- lookup target
---                                                     --         --     |> stateOrDefault rendered.id rendered.name
---                                                     --         -- propLookup target
---                                                     --         }
---                                                 in
---                                                 found
---                                             maybePropLookAhead =
---                                                 Maybe.map
---                                                     (Timeline.mapLookAhead
---                                                         (stateOrDefault rendered.id rendered.name)
---                                                     )
---                                                     maybeLookAhead
---                                         in
---                                         RenderedProp
---                                             { id = rendered.id
---                                             , name = rendered.name
---                                             , format = rendered.format
---                                             , sections =
---                                                 toCurvesVisit
---                                                     propLookup
---                                                     target
---                                                     targetTime
---                                                     data.previous
---                                                     maybePropLookAhead
---                                                     rendered.state
---                                                     rendered.sections
---                                             , state =
---                                                 Interpolate.moving.visit
---                                                     propLookup
---                                                     target
---                                                     targetTime
---                                                     maybePropLookAhead
---                                                     rendered.state
---                                             }
---                                     CompoundProp details ->
---                                         let
---                                             ( newCompound, newStates ) =
---                                                 visitCurvesCompound
---                                                     details.states
---                                                     lookup
---                                                     prev
---                                                     target
---                                                     targetTime
---                                                     maybeLookAhead
---                                                     |> Debug.log "VISITED COMPOUND"
---                                         in
---                                         CompoundProp
---                                             { slices =
---                                                 case details.slices of
---                                                     [] ->
---                                                         [ newCompound ]
---                                                     last :: remain ->
---                                                         if isCombineableCompoundSections newCompound last then
---                                                             combineCompound newCompound last :: remain
---                                                         else
---                                                             newCompound :: details.slices
---                                             , states = newStates
---                                             }
---                             )
---                             data.rendered
---             , previous = Just target
---             }
---     , transition =
---         \prevEndTime prev target targetTime interruptedAt maybeLookAhead data ->
---             let
---                 _ =
---                     Debug.log "TRANSITION" target
---             in
---             { rendered =
---                 List.map
---                     (\prop ->
---                         case prop of
---                             RenderedColorProp details ->
---                                 let
---                                     previousColor =
---                                         colorOrDefault details.name
---                                             Internal.Css.Props.transparent
---                                             prev
---                                     newColor =
---                                         colorOrDefault details.name
---                                             Internal.Css.Props.transparent
---                                             target
---                                     new =
---                                         { details
---                                             | color = newColor
---                                             , sections =
---                                                 { start = targetTime
---                                                 , duration =
---                                                     Time.duration prevEndTime targetTime
---                                                 , steps =
---                                                     [ { percent = 0
---                                                       , color = previousColor
---                                                       }
---                                                     , { percent = 50
---                                                       , color = Interpolate.color 0.5 previousColor newColor
---                                                       }
---                                                     , { percent = 100
---                                                       , color = newColor
---                                                       }
---                                                     ]
---                                                 }
---                                                     :: details.sections
---                                         }
---                                 in
---                                 RenderedColorProp new
---                             RenderedProp rendered ->
---                                 let
---                                     -- _ =
---                                     --     Debug.log "    ->"
---                                     --         { rendered = rendered.name
---                                     --         , found = Interpolate.base targetProp
---                                     --         -- lookup target
---                                     --         --     |> stateOrDefault rendered.id rendered.name
---                                     --         -- propLookup target
---                                     --         }
---                                     previousProp =
---                                         stateOrDefault rendered.id rendered.name prev
---                                     targetProp =
---                                         stateOrDefault rendered.id rendered.name target
---                                     lookAheadProp =
---                                         Maybe.map
---                                             (Timeline.mapLookAhead
---                                                 (stateOrDefault rendered.id rendered.name)
---                                             )
---                                             maybeLookAhead
---                                 in
---                                 RenderedProp
---                                     { id = rendered.id
---                                     , name = rendered.name
---                                     , format = rendered.format
---                                     , sections =
---                                         toCurvesLerp
---                                             prevEndTime
---                                             targetProp
---                                             targetTime
---                                             interruptedAt
---                                             lookAheadProp
---                                             rendered.state
---                                             rendered.sections
---                                     , state =
---                                         Interpolate.moving.transition
---                                             prevEndTime
---                                             previousProp
---                                             targetProp
---                                             targetTime
---                                             interruptedAt
---                                             lookAheadProp
---                                             (Debug.log "    INCOMING" rendered.state)
---                                             |> Debug.log "     NEW STATE"
---                                     }
---                             CompoundProp details ->
---                                 let
---                                     ( newCompound, newStates ) =
---                                         lerpCurvesCompound
---                                             details.states
---                                             prevEndTime
---                                             prev
---                                             target
---                                             targetTime
---                                             interruptedAt
---                                             maybeLookAhead
---                                 in
---                                 CompoundProp
---                                     { slices =
---                                         case details.slices of
---                                             [] ->
---                                                 [ newCompound ]
---                                             last :: remain ->
---                                                 if isCombineableCompoundSections newCompound last then
---                                                     combineCompound newCompound last :: remain
---                                                 else
---                                                     newCompound :: details.slices
---                                     , states = newStates
---                                     }
---                     )
---                     data.rendered
---             , previous = Nothing
---             }
---     }
 
 
 {-| -}
@@ -1862,17 +1571,19 @@ type alias RenderedPropDetails =
     { id : Id
     , name : String
     , format : Internal.Css.Props.Format
-    , sections : List (Move.Sequence Float)
+    , startPos : Float
+    , sections :
+        List
+            { delay : Duration.Duration
+            , sequence : Move.Sequence Float
+            }
     , state : Interpolate.State
     }
 
 
 {-| A section is one segment of a scalar's journey that can be repeated.
-
 Every state transition will be a separate section.
-
 A dwell will be a section by itself and can possibly repeat.
-
 -}
 type Section
     = Section
