@@ -24,7 +24,6 @@ Search for (1), (2), and (3) respectively to see the code!
 
 import Animator
 import Animator.Css
-import Animator.Inline
 import Browser
 import Color
 import Html exposing (..)
