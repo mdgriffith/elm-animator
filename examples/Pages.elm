@@ -210,7 +210,7 @@ view model =
     }
 
 
-viewPage : Animator.Timeline Page -> Page -> { title : String, content : Html msg } -> Html Msg
+viewPage : Animator.Timeline Page -> Page -> { title : String, content : Html Msg } -> Html Msg
 viewPage timeline page { title, content } =
     let
         wrapInLink html =
@@ -228,7 +228,7 @@ viewPage timeline page { title, content } =
         (pageAnimation page)
         [ Attr.class "page" ]
         [ Html.h2 [] [ Html.text title ]
-        , loremIpsum
+        , content
         ]
         |> wrapInLink
 
