@@ -6,7 +6,7 @@ module Animator.Css2 exposing
     , div, node
     , Css, css
     , watching
-    , Attribute
+    , Attribute, xAsSingleProp
     )
 
 {-|
@@ -109,6 +109,15 @@ opacity o =
         "opacity"
         (Move.to o)
         Internal.Css.Props.float
+
+
+xAsSingleProp : Float -> Property
+xAsSingleProp o =
+    Css.Prop
+        Internal.Css.Props.ids.opacity
+        "transform"
+        (Move.to o)
+        Internal.Css.Props.translateX
 
 
 {-| -}

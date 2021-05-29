@@ -3,7 +3,7 @@ module Internal.Css.Props exposing
     , isTransformId
     , Format, format, float, int, px
     , roundFloat, floatToString
-    , colorHash, name, noId, toStr, transparent, zero
+    , colorHash, name, noId, toStr, translateX, transparent, zero
     )
 
 {-|
@@ -51,11 +51,15 @@ format form num =
         Px ->
             String.fromInt (round num) ++ "px"
 
+        TranslateX ->
+            "translateX(" ++ String.fromInt (round num) ++ "px)"
+
 
 type Format
     = AsFloat
     | AsInt
     | Px
+    | TranslateX
 
 
 float : Format
@@ -71,6 +75,11 @@ int =
 px : Format
 px =
     Px
+
+
+translateX : Format
+translateX =
+    TranslateX
 
 
 {-| We make this huge because we want it last.

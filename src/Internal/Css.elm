@@ -846,6 +846,7 @@ scalarHelper now renderedProps anim =
                 remain
                 (propToCssHelper now
                     details.startPos
+                    --(Debug.todo "This is not the right starting position :thinking:")
                     details
                     details.sections
                     emptyAnim
@@ -1280,11 +1281,13 @@ toPropCurves2 only =
 
         -}
         let
-            -- _ =
-            --     Debug.log "     TRANSITION"
-            --         { prev = prev
-            --         , target = target
-            --         }
+            _ =
+                Debug.log "     TRANSITION"
+                    { prev = prev
+                    , target = target
+                    , finished = finished
+                    }
+
             -- _ =
             --     Debug.log "     -> "
             --         { prev = lookup (Timeline.getEvent prev)
@@ -1297,7 +1300,15 @@ toPropCurves2 only =
                 Timeline.endTime prev
 
             finished =
-                Time.thisAfterOrEqualThat now (Timeline.endTime target)
+                -- we only want to ignore this event if it's both finished
+                -- and not immediately preceding an event that is still upcoming
+                case future of
+                    [] ->
+                        False
+
+                    next :: _ ->
+                        Time.thisAfterOrEqualThat now (Timeline.endTime target)
+                            && not (Time.thisBeforeThat now (Timeline.startTime next))
         in
         List.map
             (\prop ->
@@ -1378,15 +1389,40 @@ toPropCurves2 only =
                                 case targetProp of
                                     Move.Pos trans _ _ ->
                                         trans
+
+                            newState =
+                                Transition.atX
+                                    progress
+                                    domain
+                                    rendered.state.velocity
+                                    targetVelocity
+                                    targetTransition
                         in
                         RenderedProp
                             { id = rendered.id
                             , name = rendered.name
                             , format = rendered.format
-                            , startPos = rendered.startPos
+                            , startPos =
+                                -- startPos is the position at the beginning of the active animation
+                                --  So, we're tracking that as the end of any state we've completely passed
+                                if Time.thisAfterOrEqualThat now (Timeline.endTime target) then
+                                    Pixels.inPixels newState.position
+
+                                else
+                                    rendered.startPos
                             , sections =
                                 if finished then
                                     rendered.sections
+
+                                else if Pixels.inPixelsPerSecond targetVelocity /= 0 then
+                                    Move.continuingSplines
+                                        startTime
+                                        targetTime
+                                        now
+                                        targetVelocity
+                                        targetProp
+                                        rendered.state
+                                        rendered.sections
 
                                 else
                                     Move.sequences
@@ -1397,12 +1433,7 @@ toPropCurves2 only =
                                         rendered.state
                                         rendered.sections
                             , state =
-                                Transition.atX
-                                    progress
-                                    domain
-                                    rendered.state.velocity
-                                    targetVelocity
-                                    targetTransition
+                                newState
                             }
 
                     CompoundProp details ->
@@ -2386,7 +2417,8 @@ toCss :
     -> (Float -> String)
     -> (state -> Move.Move Float)
     ->
-        Timeline.Interp state
+        Timeline.Interp
+            state
             (Move.Move Float)
             { css : CssAnim
             , stackStart : Time.Absolute

@@ -228,7 +228,8 @@ sequences startTime targetTime now movement state existingSequence =
                     seq =
                         Sequence 1
                             transitionDuration
-                            [ Step transitionDuration trans value ]
+                            [ Step transitionDuration trans value
+                            ]
                 in
                 { sequence = seq
                 , delay = durationToNow
@@ -245,7 +246,11 @@ sequences startTime targetTime now movement state existingSequence =
                             |> Time.expand dur
 
                     transitionSequence =
-                        Sequence 1 transitionDuration (Step stepDuration trans value :: steps)
+                        Sequence 1
+                            transitionDuration
+                            (Step stepDuration trans value
+                                :: steps
+                            )
                 in
                 { sequence = transitionSequence
                 , delay = durationToNow
@@ -258,7 +263,10 @@ sequences startTime targetTime now movement state existingSequence =
                         Time.duration startTime targetTime
 
                     transitionSequence =
-                        Sequence 1 transitionDuration [ Step transitionDuration trans value ]
+                        Sequence 1
+                            transitionDuration
+                            [ Step transitionDuration trans value
+                            ]
                 in
                 { sequence = transitionSequence
                 , delay = durationToNow
@@ -597,8 +605,16 @@ continuingSplines :
     -> Units.PixelsPerSecond
     -> Move Float
     -> State
-    -> List (Sequence Float)
-    -> List (Sequence Float)
+    ->
+        List
+            { delay : Duration.Duration
+            , sequence : Sequence Float
+            }
+    ->
+        List
+            { delay : Duration.Duration
+            , sequence : Sequence Float
+            }
 continuingSplines startTime targetTime now transitionFinishVelocity movement state existingSequence =
     let
         durationToNow =
@@ -615,8 +631,15 @@ continuingSplines startTime targetTime now transitionFinishVelocity movement sta
                 let
                     transitionDuration =
                         Time.duration startTime targetTime
+
+                    seq =
+                        Sequence 1
+                            transitionDuration
+                            [ Step transitionDuration trans value ]
                 in
-                Sequence 1 transitionDuration [ Step transitionDuration trans value ]
+                { sequence = seq
+                , delay = durationToNow
+                }
                     :: existingSequence
 
     else if after startTime targetTime now movement then
@@ -642,10 +665,16 @@ continuingSplines startTime targetTime now transitionFinishVelocity movement sta
                 in
                 case newSequence.following of
                     Nothing ->
-                        newSequence.base :: existingSequence
+                        [ { sequence = newSequence.base, delay = Time.zeroDuration } ]
 
                     Just following ->
-                        newSequence.base :: following :: existingSequence
+                        [ { sequence = newSequence.base
+                          , delay = Time.zeroDuration
+                          }
+                        , { sequence = following
+                          , delay = getSequenceDuration newSequence.base
+                          }
+                        ]
 
 
 {-| We are specifically going to a new state and not continuing on to another.
@@ -904,6 +933,15 @@ keyframes name startPos toString (Sequence _ dur steps) rendered =
     keyframeHelper name startPos toString dur zeroDuration steps rendered
 
 
+keyframeHelper :
+    String
+    -> Float
+    -> (Float -> String)
+    -> Time.Duration
+    -> Time.Duration
+    -> List (Step Float)
+    -> String
+    -> String
 keyframeHelper name startPos toString sequenceDuration currentDur steps rendered =
     case steps of
         [] ->
@@ -911,30 +949,50 @@ keyframeHelper name startPos toString sequenceDuration currentDur steps rendered
 
         (Step dur transition val) :: [] ->
             let
-                last =
-                    "100% { " ++ (name ++ ":" ++ toString val ++ ";}")
-            in
-            rendered ++ last
+                toPropString v =
+                    name ++ ":" ++ toString v
 
-        (Step dur transition val) :: (((Step nextdur nextTrans nextVal) :: future) as remaining) ->
-            let
-                -- percentage =
-                --     String.fromInt
-                --         (round
-                --             (Time.progressWithin currentDur sequenceDuration * 100)
-                --         )
-                --         ++ "%"
+                last =
+                    "100% { " ++ (toPropString val ++ ";}")
+
                 domain =
                     { start =
                         { x = 0
-
-                        --startTime
                         , y = startPos
                         }
                     , end =
                         { x = 100
+                        , y = val
+                        }
+                    }
 
-                        --targetTime
+                startPercent =
+                    Time.progressWithin currentDur sequenceDuration * 100
+
+                endPercent =
+                    100
+
+                frames =
+                    Transition.keyframes
+                        domain
+                        0
+                        0
+                        startPercent
+                        endPercent
+                        toPropString
+                        transition
+            in
+            rendered ++ frames ++ last
+
+        (Step dur transition val) :: (((Step nextdur nextTrans nextVal) :: future) as remaining) ->
+            let
+                domain =
+                    { start =
+                        { x = 0
+                        , y = startPos
+                        }
+                    , end =
+                        { x = 100
                         , y = val
                         }
                     }
@@ -957,15 +1015,6 @@ keyframeHelper name startPos toString sequenceDuration currentDur steps rendered
                         endPercent
                         toString
                         transition
-
-                -- percentage
-                --     ++ "{\n    "
-                --     ++ (name ++ ":" ++ toString val ++ ";\n")
-                --     ++ ("    animation-timing-function:"
-                --             ++ Bezier.cssTimingString top
-                --             ++ ";"
-                --        )
-                --     ++ "\n}\n"
             in
             keyframeHelper
                 name
@@ -982,6 +1031,7 @@ hash name (Sequence n dur steps) =
     name ++ String.fromInt n ++ stepHash steps ""
 
 
+stepHash : List (Step Float) -> String -> String
 stepHash steps hashed =
     case steps of
         [] ->
@@ -990,7 +1040,7 @@ stepHash steps hashed =
         (Step dur trans v) :: remain ->
             stepHash remain
                 (hashed
-                    ++ ":"
+                    ++ "--"
                     ++ hashDuration dur
                     ++ "-"
                     ++ Transition.hash trans
@@ -1009,11 +1059,13 @@ floatToString f =
     String.fromFloat (roundFloat f)
 
 
+hashDuration : Duration.Duration -> String
 hashDuration dur =
     String.fromInt
         (round (Duration.inSeconds dur))
 
 
+lastPosOr : value -> Sequence value -> value
 lastPosOr x (Sequence _ _ steps) =
     case steps of
         [] ->
@@ -1023,6 +1075,7 @@ lastPosOr x (Sequence _ _ steps) =
             lastPosOrHelper x steps
 
 
+lastPosOrHelper : value -> List (Step value) -> value
 lastPosOrHelper x steps =
     case steps of
         [] ->
@@ -1044,8 +1097,23 @@ lastPosOrHelper x steps =
             lastPosOrHelper v remain
 
 
+css :
+    Duration.Duration
+    -> Float
+    -> String
+    -> (Float -> String)
+    -> Sequence Float
+    ->
+        { hash : String
+        , animation : String
+        , keyframes : String
+        , props : List a
+        }
 css delay startPos name toString seq =
     let
+        _ =
+            Debug.log "SEQUENCE" seq
+
         animationName =
             hash name seq
 
