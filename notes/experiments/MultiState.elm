@@ -25,6 +25,7 @@ import Time
 {-| -}
 type alias Model =
     { ball : Animator.Timeline Int
+    , queue : Bool
     }
 
 
@@ -40,6 +41,7 @@ main =
         { init =
             \() ->
                 ( { ball = Animator.init positions.start
+                  , queue = False
                   }
                 , Cmd.none
                 )
@@ -77,6 +79,7 @@ animator =
 type Msg
     = Tick Time.Posix
     | GoTo Int
+    | ToggleQueue
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -90,8 +93,49 @@ update msg model =
         GoTo int ->
             ( { model
                 | ball =
-                    model.ball
-                        |> Animator.go Animator.verySlowly int
+                    if model.queue then
+                        let
+                            current =
+                                Animator.current model.ball
+                                    |> Debug.log "Current"
+
+                            lowest =
+                                min current int
+
+                            highest =
+                                max current int
+
+                            range =
+                                List.range lowest highest
+
+                            correctRange =
+                                if highest - int == 0 then
+                                    List.drop 1 range
+
+                                else
+                                    List.drop 1 (List.reverse range)
+                        in
+                        model.ball
+                            |> Animator.queue
+                                (correctRange
+                                    |> Debug.log "QUEUING RANGE"
+                                    |> List.map
+                                        (\i ->
+                                            Animator.transitionTo Animator.verySlowly i
+                                        )
+                                )
+
+                    else
+                        model.ball
+                            |> Animator.go Animator.verySlowly int
+              }
+            , Cmd.none
+            )
+
+        ToggleQueue ->
+            ( { model
+                | queue =
+                    not model.queue
               }
             , Cmd.none
             )
@@ -120,6 +164,14 @@ view model =
                 , viewBallTarget 1
                 , viewBallTarget 2
                 , viewBallTarget 3
+                ]
+            , div
+                [ Events.onClick ToggleQueue ]
+                [ if model.queue then
+                    text "queue"
+
+                  else
+                    text "direct"
                 ]
             ]
         ]

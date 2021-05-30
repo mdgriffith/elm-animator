@@ -848,7 +848,7 @@ scalarHelper now renderedProps anim =
                     details.startPos
                     --(Debug.todo "This is not the right starting position :thinking:")
                     details
-                    details.sections
+                    (List.reverse details.sections)
                     emptyAnim
                     |> combine anim
                 )
@@ -899,13 +899,16 @@ propToCssHelper now startPos details sections anim =
                 details
                 remain
                 (combine
-                    anim
+                    -- NOTE, this order is important!
+                    -- it affects the order of the animation statements in CSS
+                    -- If the y are out of order they can cancel each other out in weird ways.
                     (Move.css sequence.delay
                         startPos
                         details.name
                         (Internal.Css.Props.format details.format)
                         sequence.sequence
                     )
+                    anim
                 )
 
 
@@ -1302,13 +1305,14 @@ toPropCurves2 only =
             finished =
                 -- we only want to ignore this event if it's both finished
                 -- and not immediately preceding an event that is still upcoming
-                case future of
-                    [] ->
-                        False
+                --case future of
+                --    [] ->
+                --        False
+                --
+                --    next :: _ ->
+                Time.thisAfterOrEqualThat now (Timeline.endTime target)
 
-                    next :: _ ->
-                        Time.thisAfterOrEqualThat now (Timeline.endTime target)
-                            && not (Time.thisBeforeThat now (Timeline.startTime next))
+            --&& not (Time.thisBeforeThat now (Timeline.startTime next))
         in
         List.map
             (\prop ->
@@ -1413,16 +1417,6 @@ toPropCurves2 only =
                             , sections =
                                 if finished then
                                     rendered.sections
-
-                                else if Pixels.inPixelsPerSecond targetVelocity /= 0 then
-                                    Move.continuingSplines
-                                        startTime
-                                        targetTime
-                                        now
-                                        targetVelocity
-                                        targetProp
-                                        rendered.state
-                                        rendered.sections
 
                                 else
                                     Move.sequences

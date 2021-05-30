@@ -619,9 +619,6 @@ continuingSplines startTime targetTime now transitionFinishVelocity movement sta
     let
         durationToNow =
             Time.duration startTime now
-
-        _ =
-            Debug.todo "calculate new spline with target velocity!"
     in
     if Time.thisAfterOrEqualThat startTime now then
         -- We've definitely started, so we want to report the full sequence
@@ -930,7 +927,13 @@ initialSequenceVelocity seq =
 
 keyframes : String -> Float -> (Float -> String) -> Sequence Float -> String -> String
 keyframes name startPos toString (Sequence _ dur steps) rendered =
-    keyframeHelper name startPos toString dur zeroDuration steps rendered
+    keyframeHelper name
+        startPos
+        toString
+        dur
+        zeroDuration
+        steps
+        rendered
 
 
 keyframeHelper :
@@ -1112,7 +1115,7 @@ css :
 css delay startPos name toString seq =
     let
         _ =
-            Debug.log "SEQUENCE" seq
+            Debug.log "SEQUENCE" ( startPos, seq )
 
         animationName =
             hash name seq
