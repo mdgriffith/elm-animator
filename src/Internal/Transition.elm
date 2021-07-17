@@ -212,6 +212,10 @@ atX progress domain introVelocity exitVelocity transition =
                 |> wrapUnits
 
 
+toTimeProgress :
+    TimeDomain
+    -> Float
+    -> Float
 toTimeProgress domain factor =
     let
         start =
@@ -231,6 +235,13 @@ wrapUnits state =
     }
 
 
+posVel :
+    Float
+    -> Bezier.Spline
+    ->
+        { position : Quantity.Quantity Float Pixels.Pixels
+        , velocity : Quantity.Quantity Float Pixels.PixelsPerSecond
+        }
 posVel progress spline =
     let
         current =
