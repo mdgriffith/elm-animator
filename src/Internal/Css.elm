@@ -172,7 +172,8 @@ cssFromProps timeline lookup =
                 (startProps present)
                 (toPropCurves2 present)
                 timeline
-                |> Debug.log "RENDERED PROPS"
+
+        --|> Debug.log "RENDERED PROPS"
     in
     renderCss (Timeline.getCurrentTime timeline) renderers renderedProps
 
@@ -304,7 +305,7 @@ renderColorSectionToCss now name section =
                 ++ delay
                 ++ " "
                 ++ n
-                ++ " normal both running "
+                ++ " normal forwards running "
                 ++ animationName
 
         keyframes =
@@ -503,7 +504,7 @@ renderCompoundSections now sections anim =
                             ++ delay
                             ++ " "
                             ++ n
-                            ++ " normal both running "
+                            ++ " normal forwards running "
                             ++ new.hash
                 in
                 renderCompoundSections now
@@ -1007,7 +1008,7 @@ sectionToCss now id name format (Section section) =
                 ++ delay
                 ++ " "
                 ++ n
-                ++ " normal both running "
+                ++ " normal forwards running "
                 ++ animationName
 
         keyframes =
@@ -1376,7 +1377,8 @@ toPropCurves2 only =
                                 }
 
                             targetVelocity =
-                                Interpolate.velocityAtTarget lookupState target future
+                                --Interpolate.velocityAtTarget lookupState target future
+                                Pixels.pixelsPerSecond 0
 
                             progress =
                                 Time.progress startTime targetTime now
@@ -2358,7 +2360,7 @@ finalize name renderValue now stack =
                         -- , but it is overridden by the one in keyframes
                         ++ "linear "
                         ++ delay
-                        ++ " 1 normal both running "
+                        ++ " 1 normal forwards running "
                         ++ animationName
 
                 keyframes =
