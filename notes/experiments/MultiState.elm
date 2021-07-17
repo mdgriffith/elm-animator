@@ -90,7 +90,7 @@ update msg model =
             , Cmd.none
             )
 
-        GoTo int ->
+        GoTo target ->
             ( { model
                 | ball =
                     if model.queue then
@@ -99,25 +99,28 @@ update msg model =
                                 Animator.current model.ball
                                     |> Debug.log "Current"
 
-                            lowest =
-                                min current int
-
-                            highest =
-                                max current int
-
                             range =
-                                List.range lowest highest
-
-                            correctRange =
-                                if highest - int == 0 then
-                                    List.drop 1 range
+                                if target > current then
+                                    List.range current target
+                                        |> List.drop 1
 
                                 else
-                                    List.drop 1 (List.reverse range)
+                                    List.range target current
+                                        |> List.reverse
+                                        |> List.drop 1
+
+                            --correctRange =
+                            --    if highest - target == 0 then
+                            --        --List.drop 1
+                            --        range
+                            --
+                            --    else
+                            --        --List.drop 1
+                            --        List.reverse range
                         in
                         model.ball
                             |> Animator.queue
-                                (correctRange
+                                (range
                                     |> Debug.log "QUEUING RANGE"
                                     |> List.map
                                         (\i ->
@@ -127,7 +130,7 @@ update msg model =
 
                     else
                         model.ball
-                            |> Animator.go Animator.verySlowly int
+                            |> Animator.go Animator.verySlowly target
               }
             , Cmd.none
             )
@@ -147,6 +150,10 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
+    let
+        _ =
+            Debug.log "------------VIEWING2" "----------"
+    in
     div []
         [ stylesheet
         , div

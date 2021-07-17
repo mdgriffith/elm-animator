@@ -292,7 +292,7 @@ node :
 node name timeline toProps attrs children =
     let
         rendered =
-            css timeline toProps
+            Debug.log "STYLE" (css timeline toProps)
 
         styles =
             List.map (\( propName, val ) -> Attr.style propName val)
@@ -349,15 +349,40 @@ watching :
 watching get set (Timeline.Animator isRunning updateModel) =
     Timeline.Animator
         (\model ->
-            if isRunning model then
-                True
+            let
+                prev =
+                    isRunning model
 
-            else
-                let
-                    tl =
-                        get model
-                in
-                Timeline.hasChanged tl || Timeline.justInitialized tl
+                timeline =
+                    get model
+
+                ping =
+                    case Timeline.sendPing timeline of
+                        Nothing ->
+                            prev.ping
+
+                        Just currentPing ->
+                            case prev.ping of
+                                Nothing ->
+                                    Just currentPing
+
+                                Just prevPing ->
+                                    if prevPing < currentPing then
+                                        Just prevPing
+
+                                    else
+                                        Just currentPing
+
+                running =
+                    if prev.running then
+                        True
+
+                    else
+                        Timeline.hasChanged timeline || Timeline.justInitialized timeline
+            in
+            { running = running
+            , ping = ping
+            }
         )
         (\now model ->
             let

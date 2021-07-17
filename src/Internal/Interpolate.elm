@@ -356,18 +356,17 @@ type alias Milliseconds =
 transitionSplines : Time.Absolute -> Movement -> Time.Absolute -> Maybe (Timeline.LookAhead Movement) -> State -> List Bezier.Spline
 transitionSplines prevEndTime target targetTime maybeLookAhead state =
     let
-        _ =
-            Debug.log "    -> SPLINES"
-                { start =
-                    { x = Time.inMilliseconds prevEndTime
-                    , y = Pixels.inPixels state.position
-                    }
-                , end =
-                    { x = Time.inMilliseconds targetTime
-                    , y = targetPos
-                    }
-                }
-
+        --_ =
+        --    Debug.log "    -> SPLINES"
+        --        { start =
+        --            { x = Time.inMilliseconds prevEndTime
+        --            , y = Pixels.inPixels state.position
+        --            }
+        --        , end =
+        --            { x = Time.inMilliseconds targetTime
+        --            , y = targetPos
+        --            }
+        --        }
         targetPos =
             case target of
                 Move.Pos _ x _ ->
@@ -397,25 +396,24 @@ transitionSplines prevEndTime target targetTime maybeLookAhead state =
 transition : Time.Absolute -> Movement -> Movement -> Time.Absolute -> Time.Absolute -> Maybe (Timeline.LookAhead Movement) -> State -> State
 transition startTime prev2 target targetTime now maybeLookAhead state =
     let
-        _ =
-            Debug.log "DOMAIN POSITION"
-                { start =
-                    { x = Time.inMilliseconds startTime
-                    , y = Pixels.inPixels state.position
-                    }
-                , end =
-                    { x = Time.inMilliseconds targetTime
-                    , y = Pixels.inPixels targetPosition
-                    }
-                }
-
+        --_ =
+        --    Debug.log "DOMAIN POSITION"
+        --        { start =
+        --            { x = Time.inMilliseconds startTime
+        --            , y = Pixels.inPixels state.position
+        --            }
+        --        , end =
+        --            { x = Time.inMilliseconds targetTime
+        --            , y = Pixels.inPixels targetPosition
+        --            }
+        --        }
         targetVelocity =
             newVelocityAtTarget target targetTime maybeLookAhead
 
         progress =
             Time.progress startTime targetTime now
-                |> Debug.log "PROGRESS"
 
+        --|> Debug.log "PROGRESS"
         targetPosition =
             case target of
                 Move.Pos _ x _ ->

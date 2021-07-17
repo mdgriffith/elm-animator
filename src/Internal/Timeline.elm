@@ -4,7 +4,7 @@ module Internal.Timeline exposing
     , update, needsUpdate
     , startTime, endTime, getEvent, extendEventDwell, hasDwell, isResting
     , addToDwell
-    , progress, dwellingTime
+    , progress, dwellingTime, sendPing
     , current, arrivedAt, arrived, previous, upcoming
     , Line(..), Timetable(..)
     , foldp, foldpAll2, captureTimeline
@@ -23,7 +23,7 @@ module Internal.Timeline exposing
 
 @docs addToDwell
 
-@docs progress, dwellingTime
+@docs progress, dwellingTime, sendPing
 
 @docs current, arrivedAt, arrived, previous, upcoming
 
@@ -373,12 +373,18 @@ getCurrentTime (Timeline timeline) =
 
 
 cutoff =
-    Time.millis 1618490321242
+    --Time.millis 1618490321242
+    Time.millis 0
 
 
 update : Time.Posix -> Timeline event -> Timeline event
 update =
     updateWith True
+
+
+type Msg
+    = Tick Time.Posix
+    | Ping
 
 
 {-| -}
@@ -1184,8 +1190,8 @@ foldpAll lookup fn (Timeline timelineDetails) =
                         (Line lineStart firstEvent remain) :: _ ->
                             Occurring timelineDetails.initial lineStart lineStart
 
-                _ =
-                    Debug.log "      -----    start foldpAll" timelineDetails.now
+                --_ =
+                --    Debug.log "      -----    start foldpAll" timelineDetails.now
             in
             visitAll
                 False
@@ -1301,10 +1307,10 @@ visitAll transitionOngoing toAnchor interp details prev events future state =
                             lerped =
                                 state
                                     |> (\w ->
-                                            let
-                                                _ =
-                                                    Debug.log "DOUBLE TRANSITION STARTING"
-                                            in
+                                            --let
+                                            --    _ =
+                                            --        Debug.log "DOUBLE TRANSITION STARTING"
+                                            --in
                                             w
                                        )
                                     |> interp.transition
@@ -1390,8 +1396,8 @@ foldpAll2 lookup toStart transitionTo (Timeline timelineDetails) =
                         (Line lineStart firstEvent remain) :: _ ->
                             Occurring timelineDetails.initial lineStart lineStart
 
-                _ =
-                    Debug.log "      -----    start foldpAll2" timelineDetails.now
+                --_ =
+                --    Debug.log "      -----    start foldpAll2" timelineDetails.now
             in
             visitAll2
                 lookup
@@ -1462,7 +1468,7 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                         new
 
                 (Line futureStart futureEvent futureRemain) :: restOfFuture ->
-                    if Debug.log "INterrupted" <| Time.thisBeforeThat futureStart (endTime top) then
+                    if Time.thisBeforeThat futureStart (endTime top) then
                         -- enroute to `top`, we are interrupted
                         -- so we transition to top (stopping at the interruption point)
                         -- then make another transition from where we were interrupted to
@@ -2742,7 +2748,91 @@ dwellingTime timeline =
 
 {-| -}
 type Animator model
-    = Animator (model -> Bool) (Time.Posix -> model -> model)
+    = Animator (model -> Running) (Time.Posix -> model -> model)
+
+
+type alias Running =
+    { running : Bool
+    , ping : Maybe Float
+    }
+
+
+sendPing : Timeline event -> Maybe Float
+sendPing ((Timeline details) as timeline) =
+    Maybe.map (encodeStamp details.now) (findNextTransitionTime timeline)
+
+
+findNextTransitionTime : Timeline event -> Maybe Time.Absolute
+findNextTransitionTime ((Timeline details) as timeline) =
+    foldp
+        identity
+        { start =
+            \_ ->
+                Nothing
+        , visit =
+            \lookup target targetTime maybeLookAhead state ->
+                state
+        , transition =
+            \prevEndTime prev target targetTime now maybeLookAhead state ->
+                case state of
+                    Nothing ->
+                        let
+                            _ =
+                                Debug.log "targetTime for:" target
+                        in
+                        Just targetTime
+
+                    _ ->
+                        state
+        }
+        timeline
+
+
+
+--
+--sendPing : Timeline event -> Maybe Float
+--sendPing (Timeline timeline) =
+--    case timeline.queued of
+--        Nothing ->
+--            Nothing
+--
+--        Just (Schedule _ _ []) ->
+--            Nothing
+--
+--        Just (Schedule delayDur (Event transitionTime _ maybeDwellDur) ((Event nextTransitionTime _ maybeNextDur) :: remain)) ->
+--            case maybeDwellDur of
+--                Nothing ->
+--                    Quantity.plus delayDur transitionTime
+--                        |> Duration.inMilliseconds
+--                        |> encodeStamp timeline.now
+--                        |> Just
+--
+--                Just dwellDur ->
+--                    Quantity.plus delayDur transitionTime
+--                        |> Quantity.plus dwellDur
+--                        |> Duration.inMilliseconds
+--                        |> encodeStamp timeline.now
+--                        |> Just
+
+
+{-| This is to account for a bug in `Time.every` where it uses the provided delay time as a key to keep track of a time.
+
+To get around this, we encode the current time as a really small part of the given time.
+
+-}
+encodeStamp : Time.Absolute -> Time.Absolute -> Float
+encodeStamp now target =
+    let
+        millis =
+            Time.inMilliseconds target - nowInMillis
+
+        nowInMillis =
+            Time.inMilliseconds now
+
+        nowTail =
+            nowInMillis / 1000000
+    in
+    millis + (1 / nowTail)
 
 
 {-| -}

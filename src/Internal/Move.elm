@@ -291,6 +291,9 @@ sequences startTime targetTime now movement state existingSequence =
                     transitionDuration =
                         Time.duration startTime targetTime
 
+                    _ =
+                        Debug.log "TRANSITION TIME" transitionDuration
+
                     newSequence =
                         Sequence 1 transitionDuration [ Step transitionDuration trans value ]
                             |> takeAfter durationToNow
@@ -491,6 +494,7 @@ takeAfter durationToNow ((Sequence n duration steps) as seq) =
             seqDurInMs =
                 Duration.inMilliseconds duration
                     |> round
+                    |> Debug.log "SEQ DURATION "
 
             newN =
                 durationToNowMs
@@ -502,13 +506,15 @@ takeAfter durationToNow ((Sequence n duration steps) as seq) =
                     |> toFloat
                     |> Duration.milliseconds
 
-            durationToNewStart =
-                durationOfUnrolledSeq
+            remainingDuration =
+                duration
+                    |> Quantity.minus durationOfUnrolledSeq
+                    |> Debug.log "Remaining duration"
         in
         { base =
             Sequence 1
-                durationOfUnrolledSeq
-                (takeStepsAfter (duration |> Quantity.minus durationOfUnrolledSeq) steps)
+                remainingDuration
+                (takeStepsAfter durationOfUnrolledSeq steps)
         , following =
             if newN - 1 <= 0 then
                 Nothing
@@ -1114,9 +1120,8 @@ css :
         }
 css delay startPos name toString seq =
     let
-        _ =
-            Debug.log "SEQUENCE" ( startPos, seq )
-
+        --_ =
+        --    Debug.log "SEQUENCE" ( startPos, seq )
         animationName =
             hash name seq
 

@@ -1343,7 +1343,7 @@ type alias Animator model =
 {-| -}
 animator : Animator model
 animator =
-    Timeline.Animator (always False) (\now model -> model)
+    Timeline.Animator (\_ -> { running = False, ping = Nothing }) (\now model -> model)
 
 
 {-| `watching` will ensure that [`AnimationFrame`](https://package.elm-lang.org/packages/elm/browser/latest/Browser-Events#onAnimationFrame) is running when the animator is transformed into a [`subscription`](#toSubscription).
@@ -1356,10 +1356,14 @@ watching :
     -> (Timeline state -> model -> model)
     -> Animator model
     -> Animator model
-watching get set (Timeline.Animator isRunning updateModel) =
+watching get set (Timeline.Animator getDetails updateModel) =
     Timeline.Animator
         -- always runs
-        (always True)
+        (\model ->
+            { running = True
+            , ping = getDetails model |> .ping
+            }
+        )
         (\now model ->
             let
                 newModel =
@@ -1400,20 +1404,43 @@ watchingWith :
 watchingWith get set eventIsRestable (Timeline.Animator isRunning updateModel) =
     Timeline.Animator
         (\model ->
-            -- if we're already running, skip
-            if isRunning model then
-                True
+            let
+                prev =
+                    isRunning model
 
-            else
-                let
-                    timeline =
-                        get model
-                in
-                if Timeline.needsUpdate timeline then
+                timeline =
+                    get model
+
+                ping =
+                    case Timeline.sendPing timeline of
+                        Nothing ->
+                            prev.ping
+
+                        Just currentPing ->
+                            case prev.ping of
+                                Nothing ->
+                                    Just currentPing
+
+                                Just prevPing ->
+                                    if prevPing < currentPing then
+                                        Just prevPing
+
+                                    else
+                                        Just currentPing
+            in
+            { running =
+                -- if we're already running, skip
+                if prev.running then
+                    prev.running
+
+                else if Timeline.needsUpdate timeline then
                     True
 
                 else
                     eventIsRestable (Timeline.current timeline)
+            , ping =
+                ping
+            }
         )
         (\now model ->
             let
@@ -1433,10 +1460,26 @@ This is where the animator will decide if a running animation needs another fram
 
 -}
 toSubscription : (Time.Posix -> msg) -> model -> Animator model -> Sub msg
-toSubscription toMsg model (Timeline.Animator isRunning _) =
-    if isRunning model then
-        Browser.Events.onAnimationFrame
-            toMsg
+toSubscription toMsg model (Timeline.Animator getContext _) =
+    let
+        context =
+            getContext model
+    in
+    if context.running || not (context.ping == Nothing) then
+        Sub.batch
+            [ if context.running then
+                Browser.Events.onAnimationFrame
+                    toMsg
+
+              else
+                Sub.none
+            , case context.ping of
+                Just delayDuration ->
+                    Time.every delayDuration toMsg
+
+                Nothing ->
+                    Sub.none
+            ]
 
     else
         Sub.none

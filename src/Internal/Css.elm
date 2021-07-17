@@ -165,14 +165,20 @@ cssFromProps timeline lookup =
                 timeline
                 |> .props
                 |> List.sortBy propOrder
-                |> Debug.log "scanned"
 
+        --|> Debug.log "scanned"
         renderedProps =
-            Timeline.foldpAll2 lookup (startProps present) (toPropCurves2 present) timeline
+            Timeline.foldpAll2 lookup
+                (startProps present)
+                (toPropCurves2 present)
+                timeline
                 |> Debug.log "RENDERED PROPS"
     in
     renderCss (Timeline.getCurrentTime timeline) renderers renderedProps
-        |> Debug.log "CSS"
+
+
+
+--|> Debug.log "CSS"
 
 
 {-| RenderdProp's are required to be ordered!
@@ -298,7 +304,7 @@ renderColorSectionToCss now name section =
                 ++ delay
                 ++ " "
                 ++ n
-                ++ " normal forwards running "
+                ++ " normal both running "
                 ++ animationName
 
         keyframes =
@@ -406,10 +412,10 @@ renderCompoundSections now sections anim =
             in
             if onlyOnce && Time.thisBeforeThat end now then
                 -- Debug.log "ONLY ONCE"
-                let
-                    _ =
-                        Debug.log "  -> passed one section" tail
-                in
+                --let
+                --    _ =
+                --        Debug.log "  -> passed one section" tail
+                --in
                 renderCompoundSections now
                     tail
                     anim
@@ -422,22 +428,21 @@ renderCompoundSections now sections anim =
                                 ( old_, active, maybeNext ) =
                                     splitCompoundSection now targetSection
                             in
-                            Debug.log "SPLITTING SECTIONS"
-                                ( active
-                                , case maybeNext of
-                                    Nothing ->
-                                        tail
+                            --Debug.log "SPLITTING SECTIONS"
+                            ( active
+                            , case maybeNext of
+                                Nothing ->
+                                    tail
 
-                                    Just next ->
-                                        next :: tail
-                                )
+                                Just next ->
+                                    next :: tail
+                            )
 
                         else
                             ( targetSection, tail )
 
-                    _ =
-                        List.map (Debug.log "FRAMES") section.frames
-
+                    --_ =
+                    --    List.map (Debug.log "FRAMES") section.frames
                     new =
                         if section.conflicting then
                             renderCompoundKeyframesExact 12
@@ -478,9 +483,8 @@ renderCompoundSections now sections anim =
                             Timeline.Repeat count _ ->
                                 String.fromInt count
 
-                    _ =
-                        Debug.log "DELAY" delay
-
+                    --_ =
+                    --    Debug.log "DELAY" delay
                     delay =
                         Time.duration now section.start
                             |> Duration.inMilliseconds
@@ -499,7 +503,7 @@ renderCompoundSections now sections anim =
                             ++ delay
                             ++ " "
                             ++ n
-                            ++ " normal forwards running "
+                            ++ " normal both running "
                             ++ new.hash
                 in
                 renderCompoundSections now
@@ -845,8 +849,7 @@ scalarHelper now renderedProps anim =
             scalarHelper now
                 remain
                 (propToCssHelper now
-                    details.startPos
-                    --(Debug.todo "This is not the right starting position :thinking:")
+                    (Pixels.inPixels details.state.position)
                     details
                     (List.reverse details.sections)
                     emptyAnim
@@ -901,7 +904,7 @@ propToCssHelper now startPos details sections anim =
                 (combine
                     -- NOTE, this order is important!
                     -- it affects the order of the animation statements in CSS
-                    -- If the y are out of order they can cancel each other out in weird ways.
+                    -- If they are out of order they can cancel each other out in weird ways.
                     (Move.css sequence.delay
                         startPos
                         details.name
@@ -1004,7 +1007,7 @@ sectionToCss now id name format (Section section) =
                 ++ delay
                 ++ " "
                 ++ n
-                ++ " normal forwards running "
+                ++ " normal both running "
                 ++ animationName
 
         keyframes =
@@ -1284,18 +1287,12 @@ toPropCurves2 only =
 
         -}
         let
-            _ =
-                Debug.log "     TRANSITION"
-                    { prev = prev
-                    , target = target
-                    , finished = finished
-                    }
-
-            -- _ =
-            --     Debug.log "     -> "
-            --         { prev = lookup (Timeline.getEvent prev)
-            --         , target = lookup (Timeline.getEvent target)
-            --         }
+            --_ =
+            --    Debug.log "     TRANSITION"
+            --        { prev = prev
+            --        , target = target
+            --        , finished = finished
+            --        }
             targetTime =
                 Timeline.startTime target
 
@@ -2361,7 +2358,7 @@ finalize name renderValue now stack =
                         -- , but it is overridden by the one in keyframes
                         ++ "linear "
                         ++ delay
-                        ++ " 1 normal forwards running "
+                        ++ " 1 normal both running "
                         ++ animationName
 
                 keyframes =
