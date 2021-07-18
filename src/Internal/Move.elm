@@ -1102,7 +1102,8 @@ lastPosOrHelper x steps =
 
 
 css :
-    Duration.Duration
+    Time.Absolute
+    -> Duration.Duration
     -> Float
     -> String
     -> (Float -> String)
@@ -1113,12 +1114,12 @@ css :
         , keyframes : String
         , props : List a
         }
-css delay startPos name toString seq =
+css now delay startPos name toString seq =
     let
-        --_ =
-        --    Debug.log "SEQUENCE" ( startPos, seq )
         animationName =
-            hash name seq
+            -- we need to encode the current time in the animations name so the browser doesn't cache anything
+            -- IM LOOKIN AT YOU, CHROME
+            hash (name ++ String.fromInt (round <| Time.inMilliseconds now)) seq
 
         n =
             case seq of

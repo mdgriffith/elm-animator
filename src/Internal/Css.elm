@@ -906,7 +906,8 @@ propToCssHelper now startPos details sections anim =
                     -- NOTE, this order is important!
                     -- it affects the order of the animation statements in CSS
                     -- If they are out of order they can cancel each other out in weird ways.
-                    (Move.css sequence.delay
+                    (Move.css now
+                        sequence.delay
                         startPos
                         details.name
                         (Internal.Css.Props.format details.format)
