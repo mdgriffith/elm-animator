@@ -185,7 +185,7 @@ toStr id =
 
         3 ->
             \f ->
-                "rotation(" ++ String.fromFloat f ++ "rad)"
+                "rotate(" ++ String.fromFloat f ++ "rad)"
 
         4 ->
             \f ->
