@@ -13,6 +13,7 @@ import Internal.Time as Time
 import Internal.Timeline as Timeline
 import Internal.Transition as Transition
 import Pixels
+import Quantity
 import Set exposing (Set)
 
 
@@ -55,7 +56,6 @@ type Prop
       -- they are only really necessary for `transforms`
       -- props defined by the user use the prop name for identity
       Prop Id String (Move.Move Float) Internal.Css.Props.Format
-      -- | ColorProp ColorPropDetails
     | ColorProp String (Move.Move Float) Color.Color
 
 
@@ -148,7 +148,6 @@ cssFromProps timeline lookup =
                 )
                 (\get prev target now future cursor ->
                     let
-                        -- _ = Debug.log get (Timeline.getEvent prev)
                         new =
                             case cursor.props of
                                 [] ->
@@ -166,20 +165,13 @@ cssFromProps timeline lookup =
                 |> .props
                 |> List.sortBy propOrder
 
-        --|> Debug.log "scanned"
         renderedProps =
             Timeline.foldpAll2 lookup
                 (startProps present)
                 (toPropCurves2 present)
                 timeline
-
-        --|> Debug.log "RENDERED PROPS"
     in
     renderCss (Timeline.getCurrentTime timeline) renderers renderedProps
-
-
-
---|> Debug.log "CSS"
 
 
 {-| RenderdProp's are required to be ordered!
@@ -402,8 +394,6 @@ renderCompoundSections now sections anim =
 
         targetSection :: tail ->
             let
-                -- _ =
-                --     Debug.log "target" targetSection
                 end =
                     targetSection.start
                         |> Time.advanceBy (Timeline.periodDuration targetSection.period)
@@ -412,11 +402,6 @@ renderCompoundSections now sections anim =
                     Timeline.isOnce targetSection.period
             in
             if onlyOnce && Time.thisBeforeThat end now then
-                -- Debug.log "ONLY ONCE"
-                --let
-                --    _ =
-                --        Debug.log "  -> passed one section" tail
-                --in
                 renderCompoundSections now
                     tail
                     anim
@@ -429,7 +414,6 @@ renderCompoundSections now sections anim =
                                 ( old_, active, maybeNext ) =
                                     splitCompoundSection now targetSection
                             in
-                            --Debug.log "SPLITTING SECTIONS"
                             ( active
                             , case maybeNext of
                                 Nothing ->
@@ -442,8 +426,6 @@ renderCompoundSections now sections anim =
                         else
                             ( targetSection, tail )
 
-                    --_ =
-                    --    List.map (Debug.log "FRAMES") section.frames
                     new =
                         if section.conflicting then
                             renderCompoundKeyframesExact 12
@@ -484,8 +466,6 @@ renderCompoundSections now sections anim =
                             Timeline.Repeat count _ ->
                                 String.fromInt count
 
-                    --_ =
-                    --    Debug.log "DELAY" delay
                     delay =
                         Time.duration now section.start
                             |> Duration.inMilliseconds
@@ -663,13 +643,6 @@ renderCompoundKeyframes start period frames hash rendered =
 
         keyframe :: remain ->
             let
-                -- _ =
-                --     Debug.log "COMPOUND FRAME"
-                --         { progress = percentage
-                --         , duration = Timeline.periodDuration period
-                --         , start = start
-                --         , end = start |> Time.advanceBy (Timeline.periodDuration period)
-                --         }
                 percentage =
                     round
                         (100
@@ -761,10 +734,10 @@ renderTransformProp states rendered =
 
         ( id, state ) :: remain ->
             renderTransformProp remain
-                (rendered
+                (Internal.Css.Props.toStr id
+                    (Pixels.inPixels state.position)
                     ++ " "
-                    ++ Internal.Css.Props.toStr id
-                        (Pixels.inPixels state.position)
+                    ++ rendered
                 )
 
 
@@ -1023,20 +996,6 @@ sectionToCss now id name format (Section section) =
                     splines
                     ""
                 ++ "\n}"
-
-        _ =
-            if name == "border-width" then
-                -- Debug.log "BORDER"
-                { hash = animationName
-                , animation = animation
-                , keyframes = keyframes
-                }
-
-            else
-                { hash = animationName
-                , animation = animation
-                , keyframes = keyframes
-                }
     in
     { hash = animationName
     , animation = animation
@@ -1289,12 +1248,6 @@ toPropCurves2 only =
 
         -}
         let
-            --_ =
-            --    Debug.log "     TRANSITION"
-            --        { prev = prev
-            --        , target = target
-            --        , finished = finished
-            --        }
             targetTime =
                 Timeline.startTime target
 
@@ -1360,9 +1313,6 @@ toPropCurves2 only =
                             propLookup occur =
                                 stateOrDefault rendered.id rendered.name (lookup (Timeline.getEvent occur))
 
-                            lookupState s =
-                                stateOrDefault rendered.id rendered.name (lookup s)
-
                             targetProp =
                                 propLookup target
 
@@ -1424,7 +1374,6 @@ toPropCurves2 only =
                                         targetTime
                                         now
                                         targetProp
-                                        rendered.state
                                         rendered.sections
                             , state =
                                 newState
@@ -1627,6 +1576,50 @@ type alias Compound =
     }
 
 
+{-| -}
+type alias PropSequence =
+    { id : Id
+    , sections :
+        List
+            { delay : Duration.Duration
+            , sequence : Move.Sequence Float
+            }
+    , state : Interpolate.State
+    }
+
+
+{-| A compound section represents all the
+props transitioning from one state to another.
+
+In CSS terms, each compound section is it's own
+@keyframe definition
+
+-}
+type alias CompoundSection =
+    { start : Time.Absolute
+    , period : Timeline.Period
+    , conflicting : Bool
+    , frames : List Keyframe
+    }
+
+
+{-| A Keyframe are all the properties necesasry to render a single keyframe.
+-}
+type alias Keyframe =
+    { start : Time.Absolute
+    , end : Time.Absolute
+    , timing : Bezier.Spline
+
+    -- {1, spline}, {2, spline}
+    -- If the splines are not conflicting
+    , props :
+        List
+            { id : Id
+            , spline : Bezier.Spline
+            }
+    }
+
+
 splitColorSection : Time.Absolute -> ColorSection -> ( ColorSection, ColorSection )
 splitColorSection at colorSection =
     let
@@ -1802,21 +1795,6 @@ splitSection at (Section section) =
     )
 
 
-{-| A compound section represents all the
-props transitioning from one state to another.
-
-In CSS terms, each compound section is it's own
-@keyframe definition
-
--}
-type alias CompoundSection =
-    { start : Time.Absolute
-    , period : Timeline.Period
-    , conflicting : Bool
-    , frames : List Keyframe
-    }
-
-
 {-| Splitting a section is useful when rendering because maybe `now` is in the middle of a section.
 
 In the standard case, splitting a compound would return two sections.
@@ -1839,18 +1817,24 @@ splitCompoundSection at cpd =
             splitKeyframeList at
                 cpd.frames
 
+        beforeDuration =
+            Time.duration cpd.start at
+
         before =
             { start = cpd.start
-            , period = once (Time.duration cpd.start at)
+            , period = once beforeDuration
             , conflicting = cpd.conflicting
             , frames = split.before
             }
 
+        duration =
+            Timeline.periodDuration cpd.period
+
         after =
-            { start = cpd.start
-            , period = once (Time.duration cpd.start at)
+            { start = at
+            , period = once (duration |> Quantity.minus beforeDuration)
             , conflicting = cpd.conflicting
-            , frames = split.before
+            , frames = split.after
             }
 
         remaining =
@@ -1928,7 +1912,7 @@ splitKeyframe now keyframe =
             List.map
                 (\prop ->
                     { id = prop.id
-                    , spline = Tuple.first (Bezier.splitAt nowMS prop.spline)
+                    , spline = Tuple.first (Bezier.splitAtX nowMS prop.spline)
                     }
                 )
                 keyframe.props
@@ -1937,7 +1921,8 @@ splitKeyframe now keyframe =
             List.map
                 (\prop ->
                     { id = prop.id
-                    , spline = Tuple.second (Bezier.splitAt nowMS prop.spline)
+                    , spline =
+                        Tuple.second (Bezier.splitAtX nowMS prop.spline)
                     }
                 )
                 keyframe.props
@@ -1973,23 +1958,6 @@ type alias CompoundFrame =
 type CapturedMovement
     = BySpline (List Bezier.Spline)
     | Stationary Float
-
-
-{-| A Keyframe are all the properties necesasry to render a single keyframe.
--}
-type alias Keyframe =
-    { start : Time.Absolute
-    , end : Time.Absolute
-    , timing : Bezier.Spline
-
-    -- {1, spline}, {2, spline}
-    -- If the splines are not conflicting
-    , props :
-        List
-            { id : Id
-            , spline : Bezier.Spline
-            }
-    }
 
 
 {-| -}
@@ -2049,7 +2017,11 @@ lerpCurvesCompoundHelper2 remainingStates lookup prev target now future conflict
                 domain =
                     { start =
                         { x = startTime
-                        , y = state.position
+                        , y =
+                            --state.position
+                            case prevState of
+                                Move.Pos _ x _ ->
+                                    Pixels.pixels x
                         }
                     , end =
                         { x = targetTime
@@ -2058,7 +2030,8 @@ lerpCurvesCompoundHelper2 remainingStates lookup prev target now future conflict
                     }
 
                 targetVelocity =
-                    Interpolate.velocityAtTarget lookupState target future
+                    --Interpolate.velocityAtTarget lookupState target future
+                    Pixels.pixelsPerSecond 0
 
                 newState =
                     Transition.atX
