@@ -112,7 +112,7 @@ update msg model =
             ( { model
                 | checked =
                     Animator.interrupt
-                        [ Animator.event duration bool
+                        [ Animator.transitionTo duration bool
                         ]
                         model.checked
               }
@@ -123,7 +123,7 @@ update msg model =
             ( { model
                 | page =
                     Animator.interrupt
-                        [ Animator.event (Animator.millis 500) (next (Animator.current model.page))
+                        [ Animator.transitionTo (Animator.millis 500) (next (Animator.current model.page))
                         ]
                         model.page
               }
@@ -134,7 +134,7 @@ update msg model =
             ( { model
                 | spin =
                     Animator.interrupt
-                        [ Animator.event (Animator.millis 200) bool
+                        [ Animator.transitionTo (Animator.millis 200) bool
                         ]
                         model.spin
               }
@@ -145,7 +145,7 @@ update msg model =
             ( { model
                 | transitions =
                     Animator.interrupt
-                        [ Animator.event (Animator.millis 200) bool
+                        [ Animator.transitionTo (Animator.millis 200) bool
                         ]
                         model.transitions
               }

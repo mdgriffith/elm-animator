@@ -28,7 +28,7 @@ doubleEvent =
     singleEvent
         |> Animator.queue
             [ Animator.wait (Animator.millis 500)
-            , Animator.event (Animator.millis 250) Griffyndor
+            , Animator.transitionTo (Animator.millis 250) Griffyndor
             ]
         |> Internal.Timeline.updateWith False (Time.millisToPosix 0)
 
@@ -36,9 +36,9 @@ doubleEvent =
 fourContinuous =
     singleEvent
         |> Animator.queue
-            [ Animator.event (Animator.seconds 1) Griffyndor
-            , Animator.event (Animator.seconds 1) Slytherin
-            , Animator.event (Animator.seconds 1) Ravenclaw
+            [ Animator.transitionTo (Animator.seconds 1) Griffyndor
+            , Animator.transitionTo (Animator.seconds 1) Slytherin
+            , Animator.transitionTo (Animator.seconds 1) Ravenclaw
             ]
         |> Internal.Timeline.update (Time.millisToPosix 0)
 
@@ -47,11 +47,11 @@ fourWithPause =
     singleEvent
         |> Animator.queue
             [ Animator.wait (Animator.seconds 1)
-            , Animator.event (Animator.seconds 1) Griffyndor
+            , Animator.transitionTo (Animator.seconds 1) Griffyndor
             , Animator.wait (Animator.seconds 1)
-            , Animator.event (Animator.seconds 1) Slytherin
+            , Animator.transitionTo (Animator.seconds 1) Slytherin
             , Animator.wait (Animator.seconds 1)
-            , Animator.event (Animator.seconds 1) Ravenclaw
+            , Animator.transitionTo (Animator.seconds 1) Ravenclaw
             , Animator.wait (Animator.seconds 1)
             ]
         |> Internal.Timeline.updateWith False (Time.millisToPosix 0)
@@ -88,11 +88,11 @@ fourWithPauseInterrupted =
     fourWithPause
         |> Animator.interrupt
             [ Animator.wait (Animator.seconds 1)
-            , Animator.event (Animator.seconds 1) Griffyndor
+            , Animator.transitionTo (Animator.seconds 1) Griffyndor
             , Animator.wait (Animator.seconds 1)
-            , Animator.event (Animator.seconds 1) Slytherin
+            , Animator.transitionTo (Animator.seconds 1) Slytherin
             , Animator.wait (Animator.seconds 1)
-            , Animator.event (Animator.seconds 1) Ravenclaw
+            , Animator.transitionTo (Animator.seconds 1) Ravenclaw
             , Animator.wait (Animator.seconds 1)
             ]
         |> Internal.Timeline.updateWith False (Time.millisToPosix 3000)
@@ -102,11 +102,11 @@ fourWithPauseQueued =
     fourWithPause
         |> Animator.queue
             [ Animator.wait (Animator.seconds 1)
-            , Animator.event (Animator.seconds 1) Griffyndor
+            , Animator.transitionTo (Animator.seconds 1) Griffyndor
             , Animator.wait (Animator.seconds 1)
-            , Animator.event (Animator.seconds 1) Slytherin
+            , Animator.transitionTo (Animator.seconds 1) Slytherin
             , Animator.wait (Animator.seconds 1)
-            , Animator.event (Animator.seconds 1) Ravenclaw
+            , Animator.transitionTo (Animator.seconds 1) Ravenclaw
             , Animator.wait (Animator.seconds 1)
             ]
         |> Internal.Timeline.updateWith False (Time.millisToPosix 3000)
@@ -694,7 +694,7 @@ update msg model =
             let
                 addToQueue _ ( q, house ) =
                     ( Animator.wait (Animator.seconds 1)
-                        :: Animator.event (Animator.seconds 1) (next house)
+                        :: Animator.transitionTo (Animator.seconds 1) (next house)
                         :: q
                     , next house
                     )
@@ -713,7 +713,7 @@ update msg model =
             ( { model
                 | timeline =
                     Animator.queue
-                        [ Animator.event (Animator.seconds 1) Slytherin
+                        [ Animator.transitionTo (Animator.seconds 1) Slytherin
                         , Animator.wait (Animator.seconds 3)
                         ]
                         model.timeline
@@ -730,7 +730,7 @@ update msg model =
             in
             ( { model
                 | timeline =
-                    Animator.queue [ Animator.event (Animator.seconds 1) newHouse ] model.timeline
+                    Animator.queue [ Animator.transitionTo (Animator.seconds 1) newHouse ] model.timeline
                 , house = newHouse
               }
             , Cmd.none

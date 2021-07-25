@@ -40,11 +40,11 @@ suite =
 --             Animator.init Hufflepuff
 --                 |> Animator.queue
 --                     [ Animator.wait (Animator.seconds 1)
---                     , Animator.event (Animator.seconds 1) Griffyndor
+--                     , Animator.transitionTo (Animator.seconds 1) Griffyndor
 --                     , Animator.wait (Animator.seconds 1)
---                     , Animator.event (Animator.seconds 1) Slytherin
+--                     , Animator.transitionTo (Animator.seconds 1) Slytherin
 --                     , Animator.wait (Animator.seconds 1)
---                     , Animator.event (Animator.seconds 1) Ravenclaw
+--                     , Animator.transitionTo (Animator.seconds 1) Ravenclaw
 --                     , Animator.wait (Animator.seconds 1)
 --                     ]
 --                 |> Timeline.update (Time.millisToPosix 0)
@@ -286,11 +286,11 @@ floatComparison =
 --             Animator.init Hufflepuff
 --                 |> Animator.queue
 --                     [ Animator.wait (Animator.seconds 1)
---                     , Animator.event (Animator.seconds 1) Griffyndor
+--                     , Animator.transitionTo (Animator.seconds 1) Griffyndor
 --                     , Animator.wait (Animator.seconds 1)
---                     , Animator.event (Animator.seconds 1) Slytherin
+--                     , Animator.transitionTo (Animator.seconds 1) Slytherin
 --                     , Animator.wait (Animator.seconds 1)
---                     , Animator.event (Animator.seconds 1) Ravenclaw
+--                     , Animator.transitionTo (Animator.seconds 1) Ravenclaw
 --                     , Animator.wait (Animator.seconds 1)
 --                     ]
 --                 |> Timeline.update (Time.millisToPosix 0)
@@ -320,11 +320,11 @@ floatComparison =
 --             Animator.init Hufflepuff
 --                 |> Animator.queue
 --                     [ Animator.wait (Animator.seconds 1)
---                     , Animator.event (Animator.seconds 1) Griffyndor
+--                     , Animator.transitionTo (Animator.seconds 1) Griffyndor
 --                     , Animator.wait (Animator.seconds 1)
---                     , Animator.event (Animator.seconds 1) Slytherin
+--                     , Animator.transitionTo (Animator.seconds 1) Slytherin
 --                     , Animator.wait (Animator.seconds 1)
---                     , Animator.event (Animator.seconds 1) Ravenclaw
+--                     , Animator.transitionTo (Animator.seconds 1) Ravenclaw
 --                     , Animator.wait (Animator.seconds 1)
 --                     ]
 --                 |> Timeline.update (Time.millisToPosix 0)

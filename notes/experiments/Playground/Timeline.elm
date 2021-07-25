@@ -56,15 +56,15 @@ main =
                 ( { -- timeline =
                     -- Animator.init (State 0)
                     --     |> Animator.queue
-                    --         [ Animator.event (Animator.millis 100) (State 1)
-                    --         , Animator.event (Animator.millis 100) (State 2)
-                    --         , Animator.event (Animator.millis 100) (State 3)
+                    --         [ Animator.transitionTo (Animator.millis 100) (State 1)
+                    --         , Animator.transitionTo (Animator.millis 100) (State 2)
+                    --         , Animator.transitionTo (Animator.millis 100) (State 3)
                     --         ]
                     --     |> Timeline.update (Time.millisToPosix 0)
                     --     |> Animator.interrupt
-                    --         [ Animator.event (Animator.millis 100) (State 4)
-                    --         , Animator.event (Animator.millis 100) (State 5)
-                    --         , Animator.event (Animator.millis 100) (State 6)
+                    --         [ Animator.transitionTo (Animator.millis 100) (State 4)
+                    --         , Animator.transitionTo (Animator.millis 100) (State 5)
+                    --         , Animator.transitionTo (Animator.millis 100) (State 6)
                     --         ]
                     --     |> Timeline.update (Time.millisToPosix 150)
                     --   ,
@@ -115,7 +115,7 @@ createLevelsHelper index details created =
                 List.range base (base + details.events - 1)
                     |> List.map
                         (\i ->
-                            Animator.event (Animator.millis 100) (State i)
+                            Animator.transitionTo (Animator.millis 100) (State i)
                         )
              }
                 :: created
