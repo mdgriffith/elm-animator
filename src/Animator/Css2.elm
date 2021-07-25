@@ -101,6 +101,17 @@ loop : Duration -> Oscillation -> Property -> Proeprty
         |> loop (ms 300)
             (wave 0 1)
 
+    Anim.div
+        [ loop (ms 300)
+            [ group
+                [ opacity 0
+                ]
+            , group
+                [ opacity 1
+                ]
+            ]
+        ]
+
 -}
 opacity : Float -> Property
 opacity o =
@@ -204,8 +215,15 @@ withCurve spline p =
     p
 
 
-type Step
-    = Step Animator.Duration (List Attribute)
+type alias Step =
+    Move.Step (List Attribute)
+
+
+
+--
+--step : Animator.Duration -> List Attribute -> Step
+--step dur attrs =
+--    Move.Step dur
 
 
 {-| -}
@@ -367,7 +385,7 @@ watching get set (Timeline.Animator isRunning updateModel) =
                                     Just currentPing
 
                                 Just prevPing ->
-                                    if prevPing < currentPing then
+                                    if prevPing.delay < currentPing.delay then
                                         Just prevPing
 
                                     else
@@ -378,7 +396,8 @@ watching get set (Timeline.Animator isRunning updateModel) =
                         True
 
                     else
-                        Timeline.hasChanged timeline || Timeline.justInitialized timeline
+                        Timeline.hasChanged timeline
+                            || Timeline.justInitialized timeline
             in
             { running = running
             , ping = ping

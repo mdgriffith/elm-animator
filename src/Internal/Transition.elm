@@ -595,14 +595,6 @@ hash transition =
 {-| -}
 keyframes : Domain -> Float -> Float -> Float -> Float -> (Float -> String) -> Transition -> String
 keyframes domain introVelocity exitVelocity startPercent endPercent toString transition =
-    --let
-    --    _ =
-    --        Debug.log "transition-keyframes"
-    --            { domain = domain
-    --            , startPercent = startPercent
-    --            , endPercent = endPercent
-    --            }
-    --in
     case transition of
         Transition spline ->
             let
