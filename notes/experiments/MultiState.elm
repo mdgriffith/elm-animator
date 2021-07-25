@@ -86,7 +86,7 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Tick newTime ->
-            ( Animator.update newTime animator model
+            ( { model | ball = Animator.updateTimeline newTime model.ball }
             , Cmd.none
             )
 
@@ -124,13 +124,13 @@ update msg model =
                                     |> Debug.log "QUEUING RANGE"
                                     |> List.map
                                         (\i ->
-                                            Animator.transitionTo Animator.verySlowly i
+                                            Animator.transitionTo (Animator.millis 2000) i
                                         )
                                 )
 
                     else
                         model.ball
-                            |> Animator.go Animator.verySlowly target
+                            |> Animator.go (Animator.millis 3000) target
               }
             , Cmd.none
             )
@@ -171,6 +171,9 @@ view model =
                 , viewBallTarget 1
                 , viewBallTarget 2
                 , viewBallTarget 3
+                , viewBallTarget 4
+                , viewBallTarget 5
+                , viewBallTarget 6
                 ]
             , div
                 [ Events.onClick ToggleQueue ]
@@ -197,7 +200,10 @@ viewBallTarget index =
 viewBall timeline =
     Animator.Css2.div timeline
         (\index ->
-            [ Animator.Css2.xAsSingleProp (toFloat index * 200)
+            [ --Animator.Css2.x (toFloat index * 200)
+              --, Animator.Css2.rotation (toFloat index * pi)
+              --, Animator.Css2.px "border-width" (toFloat index * 3)
+              Animator.Css2.xAsSingleProp (toFloat index * 200)
             ]
         )
         [ Attr.class "ball"
@@ -269,11 +275,14 @@ a:visited {
 
 
 .ball {
+    box-sizing: border-box;
     position:absolute;
     width: 100px;
     height: 100px;
-    border-radius: 50%;
+    border-radius: 20%;
     background-color:red;
+    border-color: black;
+    border-style: solid;
 }
 
 .ball-target {
