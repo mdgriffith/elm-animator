@@ -72,18 +72,6 @@ type Move value
     = Pos Transition.Transition value (List (Sequence value))
 
 
-{-| -}
-to : value -> Move value
-to v =
-    Pos Transition.standard v []
-
-
-{-| -}
-toWith : Transition.Transition -> value -> Move value
-toWith t v =
-    Pos t v []
-
-
 {-| A sequence is something that can be easily
 
 1.  rendered into a CSS keyframes
@@ -102,12 +90,25 @@ type Sequence value
     = Sequence Int Duration.Duration (List (Step value))
 
 
-getSequenceDuration (Sequence i dur steps) =
-    dur
-
-
 type Step value
     = Step Duration.Duration Transition.Transition value
+
+
+{-| -}
+to : value -> Move value
+to v =
+    Pos Transition.standard v []
+
+
+{-| -}
+toWith : Transition.Transition -> value -> Move value
+toWith t v =
+    Pos t v []
+
+
+getSequenceDuration : Sequence value -> Duration.Duration
+getSequenceDuration (Sequence i dur steps) =
+    dur
 
 
 type alias Pixels =
@@ -199,8 +200,9 @@ sequences :
     -> Time.Absolute
     -- now
     -> Time.Absolute
+    -- stop time
+    -> Time.Absolute
     -> Move Float
-    -> State
     ->
         List
             { delay : Duration.Duration
@@ -211,14 +213,18 @@ sequences :
             { delay : Duration.Duration
             , sequence : Sequence Float
             }
-sequences startTime targetTime now movement state existingSequence =
+sequences startTime targetTime now stopTime movement existingSequence =
     let
         durationToNow =
             Time.duration startTime now
     in
-    if Time.thisAfterOrEqualThat startTime now then
+    if Time.equal now stopTime then
+        -- We've probably been interrupted
+        []
+
+    else if Time.thisAfterOrEqualThat startTime now then
         -- We've definitely started, so we want to report the full sequence
-        -- mot common case will be startTime == now
+        -- most common case will be startTime == now
         case movement of
             Pos trans value [] ->
                 let
@@ -274,7 +280,7 @@ sequences startTime targetTime now movement state existingSequence =
                     :: addDelayToSequence (Time.expand durationToNow transitionDuration) dwell []
                     ++ existingSequence
 
-    else if after startTime targetTime now movement then
+    else if after startTime stopTime now movement then
         -- we've completely passed this state, no splines are returned
         []
 
@@ -544,15 +550,21 @@ takeStepsAfter durationToNow steps =
                 takeStepsAfter (durationToNow |> Quantity.minus duration) remain
 
 
-after startTime targetTime now movement =
+after : Time.Absolute -> Time.Absolute -> Time.Absolute -> Move value -> Bool
+after startTime stopTime now movement =
     case movement of
         Pos _ _ [] ->
-            Time.thisAfterThat now targetTime
+            Time.thisAfterThat now stopTime
 
         Pos _ _ (seq :: remaining) ->
             afterSequenceList (Time.duration startTime now) seq remaining
 
 
+afterSequenceList :
+    Quantity.Quantity Float Duration.Seconds
+    -> Sequence value
+    -> List (Sequence value)
+    -> Bool
 afterSequenceList durationTillNow seq remaining =
     if afterSequence durationTillNow seq then
         case remaining of

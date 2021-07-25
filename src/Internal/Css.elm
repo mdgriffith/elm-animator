@@ -146,7 +146,7 @@ cssFromProps timeline lookup =
                 (\props ->
                     add props [] Set.empty Set.empty
                 )
-                (\get prev target now future cursor ->
+                (\get prev target now startTime endTime future cursor ->
                     let
                         new =
                             case cursor.props of
@@ -1239,7 +1239,7 @@ startPropsHelper only props maybeTransform rendered =
 {-| -}
 toPropCurves2 : List Prop -> Timeline.Transition state (List Prop) (List RenderedProp)
 toPropCurves2 only =
-    \lookup prev target now future cursor ->
+    \lookup prev target now startTime endTime future cursor ->
         {-
            1. always track `state`
            2. only start to record sections if they're not done
@@ -1248,12 +1248,18 @@ toPropCurves2 only =
 
         -}
         let
+            _ =
+                Debug.log "   TO PROPS"
+                    { prev = prev
+                    , now = now
+                    , target = target
+                    }
+
             targetTime =
                 Timeline.startTime target
 
-            startTime =
-                Timeline.endTime prev
-
+            --startTime =
+            --    Timeline.endTime prev
             finished =
                 -- we only want to ignore this event if it's both finished
                 -- and not immediately preceding an event that is still upcoming
@@ -1373,6 +1379,7 @@ toPropCurves2 only =
                                         startTime
                                         targetTime
                                         now
+                                        endTime
                                         targetProp
                                         rendered.sections
                             , state =
@@ -1573,18 +1580,6 @@ type alias Compound =
 
     --         V-- across props
     , states : List ( Id, Interpolate.State )
-    }
-
-
-{-| -}
-type alias PropSequence =
-    { id : Id
-    , sections :
-        List
-            { delay : Duration.Duration
-            , sequence : Move.Sequence Float
-            }
-    , state : Interpolate.State
     }
 
 

@@ -189,6 +189,14 @@ type alias Transition state anchor motion =
     -> Occurring state
     -- now
     -> Time.Absolute
+    -- start time:
+    -- Either the end time of the previous transition
+    -- or when the interruption happened
+    -> Time.Absolute
+    -- end time:
+    -- This is either the endtime of `target event`
+    -- or the interruption time
+    -> Time.Absolute
     -- the future, but we can only look 1 deep
     -- this should be a maybe, but dont want to allocate it.
     -> List (Occurring state)
@@ -378,13 +386,8 @@ cutoff =
 
 
 update : Time.Posix -> Timeline event -> Timeline event
-update =
-    updateWith True
-
-
-type Msg
-    = Tick Time.Posix
-    | Ping
+update time tl =
+    updateWith True time tl
 
 
 {-| -}
@@ -437,10 +440,14 @@ clean runGC details =
         running =
             case details.events of
                 Timetable lines ->
-                    linesAreActive details.now lines
+                    --linesAreActive details.now lines
+                    False
     in
     { details
-        | running = running
+        | running =
+            --running
+            -- only apples to async
+            False
         , events =
             if runGC then
                 Timetable (garbageCollectOldEvents details.now [] events)
@@ -1189,9 +1196,6 @@ foldpAll lookup fn (Timeline timelineDetails) =
 
                         (Line lineStart firstEvent remain) :: _ ->
                             Occurring timelineDetails.initial lineStart lineStart
-
-                --_ =
-                --    Debug.log "      -----    start foldpAll" timelineDetails.now
             in
             visitAll
                 False
@@ -1396,8 +1400,8 @@ foldpAll2 lookup toStart transitionTo (Timeline timelineDetails) =
                         (Line lineStart firstEvent remain) :: _ ->
                             Occurring timelineDetails.initial lineStart lineStart
 
-                --_ =
-                --    Debug.log "      -----    start foldpAll2" timelineDetails.now
+                _ =
+                    Debug.log "      -----    start foldpAll2" timelineDetails.now
             in
             visitAll2
                 lookup
@@ -1420,14 +1424,21 @@ visitAll2 :
     -> motion
     -> motion
 visitAll2 toAnchor transitionTo details prev queue future state =
+    -- queue: the upcoming events on this Line
+    --
     case queue of
         [] ->
             case future of
                 [] ->
                     state
 
-                (Line futureStart futureEvent futureRemain) :: restOfFuture ->
+                (Line futureStart futureEvent futureRemain) :: [] ->
+                    -- the last line.
+                    -- transition to futureEvent and then continue on through the remaining events in futureRemain
                     let
+                        _ =
+                            Debug.log "    LAST Line" futureEvent
+
                         new =
                             state
                                 |> transitionTo
@@ -1435,6 +1446,8 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                                     prev
                                     futureEvent
                                     details.now
+                                    (endTime prev)
+                                    (endTime futureEvent)
                                     futureRemain
                     in
                     visitAll2
@@ -1443,18 +1456,84 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                         details
                         futureEvent
                         futureRemain
-                        restOfFuture
+                        []
                         new
+
+                (Line futureStart futureEvent futureRemain) :: (((Line nextStart nextEvent nextRemain) :: restOfFuture) as allFuture) ->
+                    if Time.thisBeforeThat nextStart (endTime futureEvent) then
+                        -- we've been interrupted!
+                        let
+                            _ =
+                                Debug.log "    NO QUEUE, INTERRUPTION!" futureEvent
+
+                            new =
+                                state
+                                    |> transitionTo
+                                        toAnchor
+                                        prev
+                                        futureEvent
+                                        details.now
+                                        --v transition start time
+                                        (endTime prev)
+                                        --v transition end time
+                                        nextStart
+                                        futureRemain
+                                    |> transitionTo toAnchor
+                                        prev
+                                        nextEvent
+                                        details.now
+                                        nextStart
+                                        (endTime nextEvent)
+                                        nextRemain
+                        in
+                        visitAll2
+                            toAnchor
+                            transitionTo
+                            details
+                            nextEvent
+                            nextRemain
+                            restOfFuture
+                            new
+
+                    else
+                        let
+                            _ =
+                                Debug.log "    NO QUEUE, CONTINUING" futureEvent
+
+                            new =
+                                state
+                                    |> transitionTo
+                                        toAnchor
+                                        prev
+                                        futureEvent
+                                        details.now
+                                        (endTime prev)
+                                        (endTime futureEvent)
+                                        futureRemain
+                        in
+                        visitAll2
+                            toAnchor
+                            transitionTo
+                            details
+                            futureEvent
+                            futureRemain
+                            allFuture
+                            new
 
         top :: remain ->
             case future of
                 [] ->
                     let
+                        _ =
+                            Debug.log "    NO FUTURE, CONTINUING" top
+
                         new =
                             transitionTo toAnchor
                                 prev
                                 top
                                 details.now
+                                (endTime prev)
+                                (endTime top)
                                 remain
                                 state
                     in
@@ -1468,16 +1547,18 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                         new
 
                 (Line futureStart futureEvent futureRemain) :: restOfFuture ->
-                    if Time.thisBeforeThat futureStart (endTime top) then
+                    if Debug.log "  A PROPER TRANSITION" <| Time.thisBeforeThat futureStart (endTime top) then
                         -- enroute to `top`, we are interrupted
                         -- so we transition to top (stopping at the interruption point)
                         -- then make another transition from where we were interrupted to
                         -- our new destination
                         let
+                            --_ =
+                            --    Debug.log "    INTERRUPTED" futureEvent
                             new =
                                 state
-                                    |> transitionTo toAnchor prev top futureStart remain
-                                    |> transitionTo toAnchor prev futureEvent details.now futureRemain
+                                    |> transitionTo toAnchor prev top details.now (endTime prev) futureStart remain
+                                    |> transitionTo toAnchor prev futureEvent details.now futureStart (endTime futureEvent) futureRemain
                         in
                         visitAll2
                             toAnchor
@@ -1490,11 +1571,15 @@ visitAll2 toAnchor transitionTo details prev queue future state =
 
                     else
                         let
+                            --_ =
+                            --    Debug.log "NOT INTERRUPTED" futureEvent
                             new =
                                 transitionTo toAnchor
                                     prev
                                     top
                                     details.now
+                                    (endTime prev)
+                                    (endTime top)
                                     remain
                                     state
                         in
@@ -2753,13 +2838,13 @@ type Animator model
 
 type alias Running =
     { running : Bool
-    , ping : Maybe Float
+    , ping : Maybe { delay : Float, target : Time.Posix }
     }
 
 
-sendPing : Timeline event -> Maybe Float
+sendPing : Timeline event -> Maybe { delay : Float, target : Time.Posix }
 sendPing ((Timeline details) as timeline) =
-    Maybe.map (encodeStamp details.now) (findNextTransitionTime timeline)
+    Maybe.andThen (encodeStamp details.now) (findNextTransitionTime timeline)
 
 
 findNextTransitionTime : Timeline event -> Maybe Time.Absolute
@@ -2776,10 +2861,6 @@ findNextTransitionTime ((Timeline details) as timeline) =
             \prevEndTime prev target targetTime now maybeLookAhead state ->
                 case state of
                     Nothing ->
-                        let
-                            _ =
-                                Debug.log "targetTime for:" target
-                        in
                         Just targetTime
 
                     _ ->
@@ -2820,7 +2901,7 @@ findNextTransitionTime ((Timeline details) as timeline) =
 To get around this, we encode the current time as a really small part of the given time.
 
 -}
-encodeStamp : Time.Absolute -> Time.Absolute -> Float
+encodeStamp : Time.Absolute -> Time.Absolute -> Maybe { delay : Float, target : Time.Posix }
 encodeStamp now target =
     let
         millis =
@@ -2831,8 +2912,19 @@ encodeStamp now target =
 
         nowTail =
             nowInMillis / 1000000
+
+        pingDelay =
+            millis + (1 / nowTail)
     in
-    millis + (1 / nowTail)
+    if pingDelay <= 0 then
+        Nothing
+
+    else
+        Just
+            { delay = pingDelay
+            , target =
+                Time.millisToPosix (round (Time.inMilliseconds target + 1))
+            }
 
 
 {-| -}
