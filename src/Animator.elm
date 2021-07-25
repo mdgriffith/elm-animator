@@ -1373,6 +1373,36 @@ watching get set (Timeline.Animator getDetails updateModel) =
         )
 
 
+{-| -}
+watchingList :
+    (model -> List (Timeline state))
+    -> (List (Timeline state) -> model -> model)
+    -> Animator model
+    -> Animator model
+watchingList getItemTimelines setItemTimelines (Timeline.Animator getDetails updateModel) =
+    Timeline.Animator
+        -- always runs
+        (\model ->
+            { running = True
+            , ping = getDetails model |> .ping
+            }
+        )
+        (\now model ->
+            let
+                newModel =
+                    updateModel now model
+
+                timelines =
+                    getItemTimelines newModel
+            in
+            setItemTimelines
+                (List.map (Timeline.update now)
+                    timelines
+                )
+                newModel
+        )
+
+
 {-| `watchingWith` will allow you to have more control over when `AnimationFrame` runs.
 
 The main thing you need to do here is capture which states are animated when they're **resting**.
@@ -1422,7 +1452,7 @@ watchingWith get set eventIsRestable (Timeline.Animator isRunning updateModel) =
                                     Just currentPing
 
                                 Just prevPing ->
-                                    if prevPing < currentPing then
+                                    if prevPing.delay < currentPing.delay then
                                         Just prevPing
 
                                     else
@@ -1474,8 +1504,11 @@ toSubscription toMsg model (Timeline.Animator getContext _) =
               else
                 Sub.none
             , case context.ping of
-                Just delayDuration ->
-                    Time.every delayDuration toMsg
+                Just ping ->
+                    Time.every ping.delay
+                        (\time ->
+                            toMsg ping.target
+                        )
 
                 Nothing ->
                     Sub.none
