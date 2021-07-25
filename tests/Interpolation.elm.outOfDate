@@ -1,4 +1,4 @@
-module Interpolation exposing (easingDerivatives, timeline)
+module Interpolation.outOfDate exposing (easingDerivatives, timeline)
 
 import Animator
 import Duration
@@ -31,7 +31,6 @@ cosInterpolation x =
 
 easingDerivatives : Test
 easingDerivatives =
-     
     describe "Calc Derivative of Easing Fn"
         [ test "deriv of a linear fn is constant" <|
             \_ ->
@@ -98,11 +97,11 @@ harryPotterHouseTimeline =
     Animator.init Hufflepuff
         |> Animator.queue
             [ Animator.wait (Animator.seconds 0.5)
-            , Animator.event (Animator.seconds 1) Griffyndor
+            , Animator.transitionTo (Animator.seconds 1) Griffyndor
             , Animator.wait (Animator.seconds 1.0)
-            , Animator.event (Animator.seconds 1) Slytherin
+            , Animator.transitionTo (Animator.seconds 1) Slytherin
             , Animator.wait (Animator.seconds 1.0)
-            , Animator.event (Animator.seconds 1) Ravenclaw
+            , Animator.transitionTo (Animator.seconds 1) Ravenclaw
             , Animator.wait (Animator.seconds 1.0)
             ]
         |> Timeline.update (Time.millisToPosix 0)
@@ -123,12 +122,12 @@ timeline =
                         Animator.init Hufflepuff
                             |> Animator.queue
                                 -- 300
-                                [ Animator.event (Animator.seconds 1) Griffyndor
+                                [ Animator.transitionTo (Animator.seconds 1) Griffyndor
                                 ]
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Animator.interrupt
                                 -- 1000
-                                [ Animator.event (Animator.seconds 1) Ravenclaw
+                                [ Animator.transitionTo (Animator.seconds 1) Ravenclaw
                                 ]
                             |> Timeline.update (Time.millisToPosix 1005)
 
@@ -163,11 +162,11 @@ timeline =
                 Animator.init Hufflepuff
                     |> Animator.queue
                         [ Animator.wait (Animator.seconds 1)
-                        , Animator.event (Animator.seconds 1) Griffyndor
+                        , Animator.transitionTo (Animator.seconds 1) Griffyndor
                         ]
                     |> Timeline.update (Time.millisToPosix 0)
                     |> Animator.interrupt
-                        [ Animator.event (Animator.seconds 1) Ravenclaw
+                        [ Animator.transitionTo (Animator.seconds 1) Ravenclaw
                         ]
                     |> Timeline.update (Time.millisToPosix 1500)
           in
@@ -179,7 +178,7 @@ timeline =
                             (Timeline.update (Time.millisToPosix 2000) newTimeline)
                             toPos
                 in
-                -- we were half the way to griffyndor 
+                -- we were half the way to griffyndor
                 --     (huff @ 100,gryff @ 300, we're at 200)
                 -- and then halfway between that and Ravenclaw (1000)
                 --  400 + 200 = 600
@@ -193,9 +192,9 @@ timeline =
                     newTimeline =
                         Animator.init Hufflepuff
                             |> Animator.queue
-                                [ Animator.event (Animator.seconds 1) Griffyndor
-                                , Animator.event (Animator.seconds 1) Slytherin
-                                , Animator.event (Animator.seconds 1) Ravenclaw
+                                [ Animator.transitionTo (Animator.seconds 1) Griffyndor
+                                , Animator.transitionTo (Animator.seconds 1) Slytherin
+                                , Animator.transitionTo (Animator.seconds 1) Ravenclaw
                                 ]
                             |> Timeline.update (Time.millisToPosix 0)
 
@@ -227,11 +226,11 @@ timeline =
                             |> Timeline.updateWith False (Time.millisToPosix 0)
                             |> Animator.queue
                                 [ Animator.wait (Animator.seconds 1)
-                                , Animator.event (Animator.seconds 1) Griffyndor
+                                , Animator.transitionTo (Animator.seconds 1) Griffyndor
                                 ]
                             |> Timeline.updateWith False (Time.millisToPosix 1000)
                             |> Animator.interrupt
-                                [ Animator.event (Animator.seconds 1) Ravenclaw
+                                [ Animator.transitionTo (Animator.seconds 1) Ravenclaw
                                 ]
                             |> Timeline.updateWith False (Time.millisToPosix 2500)
                             |> Timeline.updateWith False (Time.millisToPosix 3000)

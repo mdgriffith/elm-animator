@@ -1,4 +1,4 @@
-module SplineCreation exposing (suite)
+module SplineCreation.outOfDate exposing (suite)
 
 import Animator
 import Duration

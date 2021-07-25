@@ -1,4 +1,4 @@
-module CSS exposing (frames)
+module CSS.outOfDate exposing (frames)
 
 import Animator
 import Duration
@@ -143,8 +143,8 @@ frames =
                         Animator.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Animator.queue
-                                [ Animator.event (Animator.seconds 1) One
-                                , Animator.event (Animator.seconds 1) Two
+                                [ Animator.transitionTo (Animator.seconds 1) One
+                                , Animator.transitionTo (Animator.seconds 1) Two
                                 ]
                             -- NOTE* possible schduling bug
                             -- should be abl to schedule an event at 0
@@ -178,8 +178,8 @@ frames =
                         Animator.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Animator.queue
-                                [ Animator.event (Animator.seconds 1) One
-                                , Animator.event (Animator.seconds 1) Two
+                                [ Animator.transitionTo (Animator.seconds 1) One
+                                , Animator.transitionTo (Animator.seconds 1) Two
                                 ]
                             -- NOTE* possible schduling bug
                             -- scheduling an event
@@ -204,8 +204,8 @@ frames =
                         Animator.init One
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Animator.queue
-                                [ Animator.event (Animator.seconds 1) Two
-                                , Animator.event (Animator.seconds 1) Three
+                                [ Animator.transitionTo (Animator.seconds 1) Two
+                                , Animator.transitionTo (Animator.seconds 1) Three
                                 ]
                             -- NOTE* possible schduling bug
                             -- scheduling an event
@@ -234,14 +234,14 @@ frames =
                         Animator.init One
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Animator.queue
-                                [ Animator.event (Animator.seconds 1) Two
+                                [ Animator.transitionTo (Animator.seconds 1) Two
                                 ]
                             -- NOTE* possible schduling bug
                             -- scheduling an event
                             |> Timeline.update (Time.millisToPosix 1)
                             |> Animator.interrupt
                                 [ Animator.wait (Animator.seconds 0.5)
-                                , Animator.event (Animator.seconds 1) Three
+                                , Animator.transitionTo (Animator.seconds 1) Three
                                 ]
                             -- NOTE* possible schduling bug
                             -- scheduling an event

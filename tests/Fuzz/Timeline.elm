@@ -117,8 +117,9 @@ toTimeline { gc } (InstructionTimeline startTime startEvent instructions) =
         |> addInstructions
 
 
+instructionToEvent : ( Int, b ) -> Animator.Step b
 instructionToEvent ( i, event ) =
-    Animator.event (Animator.millis (toFloat i)) event
+    Animator.transitionTo (Animator.millis (toFloat i)) event
 
 
 listOneToFive : Fuzzer a -> Fuzzer (List a)

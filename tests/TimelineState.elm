@@ -66,18 +66,18 @@ timelines =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Animator.queue
-                    [ Animator.event (Animator.seconds 1) One
-                    , Animator.event (Animator.seconds 1) Two
-                    , Animator.event (Animator.seconds 1) Three
+                    [ Animator.transitionTo (Animator.seconds 1) One
+                    , Animator.transitionTo (Animator.seconds 1) Two
+                    , Animator.transitionTo (Animator.seconds 1) Three
                     ]
                 |> Timeline.update (Time.millisToPosix 0)
         , transitioningToOne =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Animator.queue
-                    [ Animator.event (Animator.seconds 1) One
-                    , Animator.event (Animator.seconds 1) Two
-                    , Animator.event (Animator.seconds 1) Three
+                    [ Animator.transitionTo (Animator.seconds 1) One
+                    , Animator.transitionTo (Animator.seconds 1) Two
+                    , Animator.transitionTo (Animator.seconds 1) Three
                     ]
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Timeline.update (Time.millisToPosix 500)
@@ -85,9 +85,9 @@ timelines =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Animator.queue
-                    [ Animator.event (Animator.seconds 1) One
-                    , Animator.event (Animator.seconds 1) Two
-                    , Animator.event (Animator.seconds 1) Three
+                    [ Animator.transitionTo (Animator.seconds 1) One
+                    , Animator.transitionTo (Animator.seconds 1) Two
+                    , Animator.transitionTo (Animator.seconds 1) Three
                     ]
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Timeline.update (Time.millisToPosix 1500)
@@ -95,9 +95,9 @@ timelines =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Animator.queue
-                    [ Animator.event (Animator.seconds 1) One
-                    , Animator.event (Animator.seconds 1) Two
-                    , Animator.event (Animator.seconds 1) Three
+                    [ Animator.transitionTo (Animator.seconds 1) One
+                    , Animator.transitionTo (Animator.seconds 1) Two
+                    , Animator.transitionTo (Animator.seconds 1) Three
                     ]
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Timeline.update (Time.millisToPosix 2500)
@@ -105,9 +105,9 @@ timelines =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Animator.queue
-                    [ Animator.event (Animator.seconds 1) One
-                    , Animator.event (Animator.seconds 1) Two
-                    , Animator.event (Animator.seconds 1) Three
+                    [ Animator.transitionTo (Animator.seconds 1) One
+                    , Animator.transitionTo (Animator.seconds 1) Two
+                    , Animator.transitionTo (Animator.seconds 1) Three
                     ]
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Timeline.update (Time.millisToPosix 1000)
@@ -115,9 +115,9 @@ timelines =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Animator.queue
-                    [ Animator.event (Animator.seconds 1) One
-                    , Animator.event (Animator.seconds 1) Two
-                    , Animator.event (Animator.seconds 1) Three
+                    [ Animator.transitionTo (Animator.seconds 1) One
+                    , Animator.transitionTo (Animator.seconds 1) Two
+                    , Animator.transitionTo (Animator.seconds 1) Three
                     ]
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Timeline.update (Time.millisToPosix 2000)
@@ -125,9 +125,9 @@ timelines =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Animator.queue
-                    [ Animator.event (Animator.seconds 1) One
-                    , Animator.event (Animator.seconds 1) Two
-                    , Animator.event (Animator.seconds 1) Three
+                    [ Animator.transitionTo (Animator.seconds 1) One
+                    , Animator.transitionTo (Animator.seconds 1) Two
+                    , Animator.transitionTo (Animator.seconds 1) Three
                     ]
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Timeline.update (Time.millisToPosix 3000)
@@ -135,9 +135,9 @@ timelines =
             Animator.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Animator.queue
-                    [ Animator.event (Animator.seconds 1) One
-                    , Animator.event (Animator.seconds 1) Two
-                    , Animator.event (Animator.seconds 1) Three
+                    [ Animator.transitionTo (Animator.seconds 1) One
+                    , Animator.transitionTo (Animator.seconds 1) Two
+                    , Animator.transitionTo (Animator.seconds 1) Three
                     ]
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Timeline.update (Time.millisToPosix 3001)
@@ -271,9 +271,9 @@ current =
                         Animator.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Animator.queue
-                                [ Animator.event (Animator.seconds 1) One
-                                , Animator.event (Animator.seconds 1) Two
-                                , Animator.event (Animator.seconds 1) Three
+                                [ Animator.transitionTo (Animator.seconds 1) One
+                                , Animator.transitionTo (Animator.seconds 1) Two
+                                , Animator.transitionTo (Animator.seconds 1) Three
                                 ]
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Timeline.update (Time.millisToPosix 2500)
@@ -287,9 +287,9 @@ current =
                         Animator.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Animator.queue
-                                [ Animator.event (Animator.seconds 1) One
-                                , Animator.event (Animator.seconds 1) Two
-                                , Animator.event (Animator.seconds 1) Three
+                                [ Animator.transitionTo (Animator.seconds 1) One
+                                , Animator.transitionTo (Animator.seconds 1) Two
+                                , Animator.transitionTo (Animator.seconds 1) Three
                                 ]
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Timeline.update (Time.millisToPosix 3000)
@@ -454,8 +454,8 @@ arrived =
                         Animator.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Animator.queue
-                                [ Animator.event (Animator.seconds 1) One
-                                , Animator.event (Animator.seconds 1) Two
+                                [ Animator.transitionTo (Animator.seconds 1) One
+                                , Animator.transitionTo (Animator.seconds 1) Two
                                 ]
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Timeline.update (Time.millisToPosix 500)
@@ -874,9 +874,9 @@ upcoming =
                         Animator.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Animator.queue
-                                [ Animator.event (Animator.seconds 1) One
-                                , Animator.event (Animator.seconds 1) Two
-                                , Animator.event (Animator.seconds 1) Three
+                                [ Animator.transitionTo (Animator.seconds 1) One
+                                , Animator.transitionTo (Animator.seconds 1) Two
+                                , Animator.transitionTo (Animator.seconds 1) Three
                                 ]
 
                     -- we're not updating yet.
@@ -890,9 +890,9 @@ upcoming =
                         Animator.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Animator.interrupt
-                                [ Animator.event (Animator.seconds 1) One
-                                , Animator.event (Animator.seconds 1) Two
-                                , Animator.event (Animator.seconds 1) Three
+                                [ Animator.transitionTo (Animator.seconds 1) One
+                                , Animator.transitionTo (Animator.seconds 1) Two
+                                , Animator.transitionTo (Animator.seconds 1) Three
                                 ]
 
                     -- we're not updating yet.
@@ -935,9 +935,9 @@ arrivedAt =
                         Animator.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Animator.queue
-                                [ Animator.event (Animator.seconds 1) One
-                                , Animator.event (Animator.seconds 1) Two
-                                , Animator.event (Animator.seconds 1) Three
+                                [ Animator.transitionTo (Animator.seconds 1) One
+                                , Animator.transitionTo (Animator.seconds 1) Two
+                                , Animator.transitionTo (Animator.seconds 1) Three
                                 ]
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Timeline.update (Time.millisToPosix 1999)
