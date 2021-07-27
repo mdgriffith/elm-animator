@@ -12,6 +12,7 @@ import Internal.Move as Move
 import Internal.Time as Time
 import Internal.Timeline as Timeline
 import Internal.Transition as Transition
+import Internal.Units as Units
 import Pixels
 import Quantity
 import Set exposing (Set)
@@ -1236,6 +1237,59 @@ startPropsHelper only props maybeTransform rendered =
                 startPropsHelper remain props maybeTransform (new :: rendered)
 
 
+normalizeVelocity :
+    Time.Absolute
+    -> Time.Absolute
+    -> Float
+    -> Float
+    -> Units.PixelsPerSecond
+    -> Float
+normalizeVelocity startTime targetTime startPosition targetPosition velocity =
+    let
+        pixelsPerSecond =
+            Pixels.inPixelsPerSecond velocity
+    in
+    if pixelsPerSecond == 0 then
+        0
+
+    else
+        (pixelsPerSecond * Duration.inSeconds (Time.duration startTime targetTime))
+            / (targetPosition - startPosition)
+
+
+denormalize :
+    Time.Absolute
+    -> Time.Absolute
+    -> Float
+    -> Float
+    ->
+        { position : Bezier.Point
+        , velocity : Bezier.Point
+        }
+    -> Interpolate.State
+denormalize startTime targetTime startPosition targetPosition state =
+    { position =
+        Pixels.pixels
+            (Move.toReal
+                startPosition
+                targetPosition
+                state.position.y
+            )
+    , velocity =
+        let
+            scaled =
+                state.velocity
+                    |> Bezier.scaleXYBy
+                        { x =
+                            Duration.inSeconds
+                                (Time.duration startTime targetTime)
+                        , y = targetPosition - startPosition
+                        }
+        in
+        Pixels.pixelsPerSecond (scaled.y / scaled.x)
+    }
+
+
 {-| -}
 toPropCurves2 : List Prop -> Timeline.Transition state (List Prop) (List RenderedProp)
 toPropCurves2 only =
@@ -1315,48 +1369,46 @@ toPropCurves2 only =
 
                     RenderedProp rendered ->
                         let
-                            propLookup : Timeline.Occurring state -> Move.Move Float
-                            propLookup occur =
-                                stateOrDefault rendered.id rendered.name (lookup (Timeline.getEvent occur))
-
+                            targetProp : Move.Move Float
                             targetProp =
-                                propLookup target
+                                Timeline.getEvent target
+                                    |> lookup
+                                    |> stateOrDefault rendered.id
+                                        rendered.name
 
-                            domain =
-                                { start =
-                                    { x = startTime
-                                    , y = rendered.state.position
-                                    }
-                                , end =
-                                    { x = targetTime
-                                    , y = targetPosition
-                                    }
-                                }
-
-                            targetVelocity =
-                                --Interpolate.velocityAtTarget lookupState target future
-                                Pixels.pixelsPerSecond 0
+                            -- adjust the transition if necessary by taking into account
+                            -- the intro and exit velocity
+                            finalProp =
+                                targetProp
+                                    |> Move.withVelocities
+                                        (normalizeVelocity
+                                            startTime
+                                            targetTime
+                                            startPosition
+                                            targetPosition
+                                            rendered.state.velocity
+                                        )
+                                        -- NORMALIZE VELOCITY HERE TOO
+                                        --Interpolate.velocityAtTarget lookupState target future
+                                        0
 
                             progress =
                                 Time.progress startTime targetTime now
 
+                            newState =
+                                Move.atX progress finalProp
+                                    |> denormalize startTime
+                                        targetTime
+                                        startPosition
+                                        targetPosition
+
+                            startPosition =
+                                Pixels.inPixels rendered.state.position
+
                             targetPosition =
                                 case targetProp of
                                     Move.Pos _ x _ ->
-                                        Pixels.pixels x
-
-                            targetTransition =
-                                case targetProp of
-                                    Move.Pos trans _ _ ->
-                                        trans
-
-                            newState =
-                                Transition.atX
-                                    progress
-                                    domain
-                                    rendered.state.velocity
-                                    targetVelocity
-                                    targetTransition
+                                        x
                         in
                         RenderedProp
                             { id = rendered.id
@@ -1380,12 +1432,75 @@ toPropCurves2 only =
                                         targetTime
                                         now
                                         endTime
-                                        targetProp
+                                        finalProp
                                         rendered.sections
                             , state =
                                 newState
                             }
 
+                    -- RenderedProp rendered ->
+                    --     let
+                    --         propLookup : Timeline.Occurring state -> Move.Move Float
+                    --         propLookup occur =
+                    --             stateOrDefault rendered.id rendered.name (lookup (Timeline.getEvent occur))
+                    --         targetProp =
+                    --             propLookup target
+                    -- domain =
+                    --     { start =
+                    --         { x = startTime
+                    --         , y = rendered.state.position
+                    --         }
+                    --     , end =
+                    --         { x = targetTime
+                    --         , y = targetPosition
+                    --         }
+                    --     }
+                    -- targetVelocity =
+                    --     --Interpolate.velocityAtTarget lookupState target future
+                    --     Pixels.pixelsPerSecond 0
+                    --         progress =
+                    --             Time.progress startTime targetTime now
+                    --         targetPosition =
+                    --             case targetProp of
+                    --                 Move.Pos _ x _ ->
+                    --                     Pixels.pixels x
+                    -- targetTransition =
+                    --     case targetProp of
+                    --         Move.Pos trans _ _ ->
+                    --             trans
+                    --         newState =
+                    -- Transition.atX
+                    --     progress
+                    --     domain
+                    --     rendered.state.velocity
+                    --     targetVelocity
+                    --     targetTransition
+                    --     in
+                    --     RenderedProp
+                    --         { id = rendered.id
+                    --         , name = rendered.name
+                    --         , format = rendered.format
+                    --         , startPos =
+                    --             -- startPos is the position at the beginning of the active animation
+                    --             --  So, we're tracking that as the end of any state we've completely passed
+                    --             if Time.thisAfterOrEqualThat now (Timeline.endTime target) then
+                    --                 Pixels.inPixels newState.position
+                    --             else
+                    --                 rendered.startPos
+                    --         , sections =
+                    --             if finished then
+                    --                 rendered.sections
+                    --             else
+                    --                 Move.sequences
+                    --                     startTime
+                    --                     targetTime
+                    --                     now
+                    --                     endTime
+                    --                     targetProp
+                    --                     rendered.sections
+                    --         , state =
+                    --             newState
+                    --         }
                     CompoundProp details ->
                         let
                             new =
@@ -2379,8 +2494,7 @@ toCss :
     -> (Float -> String)
     -> (state -> Move.Move Float)
     ->
-        Timeline.Interp
-            state
+        Timeline.Interp state
             (Move.Move Float)
             { css : CssAnim
             , stackStart : Time.Absolute

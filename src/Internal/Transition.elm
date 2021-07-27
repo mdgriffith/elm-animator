@@ -5,7 +5,7 @@ module Internal.Transition exposing
     , split, before
     , hash, keyframes, compoundKeyframes
     , splines
-    , takeAfter
+    , adjust, atX2, takeAfter, withVelocities
     )
 
 {-|
@@ -210,6 +210,82 @@ atX progress domain introVelocity exitVelocity transition =
                 , velocity = Units.inPixelsPerMs introVelocity
                 }
                 |> wrapUnits
+
+
+{-|
+
+    Every bezier curve is made for going from 0,0 to 1,1
+
+
+    We also know
+
+-}
+adjust : Float -> Float -> Transition -> Transition
+adjust introVelocity exitVelocity transition =
+    case transition of
+        Transition spline ->
+            transition
+
+        Trail trail ->
+            transition
+
+        Wobble wob ->
+            transition
+
+
+{-| -}
+atX2 :
+    Float
+    -> Transition
+    ->
+        { position : Bezier.Point
+        , velocity : Bezier.Point
+        }
+atX2 progress transition =
+    case transition of
+        Transition spline ->
+            let
+                pos =
+                    Bezier.atX progress spline
+            in
+            { position = pos.point
+            , velocity =
+                Bezier.firstDerivative spline pos.t
+            }
+
+        Trail trail ->
+            -- onTrail progress domain introVelocity exitVelocity trail
+            Debug.todo "atX2 Trails!"
+
+        Wobble wob ->
+            -- let
+            --     totalX =
+            --         Time.inMilliseconds domain.end.x - Time.inMilliseconds domain.start.x
+            --     params =
+            --         Spring.select wob
+            --             (Quantity.Quantity totalX)
+            -- in
+            -- Spring.analytical params
+            --     (Quantity.Quantity (totalX * progress))
+            --     (Units.inPixels domain.end.y)
+            --     { position = Units.inPixels domain.start.y
+            --     , velocity = Units.inPixelsPerMs introVelocity
+            --     }
+            --     |> wrapUnits
+            Debug.todo "atX2 wob!"
+
+
+withVelocities : Float -> Float -> Transition -> Transition
+withVelocities intro exit transition =
+    case transition of
+        Transition spline ->
+            Transition (Bezier.withVelocities intro exit spline)
+
+        Trail trail ->
+            Debug.todo "Transition.withVelocities Trail"
+
+        Wobble wob ->
+            Debug.todo "Transition.withVelocities Wobble"
 
 
 toTimeProgress :

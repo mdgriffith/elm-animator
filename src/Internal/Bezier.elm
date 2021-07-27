@@ -7,7 +7,7 @@ module Internal.Bezier exposing
     , addX
     , doesNotMove, afterLastX
     , toPath, cssTimingString
-    , horizontal
+    , horizontal, scaleBy, scaleXYBy, withVelocities, zeroPoint
     )
 
 {-| This module defines types and functions for cubic bezier splines.
@@ -405,7 +405,7 @@ guessTime now (Spline one two three four) =
 
 atXTolerance : Float
 atXTolerance =
-    1
+    0.0005
 
 
 {-| Once we have a bezier curve, we need to find the value of y at a given x.
@@ -679,3 +679,40 @@ splitList at splines passed =
 
             else
                 splitList at remain (top :: passed)
+
+
+{-| The math here comes the `fromEndpoints` constructor in elm-geometry
+
+<https://github.com/ianmackenzie/elm-geometry/blob/3.9.0/src/CubicSpline2d.elm#L174>
+
+-}
+withVelocities : Float -> Float -> Spline -> Spline
+withVelocities intro exit ((Spline one two three four) as full) =
+    if intro == 0 && exit == 0 then
+        full
+
+    else
+        let
+            ctrl1 =
+                if intro == 0 then
+                    two
+
+                else
+                    { x = one.x + (1 / 3)
+                    , y = one.y + ((1 / 3) * intro)
+                    }
+
+            ctrl2 =
+                if exit == 0 then
+                    three
+
+                else
+                    { x = four.x + (-1 / 3)
+                    , y = four.y + ((-1 / 3) * exit)
+                    }
+        in
+        Spline
+            one
+            ctrl1
+            ctrl2
+            four

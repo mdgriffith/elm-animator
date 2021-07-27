@@ -4,7 +4,7 @@ module Internal.Move exposing
     , Step, step, stepWith, set
     , sequences, goto, continuingSplines, continue
     , css
-    , initialSequenceVelocity, lastPosOr, mapTransition
+    , atX, initialSequenceVelocity, lastPosOr, mapTransition, normalizeOver, toReal, withVelocities
     )
 
 {-|
@@ -181,6 +181,64 @@ addDelayToSequence delay seqs captured =
                  }
                     :: captured
                 )
+
+
+{-|
+
+    Adjust the transition by taking into account intro and exit velocity if necessary
+
+-}
+withVelocities : Float -> Float -> Move x -> Move x
+withVelocities intro exit ((Pos trans val dwell) as untouched) =
+    if intro == 0 && exit == 0 then
+        untouched
+
+    else
+        Pos
+            (Transition.withVelocities intro exit trans)
+            val
+            dwell
+
+
+atX :
+    Float
+    -> Move Float
+    ->
+        { position : Bezier.Point
+        , velocity : Bezier.Point
+        }
+atX progress (Pos trans value dwell) =
+    Transition.atX2 progress trans
+
+
+{-|
+
+    Map a value to 0:1 given a range it should be in.
+
+-}
+normalizeOver : Float -> Float -> Float -> Float
+normalizeOver start end current =
+    let
+        total =
+            abs (end - start)
+    in
+    if total == 0 then
+        0
+
+    else
+        ((current - start) / total)
+            |> max 0
+            |> min 1
+
+
+{-| The opposite of `normalizeOver`.
+
+I guess this is denormalization? Though i was always confused by that term :/
+
+-}
+toReal : Float -> Float -> Float -> Float
+toReal start end t =
+    start + (t * (end - start))
 
 
 {-| Transition finish velocity -> non-zero only if we're continuing on to another state
