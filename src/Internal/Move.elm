@@ -1049,8 +1049,6 @@ keyframeHelper name startPos toString sequenceDuration currentDur steps rendered
                 frames =
                     Transition.keyframes
                         domain
-                        0
-                        0
                         startPercent
                         endPercent
                         toPropString
@@ -1083,8 +1081,6 @@ keyframeHelper name startPos toString sequenceDuration currentDur steps rendered
                 frames =
                     Transition.keyframes
                         domain
-                        0
-                        0
                         startPercent
                         endPercent
                         toString

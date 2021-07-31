@@ -7,7 +7,7 @@ module Internal.Bezier exposing
     , addX
     , doesNotMove, afterLastX
     , toPath, cssTimingString
-    , horizontal, scaleBy, scaleXYBy, withVelocities, zeroPoint
+    , horizontal, onePoint, scaleBy, scaleXYBy, withVelocities, zeroPoint
     )
 
 {-| This module defines types and functions for cubic bezier splines.
@@ -239,6 +239,13 @@ zeroPoint : Point
 zeroPoint =
     { x = 0
     , y = 0
+    }
+
+
+onePoint : Point
+onePoint =
+    { x = 1
+    , y = 1
     }
 
 

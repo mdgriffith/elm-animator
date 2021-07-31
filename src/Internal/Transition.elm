@@ -5,7 +5,7 @@ module Internal.Transition exposing
     , split, before
     , hash, keyframes, compoundKeyframes
     , splines
-    , adjust, atX2, takeAfter, withVelocities
+    , atX2, takeAfter, withVelocities
     )
 
 {-|
@@ -97,13 +97,13 @@ There are likewise three situations a transition will be in.
 type Transition
     = Transition Bezier.Spline
     | Trail (List Bezier.Spline)
-    | Wobble Float
+    | Wobble { introVelocity : Float, wobble : Float }
 
 
 {-| -}
 wobble : Float -> Transition
 wobble w =
-    Wobble (clamp 0 1 w)
+    Wobble { introVelocity = 0, wobble = clamp 0 1 w }
 
 
 {-| Ideally we'd store a bezier
@@ -200,7 +200,7 @@ atX progress domain introVelocity exitVelocity transition =
                     Time.inMilliseconds domain.end.x - Time.inMilliseconds domain.start.x
 
                 params =
-                    Spring.select wob
+                    Spring.select wob.wobble
                         (Quantity.Quantity totalX)
             in
             Spring.analytical params
@@ -210,27 +210,6 @@ atX progress domain introVelocity exitVelocity transition =
                 , velocity = Units.inPixelsPerMs introVelocity
                 }
                 |> wrapUnits
-
-
-{-|
-
-    Every bezier curve is made for going from 0,0 to 1,1
-
-
-    We also know
-
--}
-adjust : Float -> Float -> Transition -> Transition
-adjust introVelocity exitVelocity transition =
-    case transition of
-        Transition spline ->
-            transition
-
-        Trail trail ->
-            transition
-
-        Wobble wob ->
-            transition
 
 
 {-| -}
@@ -254,25 +233,54 @@ atX2 progress transition =
             }
 
         Trail trail ->
-            -- onTrail progress domain introVelocity exitVelocity trail
-            Debug.todo "atX2 Trails!"
+            onTrail2 progress
+                trail
 
         Wobble wob ->
             -- let
             --     totalX =
-            --         Time.inMilliseconds domain.end.x - Time.inMilliseconds domain.start.x
+            --         1
             --     params =
-            --         Spring.select wob
+            --         Spring.select wob.wobble
             --             (Quantity.Quantity totalX)
             -- in
             -- Spring.analytical params
             --     (Quantity.Quantity (totalX * progress))
-            --     (Units.inPixels domain.end.y)
-            --     { position = Units.inPixels domain.start.y
-            --     , velocity = Units.inPixelsPerMs introVelocity
+            --     1
+            --     { position = 0
+            --     , velocity = wob.introVelocity
             --     }
             --     |> wrapUnits
-            Debug.todo "atX2 wob!"
+            Debug.todo "atX2 - Wobble"
+
+
+onTrail2 :
+    Float
+    -> List Bezier.Spline
+    ->
+        { position : Bezier.Point
+        , velocity : Bezier.Point
+        }
+onTrail2 progress trail =
+    case trail of
+        [] ->
+            { position = Bezier.onePoint
+            , velocity = Bezier.zeroPoint
+            }
+
+        spline :: remain ->
+            if Bezier.firstX spline <= progress then
+                let
+                    pos =
+                        Bezier.atX progress spline
+                in
+                { position = pos.point
+                , velocity =
+                    Bezier.firstDerivative spline pos.t
+                }
+
+            else
+                onTrail2 progress remain
 
 
 withVelocities : Float -> Float -> Transition -> Transition
@@ -285,7 +293,10 @@ withVelocities intro exit transition =
             Debug.todo "Transition.withVelocities Trail"
 
         Wobble wob ->
-            Debug.todo "Transition.withVelocities Wobble"
+            Wobble
+                { wobble = wob.wobble
+                , introVelocity = intro
+                }
 
 
 toTimeProgress :
@@ -430,7 +441,7 @@ splines domain introVelocity exitVelocity transition =
                     Time.inMilliseconds domain.end.x - Time.inMilliseconds domain.start.x
 
                 params =
-                    Spring.select wob
+                    Spring.select wob.wobble
                         (Quantity.Quantity totalX)
             in
             Spring.segments params
@@ -665,12 +676,12 @@ hash transition =
                 |> String.join "-"
 
         Wobble f ->
-            "wob-" ++ String.fromFloat f
+            "wob-" ++ String.fromFloat f.wobble
 
 
 {-| -}
-keyframes : Domain -> Float -> Float -> Float -> Float -> (Float -> String) -> Transition -> String
-keyframes domain introVelocity exitVelocity startPercent endPercent toString transition =
+keyframes : Domain -> Float -> Float -> (Float -> String) -> Transition -> String
+keyframes domain startPercent endPercent toString transition =
     case transition of
         Transition spline ->
             let
@@ -686,25 +697,36 @@ keyframes domain introVelocity exitVelocity startPercent endPercent toString tra
                                 , y = domain.end.y
                                 }
                             }
-                            introVelocity
-                            exitVelocity
+                            0
+                            0
             in
-            splineKeyframes startPercent endPercent toString normalized
+            splineKeyframes startPercent
+                endPercent
+                toString
+                normalized
 
         -- ++ finalFrame toString normalized
         Trail trail ->
-            renderTrailKeyframes startPercent endPercent domain introVelocity exitVelocity toString trail ""
+            renderTrailKeyframes
+                startPercent
+                endPercent
+                domain
+                toString
+                trail
+                ""
 
         Wobble wob ->
             let
                 params =
-                    Spring.select wob
+                    Spring.select wob.wobble
                         (Quantity.Quantity (domain.end.x - domain.start.x))
 
                 trail =
                     Spring.segments params
                         { position = domain.start.y
-                        , velocity = introVelocity
+
+                        -- intro velocity
+                        , velocity = wob.introVelocity
                         }
                         domain.end.y
             in
@@ -751,8 +773,8 @@ renderKeyframeList startPercent endPercent toString trail rendered =
                 )
 
 
-renderTrailKeyframes : Float -> Float -> Domain -> Float -> Float -> (Float -> String) -> List Bezier.Spline -> String -> String
-renderTrailKeyframes startPercent endPercent domain introVelocity exitVelocity toString trail rendered =
+renderTrailKeyframes : Float -> Float -> Domain -> (Float -> String) -> List Bezier.Spline -> String -> String
+renderTrailKeyframes startPercent endPercent domain toString trail rendered =
     case trail of
         [] ->
             rendered
@@ -760,7 +782,7 @@ renderTrailKeyframes startPercent endPercent domain introVelocity exitVelocity t
         spline :: [] ->
             let
                 normalized =
-                    toDomain domain introVelocity exitVelocity spline
+                    toDomain domain 0 0 spline
             in
             rendered
                 ++ splineKeyframes startPercent endPercent toString normalized
@@ -770,11 +792,9 @@ renderTrailKeyframes startPercent endPercent domain introVelocity exitVelocity t
             renderTrailKeyframes startPercent
                 endPercent
                 domain
-                0
-                exitVelocity
                 toString
                 remain
-                (splineKeyframes startPercent endPercent toString (toDomain domain introVelocity 0 spline)
+                (splineKeyframes startPercent endPercent toString (toDomain domain 0 0 spline)
                     ++ rendered
                 )
 
@@ -829,7 +849,7 @@ conflicting one two =
         Wobble wobOne ->
             case two of
                 Wobble wobTwo ->
-                    wobOne - wobTwo == 0
+                    wobOne.wobble - wobTwo.wobble == 0
 
                 _ ->
                     True

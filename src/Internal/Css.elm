@@ -1388,7 +1388,8 @@ toPropCurves2 only =
                                             targetPosition
                                             rendered.state.velocity
                                         )
-                                        -- NORMALIZE VELOCITY HERE TOO
+                                        -- If we do any transition smoothing
+                                        -- we'll need to normalize this velocity too
                                         --Interpolate.velocityAtTarget lookupState target future
                                         0
 
@@ -1438,69 +1439,6 @@ toPropCurves2 only =
                                 newState
                             }
 
-                    -- RenderedProp rendered ->
-                    --     let
-                    --         propLookup : Timeline.Occurring state -> Move.Move Float
-                    --         propLookup occur =
-                    --             stateOrDefault rendered.id rendered.name (lookup (Timeline.getEvent occur))
-                    --         targetProp =
-                    --             propLookup target
-                    -- domain =
-                    --     { start =
-                    --         { x = startTime
-                    --         , y = rendered.state.position
-                    --         }
-                    --     , end =
-                    --         { x = targetTime
-                    --         , y = targetPosition
-                    --         }
-                    --     }
-                    -- targetVelocity =
-                    --     --Interpolate.velocityAtTarget lookupState target future
-                    --     Pixels.pixelsPerSecond 0
-                    --         progress =
-                    --             Time.progress startTime targetTime now
-                    --         targetPosition =
-                    --             case targetProp of
-                    --                 Move.Pos _ x _ ->
-                    --                     Pixels.pixels x
-                    -- targetTransition =
-                    --     case targetProp of
-                    --         Move.Pos trans _ _ ->
-                    --             trans
-                    --         newState =
-                    -- Transition.atX
-                    --     progress
-                    --     domain
-                    --     rendered.state.velocity
-                    --     targetVelocity
-                    --     targetTransition
-                    --     in
-                    --     RenderedProp
-                    --         { id = rendered.id
-                    --         , name = rendered.name
-                    --         , format = rendered.format
-                    --         , startPos =
-                    --             -- startPos is the position at the beginning of the active animation
-                    --             --  So, we're tracking that as the end of any state we've completely passed
-                    --             if Time.thisAfterOrEqualThat now (Timeline.endTime target) then
-                    --                 Pixels.inPixels newState.position
-                    --             else
-                    --                 rendered.startPos
-                    --         , sections =
-                    --             if finished then
-                    --                 rendered.sections
-                    --             else
-                    --                 Move.sequences
-                    --                     startTime
-                    --                     targetTime
-                    --                     now
-                    --                     endTime
-                    --                     targetProp
-                    --                     rendered.sections
-                    --         , state =
-                    --             newState
-                    --         }
                     CompoundProp details ->
                         let
                             new =
