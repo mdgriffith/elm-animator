@@ -143,36 +143,230 @@ cssFromProps : Timeline.Timeline state -> (state -> List Prop) -> CssAnim
 cssFromProps timeline lookup =
     let
         present =
-            Timeline.foldpAll2 lookup
-                (\props ->
-                    add props [] Set.empty Set.empty
-                )
-                (\get prev target now startTime endTime future cursor ->
-                    let
-                        new =
-                            case cursor.props of
-                                [] ->
-                                    get (Timeline.getEvent target) ++ get (Timeline.getEvent prev)
-
-                                _ ->
-                                    get (Timeline.getEvent target)
-                    in
-                    add new
-                        cursor.props
-                        cursor.cache.name
-                        cursor.cache.id
-                )
-                timeline
-                |> .props
-                |> List.sortBy propOrder
+            getInitial2 timeline lookup
 
         renderedProps =
             Timeline.foldpAll2 lookup
-                (startProps present)
-                (toPropCurves2 present)
+                (\_ -> present)
+                toPropCurves2
                 timeline
     in
     renderCss (Timeline.getCurrentTime timeline) renderers renderedProps
+
+
+getInitial2 : Timeline.Timeline event -> (event -> List Prop) -> List RenderedProp
+getInitial2 timeline lookup =
+    let
+        ( maybeTransform, renderedProps ) =
+            Timeline.foldpAll2 lookup
+                (\props ->
+                    toInitialProps props ( Nothing, [] )
+                )
+                (\get prev target now startTime endTime future cursor ->
+                    addInitialProps (get (Timeline.getEvent target)) cursor
+                )
+                timeline
+    in
+    case maybeTransform of
+        Nothing ->
+            renderedProps
+
+        Just trans ->
+            TransformProp trans :: renderedProps
+
+
+initState x =
+    { position =
+        Pixels.pixels x
+    , velocity = Pixels.pixelsPerSecond 0
+    }
+
+
+toInitialProps : List Prop -> ( Maybe TransformPropDetails, List RenderedProp ) -> ( Maybe TransformPropDetails, List RenderedProp )
+toInitialProps props (( maybeTransform, rendered ) as untouched) =
+    case props of
+        [] ->
+            untouched
+
+        (Prop id name movement format) :: remaining ->
+            let
+                state =
+                    Interpolate.moving.start
+                        (Internal.Css.Props.default id)
+            in
+            toInitialProps remaining
+                (if Internal.Css.Props.isTransformId id then
+                    case maybeTransform of
+                        Nothing ->
+                            ( Just
+                                { sections = []
+                                , state =
+                                    { x = initState 0
+                                    , y = initState 0
+                                    , scale = initState 1
+                                    , rotation = initState 0
+                                    }
+                                }
+                            , rendered
+                            )
+
+                        Just trans ->
+                            -- we've already initialized the transform
+                            untouched
+
+                 else
+                    ( maybeTransform
+                    , RenderedProp
+                        { id = id
+                        , name = name
+                        , format = format
+                        , sections = []
+                        , state = state
+                        }
+                        :: rendered
+                    )
+                )
+
+        (ColorProp name movement color) :: remaining ->
+            toInitialProps remaining
+                ( maybeTransform
+                , RenderedColorProp
+                    { name = name
+                    , color = color
+                    , sections = []
+                    }
+                    :: rendered
+                )
+
+
+matchProp id renderedProp =
+    case renderedProp of
+        RenderedProp details ->
+            details.id - id == 0
+
+        CompoundProp details ->
+            False
+
+        RenderedColorProp details ->
+            False
+
+        TransformProp details ->
+            False
+
+
+matchColor name renderedProp =
+    case renderedProp of
+        RenderedProp details ->
+            False
+
+        CompoundProp details ->
+            False
+
+        RenderedColorProp details ->
+            details.name == name
+
+        TransformProp details ->
+            False
+
+
+{-| If a props isn't defined in the first state, but is defined in the future, we want to add it.
+-}
+addInitialProps : List Prop -> ( Maybe TransformPropDetails, List RenderedProp ) -> ( Maybe TransformPropDetails, List RenderedProp )
+addInitialProps props (( maybeTransform, rendered ) as untouched) =
+    case props of
+        [] ->
+            untouched
+
+        (Prop id name movement format) :: remaining ->
+            let
+                new =
+                    if Internal.Css.Props.isTransformId id then
+                        case maybeTransform of
+                            Nothing ->
+                                ( Just
+                                    { sections = []
+                                    , state =
+                                        { x = initState 0
+                                        , y = initState 0
+                                        , scale = initState 1
+                                        , rotation = initState 0
+                                        }
+                                    }
+                                , rendered
+                                )
+
+                            Just trans ->
+                                -- we've already initialized the transform
+                                untouched
+
+                    else if List.any (\renderedProp -> matchProp id renderedProp) rendered then
+                        untouched
+
+                    else
+                        let
+                            state =
+                                Interpolate.moving.start
+                                    (Internal.Css.Props.default id)
+                        in
+                        ( maybeTransform
+                        , RenderedProp
+                            { id = id
+                            , name = name
+                            , format = format
+                            , sections = []
+                            , state = state
+                            }
+                            :: rendered
+                        )
+            in
+            toInitialProps remaining
+                new
+
+        (ColorProp name movement color) :: remaining ->
+            let
+                new =
+                    if List.any (\renderedProp -> matchColor name renderedProp) rendered then
+                        untouched
+
+                    else
+                        ( maybeTransform
+                        , RenderedColorProp
+                            { name = name
+                            , color = color
+                            , sections = []
+                            }
+                            :: rendered
+                        )
+            in
+            toInitialProps remaining
+                new
+
+
+getInitial : Timeline.Timeline event -> (event -> List Prop) -> List Prop -> List RenderedProp
+getInitial timeline lookup =
+    Timeline.foldpAll2 lookup
+        (\props ->
+            add props [] Set.empty Set.empty
+        )
+        (\get prev target now startTime endTime future cursor ->
+            let
+                new =
+                    case cursor.props of
+                        [] ->
+                            get (Timeline.getEvent target) ++ get (Timeline.getEvent prev)
+
+                        _ ->
+                            get (Timeline.getEvent target)
+            in
+            add new
+                cursor.props
+                cursor.cache.name
+                cursor.cache.id
+        )
+        timeline
+        |> .props
+        |> List.sortBy propOrder
+        |> startProps
 
 
 {-| RenderdProp's are required to be ordered!
@@ -839,6 +1033,9 @@ scalarHelper now renderedProps anim =
             -- handled by color renderer
             scalarHelper now remain anim
 
+        (TransformProp _) :: remain ->
+            scalarHelper now remain anim
+
 
 propToCssHelper :
     Time.Absolute
@@ -1228,7 +1425,6 @@ startPropsHelper only props maybeTransform rendered =
                         RenderedProp
                             { id = onlyId
                             , name = onlyName
-                            , startPos = Pixels.inPixels state.position
                             , format = onlyFormat
                             , sections = []
                             , state = state
@@ -1291,196 +1487,198 @@ denormalize startTime targetTime startPosition targetPosition state =
 
 
 {-| -}
-toPropCurves2 : List Prop -> Timeline.Transition state (List Prop) (List RenderedProp)
-toPropCurves2 only =
-    \lookup prev target now startTime endTime future cursor ->
-        {-
-           1. always track `state`
-           2. only start to record sections if they're not done
-           3. If there are
+toPropCurves2 : Timeline.Transition state (List Prop) (List RenderedProp)
+toPropCurves2 lookup prev target now startTime endTime future cursor =
+    {-
+       1. always track `state`
+       2. only start to record sections if they're not done
+       3. If there are
 
 
-        -}
-        let
-            _ =
-                Debug.log "   TO PROPS"
-                    { prev = prev
-                    , now = now
-                    , target = target
-                    }
+    -}
+    let
+        _ =
+            Debug.log "   TO PROPS"
+                { prev = prev
+                , now = now
+                , target = target
+                }
 
-            targetTime =
-                Timeline.startTime target
+        targetTime =
+            Timeline.startTime target
 
-            --startTime =
-            --    Timeline.endTime prev
-            finished =
-                -- we only want to ignore this event if it's both finished
-                -- and not immediately preceding an event that is still upcoming
-                --case future of
-                --    [] ->
-                --        False
-                --
-                --    next :: _ ->
-                Time.thisAfterOrEqualThat now (Timeline.endTime target)
+        --startTime =
+        --    Timeline.endTime prev
+        finished =
+            -- we only want to ignore this event if it's both finished
+            -- and not immediately preceding an event that is still upcoming
+            --case future of
+            --    [] ->
+            --        False
+            --
+            --    next :: _ ->
+            Time.thisAfterOrEqualThat now (Timeline.endTime target)
 
-            --&& not (Time.thisBeforeThat now (Timeline.startTime next))
-        in
-        List.map
-            (\prop ->
-                case prop of
-                    RenderedColorProp details ->
-                        let
-                            previousColor =
-                                colorOrDefault details.name
-                                    Internal.Css.Props.transparent
-                                    (lookup (Timeline.getEvent prev))
+        --&& not (Time.thisBeforeThat now (Timeline.startTime next))
+    in
+    List.map
+        (\prop ->
+            case prop of
+                RenderedColorProp details ->
+                    let
+                        previousColor =
+                            colorOrDefault details.name
+                                Internal.Css.Props.transparent
+                                (lookup (Timeline.getEvent prev))
 
-                            newColor =
-                                colorOrDefault details.name
-                                    Internal.Css.Props.transparent
-                                    (lookup (Timeline.getEvent target))
-                        in
-                        RenderedColorProp
-                            { details
-                                | color = newColor
-                                , sections =
-                                    if finished then
-                                        details.sections
+                        newColor =
+                            colorOrDefault details.name
+                                Internal.Css.Props.transparent
+                                (lookup (Timeline.getEvent target))
+                    in
+                    RenderedColorProp
+                        { details
+                            | color = newColor
+                            , sections =
+                                if finished then
+                                    details.sections
 
-                                    else
-                                        { start = startTime
-                                        , duration =
-                                            Time.duration startTime targetTime
-                                        , steps =
-                                            [ { percent = 0
-                                              , color = previousColor
-                                              }
-                                            , { percent = 50
-                                              , color = Interpolate.color 0.5 previousColor newColor
-                                              }
-                                            , { percent = 100
-                                              , color = newColor
-                                              }
-                                            ]
-                                        }
-                                            :: details.sections
-                            }
+                                else
+                                    { start = startTime
+                                    , duration =
+                                        Time.duration startTime targetTime
+                                    , steps =
+                                        [ { percent = 0
+                                          , color = previousColor
+                                          }
+                                        , { percent = 50
+                                          , color = Interpolate.color 0.5 previousColor newColor
+                                          }
+                                        , { percent = 100
+                                          , color = newColor
+                                          }
+                                        ]
+                                    }
+                                        :: details.sections
+                        }
 
-                    RenderedProp rendered ->
-                        let
-                            targetProp : Move.Move Float
-                            targetProp =
-                                Timeline.getEvent target
-                                    |> lookup
-                                    |> stateOrDefault rendered.id
-                                        rendered.name
+                RenderedProp rendered ->
+                    let
+                        targetProp : Move.Move Float
+                        targetProp =
+                            Timeline.getEvent target
+                                |> lookup
+                                |> stateOrDefault rendered.id
+                                    rendered.name
 
-                            -- adjust the transition if necessary by taking into account
-                            -- the intro and exit velocity
-                            finalProp =
-                                targetProp
-                                    |> Move.withVelocities
-                                        (normalizeVelocity
-                                            startTime
-                                            targetTime
-                                            startPosition
-                                            targetPosition
-                                            rendered.state.velocity
-                                        )
-                                        -- If we do any transition smoothing
-                                        -- we'll need to normalize this velocity too
-                                        --Interpolate.velocityAtTarget lookupState target future
-                                        0
-
-                            progress =
-                                Time.progress startTime targetTime now
-
-                            newState =
-                                Move.atX progress finalProp
-                                    |> denormalize startTime
+                        -- adjust the transition if necessary by taking into account
+                        -- the intro and exit velocity
+                        finalProp =
+                            targetProp
+                                |> Move.withVelocities
+                                    (normalizeVelocity
+                                        startTime
                                         targetTime
                                         startPosition
                                         targetPosition
+                                        rendered.state.velocity
+                                    )
+                                    -- If we do any transition smoothing
+                                    -- we'll need to normalize this velocity too
+                                    --Interpolate.velocityAtTarget lookupState target future
+                                    0
 
-                            startPosition =
-                                Pixels.inPixels rendered.state.position
+                        progress =
+                            Time.progress startTime targetTime now
 
-                            targetPosition =
-                                case targetProp of
-                                    Move.Pos _ x _ ->
-                                        x
-                        in
-                        RenderedProp
-                            { id = rendered.id
-                            , name = rendered.name
-                            , format = rendered.format
-                            , startPos =
-                                -- startPos is the position at the beginning of the active animation
-                                --  So, we're tracking that as the end of any state we've completely passed
-                                if Time.thisAfterOrEqualThat now (Timeline.endTime target) then
-                                    Pixels.inPixels newState.position
+                        newState =
+                            Move.atX progress finalProp
+                                |> denormalize startTime
+                                    targetTime
+                                    startPosition
+                                    targetPosition
 
-                                else
-                                    rendered.startPos
-                            , sections =
-                                if finished then
-                                    rendered.sections
+                        startPosition =
+                            Pixels.inPixels rendered.state.position
 
-                                else
-                                    Move.sequences
-                                        startTime
-                                        targetTime
-                                        now
-                                        endTime
-                                        finalProp
-                                        rendered.sections
-                            , state =
-                                newState
-                            }
+                        targetPosition =
+                            case targetProp of
+                                Move.Pos _ x _ ->
+                                    x
+                    in
+                    RenderedProp
+                        { id = rendered.id
+                        , name = rendered.name
+                        , format = rendered.format
 
-                    CompoundProp details ->
-                        let
-                            new =
-                                lerpCurvesCompoundHelper2
-                                    details.states
-                                    lookup
-                                    prev
-                                    target
+                        -- , startPos =
+                        --     -- startPos is the position at the beginning of the active animation
+                        --     --  So, we're tracking that as the end of any state we've completely passed
+                        --     if Time.thisAfterOrEqualThat now (Timeline.endTime target) then
+                        --         Pixels.inPixels newState.position
+                        --     else
+                        --         rendered.startPos
+                        , sections =
+                            if finished then
+                                rendered.sections
+
+                            else
+                                Move.sequences
+                                    startTime
+                                    targetTime
                                     now
-                                    future
-                                    False
-                                    []
-                                    []
-                        in
-                        CompoundProp
-                            { slices =
-                                if finished then
-                                    details.slices
+                                    endTime
+                                    finalProp
+                                    rendered.sections
+                        , state =
+                            newState
+                        }
 
-                                else
-                                    let
-                                        newCompound =
-                                            { start = startTime
-                                            , period = once (Time.duration startTime targetTime)
-                                            , conflicting = new.conflicting
-                                            , frames = new.keyframes
-                                            }
-                                    in
-                                    case details.slices of
-                                        [] ->
-                                            [ newCompound ]
+                TransformProp details ->
+                    TransformProp details
 
-                                        last :: remain ->
-                                            if isCombineableCompoundSections newCompound last then
-                                                combineCompound newCompound last :: remain
+                CompoundProp details ->
+                    let
+                        new =
+                            lerpCurvesCompoundHelper2
+                                details.states
+                                lookup
+                                prev
+                                target
+                                now
+                                future
+                                False
+                                []
+                                []
+                    in
+                    CompoundProp
+                        { slices =
+                            if finished then
+                                details.slices
 
-                                            else
-                                                newCompound :: details.slices
-                            , states = new.states
-                            }
-            )
-            cursor
+                            else
+                                let
+                                    newCompound =
+                                        { start = startTime
+                                        , period = once (Time.duration startTime targetTime)
+                                        , conflicting = new.conflicting
+                                        , frames = new.keyframes
+                                        }
+                                in
+                                case details.slices of
+                                    [] ->
+                                        [ newCompound ]
+
+                                    last :: remain ->
+                                        if isCombineableCompoundSections newCompound last then
+                                            combineCompound newCompound last :: remain
+
+                                        else
+                                            newCompound :: details.slices
+                        , states = new.states
+                        }
+        )
+        cursor
 
 
 {-| -}
@@ -1581,6 +1779,33 @@ type RenderedProp
     = RenderedProp RenderedPropDetails
     | CompoundProp Compound
     | RenderedColorProp RenderedColorPropDetails
+    | TransformProp TransformPropDetails
+
+
+type alias TransformPropDetails =
+    { sections :
+        List
+            { delay : Duration.Duration
+            , sequence : Move.Sequence Transform
+            }
+    , state : TransformState
+    }
+
+
+type alias TransformState =
+    { x : Interpolate.State
+    , y : Interpolate.State
+    , scale : Interpolate.State
+    , rotation : Interpolate.State
+    }
+
+
+type alias Transform =
+    { x : Float
+    , y : Float
+    , scale : Float
+    , rotation : Float
+    }
 
 
 type alias RenderedColorPropDetails =
@@ -1605,7 +1830,6 @@ type alias RenderedPropDetails =
     { id : Id
     , name : String
     , format : Internal.Css.Props.Format
-    , startPos : Float
     , sections :
         List
             { delay : Duration.Duration
