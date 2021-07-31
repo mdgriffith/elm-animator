@@ -1,15 +1,15 @@
 module Internal.Move exposing
-    ( Move(..), to
+    ( Move(..), to, toWith
     , Sequence
     , Step, step, stepWith, set
     , sequences, goto, continuingSplines, continue
     , css
-    , atX, initialSequenceVelocity, lastPosOr, mapTransition, normalizeOver, toReal, withVelocities
+    , atX, floatToString, initialSequenceVelocity, lastPosOr, mapTransition, normalizeOver, toReal, withVelocities
     )
 
 {-|
 
-@docs Move, to
+@docs Move, to, toWith
 
 @docs Sequence
 @docs Step, step, stepWith, set
@@ -148,16 +148,16 @@ type alias State =
 
 addDelayToSequence :
     Duration.Duration
-    -> List (Sequence Float)
+    -> List (Sequence value)
     ->
         List
             { delay : Duration.Duration
-            , sequence : Sequence Float
+            , sequence : Sequence value
             }
     ->
         List
             { delay : Duration.Duration
-            , sequence : Sequence Float
+            , sequence : Sequence value
             }
 addDelayToSequence delay seqs captured =
     case seqs of
@@ -260,16 +260,16 @@ sequences :
     -> Time.Absolute
     -- stop time
     -> Time.Absolute
-    -> Move Float
+    -> Move value
     ->
         List
             { delay : Duration.Duration
-            , sequence : Sequence Float
+            , sequence : Sequence value
             }
     ->
         List
             { delay : Duration.Duration
-            , sequence : Sequence Float
+            , sequence : Sequence value
             }
 sequences startTime targetTime now stopTime movement existingSequence =
     let
@@ -441,11 +441,11 @@ sequences startTime targetTime now stopTime movement existingSequence =
 
 takeAfterSequenceList :
     Time.Duration
-    -> List (Sequence Float)
+    -> List (Sequence value)
     ->
         List
             { delay : Duration.Duration
-            , sequence : Sequence Float
+            , sequence : Sequence value
             }
 takeAfterSequenceList durationToNow seqs =
     case seqs of
@@ -996,7 +996,7 @@ initialSequenceVelocity seq =
                 |> Pixels.pixelsPerSecond
 
 
-keyframes : String -> Float -> (Float -> String) -> Sequence Float -> String -> String
+keyframes : String -> value -> (value -> String) -> Sequence value -> String -> String
 keyframes name startPos toString (Sequence _ dur steps) rendered =
     keyframeHelper name
         startPos
@@ -1009,11 +1009,11 @@ keyframes name startPos toString (Sequence _ dur steps) rendered =
 
 keyframeHelper :
     String
-    -> Float
-    -> (Float -> String)
+    -> value
+    -> (value -> String)
     -> Time.Duration
     -> Time.Duration
-    -> List (Step Float)
+    -> List (Step value)
     -> String
     -> String
 keyframeHelper name startPos toString sequenceDuration currentDur steps rendered =
@@ -1031,13 +1031,9 @@ keyframeHelper name startPos toString sequenceDuration currentDur steps rendered
 
                 domain =
                     { start =
-                        { x = 0
-                        , y = startPos
-                        }
+                        startPos
                     , end =
-                        { x = 100
-                        , y = val
-                        }
+                        val
                     }
 
                 startPercent =
@@ -1056,17 +1052,11 @@ keyframeHelper name startPos toString sequenceDuration currentDur steps rendered
             in
             rendered ++ frames ++ last
 
-        (Step dur transition val) :: (((Step nextdur nextTrans nextVal) :: future) as remaining) ->
+        (Step dur transition val) :: remaining ->
             let
                 domain =
-                    { start =
-                        { x = 0
-                        , y = startPos
-                        }
-                    , end =
-                        { x = 100
-                        , y = val
-                        }
+                    { start = startPos
+                    , end = val
                     }
 
                 nextCurrent =
@@ -1096,26 +1086,28 @@ keyframeHelper name startPos toString sequenceDuration currentDur steps rendered
                 (rendered ++ frames)
 
 
-hash : String -> Sequence Float -> String
-hash name (Sequence n dur steps) =
-    name ++ String.fromInt n ++ stepHash steps ""
+hash : String -> Sequence value -> (value -> String) -> String
+hash name (Sequence n dur steps) toString =
+    name ++ String.fromInt n ++ stepHash steps toString ""
 
 
-stepHash : List (Step Float) -> String -> String
-stepHash steps hashed =
+stepHash : List (Step value) -> (value -> String) -> String -> String
+stepHash steps toString hashed =
     case steps of
         [] ->
             hashed
 
         (Step dur trans v) :: remain ->
-            stepHash remain
+            stepHash
+                remain
+                toString
                 (hashed
                     ++ "--"
                     ++ hashDuration dur
                     ++ "-"
                     ++ Transition.hash trans
                     ++ "-"
-                    ++ floatToString v
+                    ++ toString v
                 )
 
 
@@ -1170,22 +1162,25 @@ lastPosOrHelper x steps =
 css :
     Time.Absolute
     -> Duration.Duration
-    -> Float
+    -> value
     -> String
-    -> (Float -> String)
-    -> Sequence Float
+    -> (value -> String)
+    -> (value -> String)
+    -> Sequence value
     ->
         { hash : String
         , animation : String
         , keyframes : String
         , props : List a
         }
-css now delay startPos name toString seq =
+css now delay startPos name toString toHashString seq =
     let
         animationName =
             -- we need to encode the current time in the animations name so the browser doesn't cache anything
             -- IM LOOKIN AT YOU, CHROME
-            hash (name ++ String.fromInt (round <| Time.inMilliseconds now)) seq
+            hash (name ++ String.fromInt (round <| Time.inMilliseconds now))
+                seq
+                toHashString
 
         n =
             case seq of

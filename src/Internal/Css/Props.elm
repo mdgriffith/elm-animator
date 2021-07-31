@@ -1,5 +1,5 @@
 module Internal.Css.Props exposing
-    ( Id, ids, hash, default
+    ( Id, ids, hash, default, defaultPosition
     , isTransformId
     , Format, format, float, int, px
     , roundFloat, floatToString
@@ -8,7 +8,7 @@ module Internal.Css.Props exposing
 
 {-|
 
-@docs Id, ids, hash, default
+@docs Id, ids, hash, default, defaultPosition
 
 @docs isTransformId
 
@@ -207,6 +207,33 @@ toStr id =
         _ ->
             \f ->
                 String.fromFloat f
+
+
+defaultPosition : Id -> Float
+defaultPosition id =
+    case id of
+        13 ->
+            -- opacity
+            1
+
+        3 ->
+            -- rotation
+            1
+
+        4 ->
+            -- scale
+            1
+
+        5 ->
+            -- scaley
+            1
+
+        6 ->
+            -- scalex
+            1
+
+        _ ->
+            0
 
 
 default : Id -> Interpolate.Movement

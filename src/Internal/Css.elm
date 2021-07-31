@@ -1033,8 +1033,116 @@ scalarHelper now renderedProps anim =
             -- handled by color renderer
             scalarHelper now remain anim
 
-        (TransformProp _) :: remain ->
-            scalarHelper now remain anim
+        (TransformProp details) :: remain ->
+            scalarHelper now
+                remain
+                (transformToCssHelper now
+                    (stateToTransform details.state)
+                    details
+                    (List.reverse details.sections)
+                    emptyAnim
+                    |> combine anim
+                )
+
+
+stateToTransform state =
+    { x =
+        Pixels.inPixels state.x.position
+    , y =
+        Pixels.inPixels state.y.position
+    , scale =
+        Pixels.inPixels state.scale.position
+    , rotation =
+        Pixels.inPixels state.rotation.position
+    }
+
+
+
+-- scalarHelper now remain anim
+
+
+renderTransformState state =
+    "translate("
+        ++ String.fromFloat (Pixels.inPixels state.x.position)
+        ++ ", "
+        ++ String.fromFloat (Pixels.inPixels state.y.position)
+        ++ ") rotate("
+        ++ String.fromFloat (Pixels.inPixels state.rotation.position)
+        ++ "turns)"
+        ++ " scale("
+        ++ String.fromFloat (Pixels.inPixels state.scale.position)
+        ++ ")"
+
+
+transformToCssHelper :
+    Time.Absolute
+    -> Transform
+    -> TransformPropDetails
+    ->
+        List
+            { delay : Duration.Duration
+            , sequence : Move.Sequence Transform
+            }
+    -> CssAnim
+    -> CssAnim
+transformToCssHelper now startPos details sections anim =
+    case sections of
+        [] ->
+            if isEmptyAnim anim then
+                { anim
+                    | props =
+                        ( "transform"
+                        , renderTransformState details.state
+                        )
+                            :: anim.props
+                }
+
+            else
+                anim
+
+        sequence :: remain ->
+            transformToCssHelper now
+                (Move.lastPosOr startPos sequence.sequence)
+                details
+                remain
+                (combine
+                    -- NOTE, this order is important!
+                    -- it affects the order of the animation statements in CSS
+                    -- If they are out of order they can cancel each other out in weird ways.
+                    (Move.css now
+                        sequence.delay
+                        startPos
+                        "transform"
+                        transformToString
+                        transformToHash
+                        sequence.sequence
+                    )
+                    anim
+                )
+
+
+transformToHash trans =
+    "t-"
+        ++ String.fromInt (round trans.x)
+        ++ "-"
+        ++ String.fromInt (round trans.y)
+        ++ "-"
+        ++ Move.floatToString trans.rotation
+        ++ "-"
+        ++ Move.floatToString trans.scale
+
+
+transformToString trans =
+    "translate("
+        ++ String.fromFloat trans.x
+        ++ ", "
+        ++ String.fromFloat trans.y
+        ++ ") rotate("
+        ++ String.fromFloat trans.rotation
+        ++ "turns)"
+        ++ " scale("
+        ++ String.fromFloat trans.scale
+        ++ ")"
 
 
 propToCssHelper :
@@ -1082,6 +1190,7 @@ propToCssHelper now startPos details sections anim =
                         startPos
                         details.name
                         (Internal.Css.Props.format details.format)
+                        Move.floatToString
                         sequence.sequence
                     )
                     anim
@@ -1497,15 +1606,17 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
 
     -}
     let
-        _ =
-            Debug.log "   TO PROPS"
-                { prev = prev
-                , now = now
-                , target = target
-                }
-
+        -- _ =
+        --     Debug.log "   TO PROPS"
+        --         { prev = prev
+        --         , now = now
+        --         , target = target
+        --         }
         targetTime =
             Timeline.startTime target
+
+        progress =
+            Time.progress startTime targetTime now
 
         --startTime =
         --    Timeline.endTime prev
@@ -1588,16 +1699,6 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                     --Interpolate.velocityAtTarget lookupState target future
                                     0
 
-                        progress =
-                            Time.progress startTime targetTime now
-
-                        newState =
-                            Move.atX progress finalProp
-                                |> denormalize startTime
-                                    targetTime
-                                    startPosition
-                                    targetPosition
-
                         startPosition =
                             Pixels.inPixels rendered.state.position
 
@@ -1610,14 +1711,6 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                         { id = rendered.id
                         , name = rendered.name
                         , format = rendered.format
-
-                        -- , startPos =
-                        --     -- startPos is the position at the beginning of the active animation
-                        --     --  So, we're tracking that as the end of any state we've completely passed
-                        --     if Time.thisAfterOrEqualThat now (Timeline.endTime target) then
-                        --         Pixels.inPixels newState.position
-                        --     else
-                        --         rendered.startPos
                         , sections =
                             if finished then
                                 rendered.sections
@@ -1631,11 +1724,95 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                     finalProp
                                     rendered.sections
                         , state =
-                            newState
+                            Move.atX progress finalProp
+                                |> denormalize startTime
+                                    targetTime
+                                    startPosition
+                                    targetPosition
                         }
 
                 TransformProp details ->
-                    TransformProp details
+                    -- for each prop
+                    --  calculate a new state
+                    --  calculate a new transition
+                    --     (for now), take the most "different" curve
+                    --  Compose a new `Move Transform` with the transition
+                    --
+                    let
+                        targetProps : List Prop
+                        targetProps =
+                            Timeline.getEvent target
+                                |> lookup
+
+                        commonTransition : Transition.Transition
+                        commonTransition =
+                            getCommonTransformTransition targetProps
+
+                        targets =
+                            { x =
+                                transformOrDefault Internal.Css.Props.ids.x
+                                    targetProps
+                            , y =
+                                transformOrDefault Internal.Css.Props.ids.y
+                                    targetProps
+                            , scale =
+                                transformOrDefault Internal.Css.Props.ids.scale
+                                    targetProps
+                            , rotation =
+                                transformOrDefault Internal.Css.Props.ids.rotation
+                                    targetProps
+                            }
+                    in
+                    TransformProp
+                        { sections =
+                            if finished then
+                                details.sections
+
+                            else
+                                Move.sequences
+                                    startTime
+                                    targetTime
+                                    now
+                                    endTime
+                                    (Move.toWith commonTransition
+                                        targets
+                                    )
+                                    details.sections
+                        , state =
+                            { x =
+                                Move.toWith commonTransition
+                                    targets.x
+                                    |> Move.atX progress
+                                    |> denormalize startTime
+                                        targetTime
+                                        (Pixels.inPixels details.state.x.position)
+                                        targets.x
+                            , y =
+                                Move.toWith commonTransition
+                                    targets.y
+                                    |> Move.atX progress
+                                    |> denormalize startTime
+                                        targetTime
+                                        (Pixels.inPixels details.state.y.position)
+                                        targets.y
+                            , scale =
+                                Move.toWith commonTransition
+                                    targets.scale
+                                    |> Move.atX progress
+                                    |> denormalize startTime
+                                        targetTime
+                                        (Pixels.inPixels details.state.scale.position)
+                                        targets.scale
+                            , rotation =
+                                Move.toWith commonTransition
+                                    targets.rotation
+                                    |> Move.atX progress
+                                    |> denormalize startTime
+                                        targetTime
+                                        (Pixels.inPixels details.state.rotation.position)
+                                        targets.rotation
+                            }
+                        }
 
                 CompoundProp details ->
                     let
@@ -1701,6 +1878,31 @@ stateOrDefaultByName targetName props =
 
             else
                 stateOrDefaultByName targetName remain
+
+
+getCommonTransformTransition : List Prop -> Transition.Transition
+getCommonTransformTransition props =
+    Transition.standard
+
+
+{-| -}
+transformOrDefault : Id -> List Prop -> Float
+transformOrDefault targetId props =
+    case props of
+        [] ->
+            Internal.Css.Props.defaultPosition targetId
+
+        (Prop id name move _) :: remain ->
+            if id - targetId == 0 then
+                case move of
+                    Move.Pos _ v _ ->
+                        v
+
+            else
+                transformOrDefault targetId remain
+
+        (ColorProp name movement clr) :: remain ->
+            transformOrDefault targetId remain
 
 
 {-| -}

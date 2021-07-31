@@ -52,7 +52,7 @@ What do we need from a transition?
     -> just render the keyframes directly
 
   - To a string hash
-    -> for rendeirng css stuff
+    -> for rendering css stuff
 
 Goals:
 
@@ -680,123 +680,112 @@ hash transition =
 
 
 {-| -}
-keyframes : Domain -> Float -> Float -> (Float -> String) -> Transition -> String
+keyframes : { start : value, end : value } -> Float -> Float -> (value -> String) -> Transition -> String
 keyframes domain startPercent endPercent toString transition =
     case transition of
         Transition spline ->
             let
                 normalized =
                     spline
-                        |> toDomain
-                            { start =
-                                { x = 0
-                                , y = domain.start.y
-                                }
-                            , end =
-                                { x = 1
-                                , y = domain.end.y
-                                }
-                            }
-                            0
-                            0
             in
             splineKeyframes startPercent
                 endPercent
+                domain.start
+                domain.end
                 toString
                 normalized
 
         -- ++ finalFrame toString normalized
         Trail trail ->
-            renderTrailKeyframes
-                startPercent
-                endPercent
-                domain
-                toString
-                trail
-                ""
+            -- renderTrailKeyframes
+            --     startPercent
+            --     endPercent
+            --     domain
+            --     toString
+            --     trail
+            --     ""
+            ""
 
         Wobble wob ->
-            let
-                params =
-                    Spring.select wob.wobble
-                        (Quantity.Quantity (domain.end.x - domain.start.x))
+            -- let
+            --     params =
+            --         Spring.select wob.wobble
+            --             (Quantity.Quantity (domain.end.x - domain.start.x))
+            --     trail =
+            --         Spring.segments params
+            --             { position = domain.start.y
+            --             -- intro velocity
+            --             , velocity = wob.introVelocity
+            --             }
+            --             domain.end.y
+            -- in
+            -- renderKeyframeList startPercent endPercent toString trail ""
+            ""
 
-                trail =
-                    Spring.segments params
-                        { position = domain.start.y
 
-                        -- intro velocity
-                        , velocity = wob.introVelocity
-                        }
-                        domain.end.y
-            in
-            renderKeyframeList startPercent endPercent toString trail ""
-
-
-splineKeyframes : Float -> Float -> (Float -> String) -> Bezier.Spline -> String
-splineKeyframes startPercent endPercent toString spline =
+splineKeyframes : Float -> Float -> value -> value -> (value -> String) -> Bezier.Spline -> String
+splineKeyframes startPercent endPercent start end toString spline =
     let
         total =
             endPercent - startPercent
+
+        percent =
+            ((Bezier.firstX spline * total) + startPercent)
+                |> floor
     in
-    String.fromFloat ((Bezier.firstX spline * total) + startPercent)
+    String.fromInt 0
         ++ "% {"
-        ++ (toString (Bezier.firstY spline) ++ ";")
+        ++ (toString start ++ ";")
         ++ ("animation-timing-function:" ++ Bezier.cssTimingString spline ++ ";")
         ++ "}"
 
 
-finalFrame : (Float -> String) -> Bezier.Spline -> String
-finalFrame toString spline =
-    "100% {" ++ (toString (Bezier.lastY spline) ++ ";}")
+finalFrame : value -> (value -> String) -> String
+finalFrame finalValue toString =
+    "100% {" ++ toString finalValue ++ ";}"
 
 
-renderKeyframeList : Float -> Float -> (Float -> String) -> List Bezier.Spline -> String -> String
-renderKeyframeList startPercent endPercent toString trail rendered =
-    case trail of
-        [] ->
-            rendered
 
-        spline :: [] ->
-            rendered
-                ++ splineKeyframes startPercent endPercent toString spline
-
-        -- ++ finalFrame toString spline
-        spline :: remain ->
-            renderKeyframeList
-                startPercent
-                endPercent
-                toString
-                remain
-                (splineKeyframes startPercent endPercent toString spline
-                    ++ rendered
-                )
-
-
-renderTrailKeyframes : Float -> Float -> Domain -> (Float -> String) -> List Bezier.Spline -> String -> String
-renderTrailKeyframes startPercent endPercent domain toString trail rendered =
-    case trail of
-        [] ->
-            rendered
-
-        spline :: [] ->
-            let
-                normalized =
-                    toDomain domain 0 0 spline
-            in
-            rendered
-                ++ splineKeyframes startPercent endPercent toString normalized
-
-        -- ++ finalFrame toString normalized
-        spline :: remain ->
-            renderTrailKeyframes startPercent
-                endPercent
-                domain
-                toString
-                remain
-                (splineKeyframes startPercent endPercent toString (toDomain domain 0 0 spline)
-                    ++ rendered
-                )
+-- renderKeyframeList : Float -> Float -> (Float -> String) -> List Bezier.Spline -> String -> String
+-- renderKeyframeList startPercent endPercent toString trail rendered =
+--     case trail of
+--         [] ->
+--             rendered
+--         spline :: [] ->
+--             rendered
+--                 ++ splineKeyframes startPercent endPercent toString spline
+--         -- ++ finalFrame toString spline
+--         spline :: remain ->
+--             renderKeyframeList
+--                 startPercent
+--                 endPercent
+--                 toString
+--                 remain
+--                 (splineKeyframes startPercent endPercent toString spline
+--                     ++ rendered
+--                 )
+-- renderTrailKeyframes : Float -> Float -> Domain -> (Float -> String) -> List Bezier.Spline -> String -> String
+-- renderTrailKeyframes startPercent endPercent domain toString trail rendered =
+--     case trail of
+--         [] ->
+--             rendered
+--         spline :: [] ->
+--             let
+--                 normalized =
+--                     toDomain domain 0 0 spline
+--             in
+--             rendered
+--                 ++ splineKeyframes startPercent endPercent toString normalized
+--         -- ++ finalFrame toString normalized
+--         spline :: remain ->
+--             renderTrailKeyframes startPercent
+--                 endPercent
+--                 domain
+--                 toString
+--                 remain
+--                 (splineKeyframes startPercent endPercent toString (toDomain domain 0 0 spline)
+--                     ++ rendered
+--                 )
 
 
 {-|

@@ -1230,8 +1230,6 @@ visitAll transitionOngoing toAnchor interp details prev events future state =
                     -- lerp to `next`
                     -- then start the next line
                     let
-                        -- _ =
-                        --     Debug.log "start one" ( prev, futureEvent )
                         lerped =
                             state
                                 -- this skips the very first transition
@@ -1400,8 +1398,8 @@ foldpAll2 lookup toStart transitionTo (Timeline timelineDetails) =
                         (Line lineStart firstEvent remain) :: _ ->
                             Occurring timelineDetails.initial lineStart lineStart
 
-                _ =
-                    Debug.log "      -----    start foldpAll2" timelineDetails.now
+                -- _ =
+                --     Debug.log "      -----    start foldpAll2" timelineDetails.now
             in
             visitAll2
                 lookup
@@ -1436,9 +1434,6 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                     -- the last line.
                     -- transition to futureEvent and then continue on through the remaining events in futureRemain
                     let
-                        _ =
-                            Debug.log "    LAST Line" futureEvent
-
                         new =
                             state
                                 |> transitionTo
@@ -1463,9 +1458,6 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                     if Time.thisBeforeThat nextStart (endTime futureEvent) then
                         -- we've been interrupted!
                         let
-                            _ =
-                                Debug.log "    NO QUEUE, INTERRUPTION!" futureEvent
-
                             new =
                                 state
                                     |> transitionTo
@@ -1497,9 +1489,6 @@ visitAll2 toAnchor transitionTo details prev queue future state =
 
                     else
                         let
-                            _ =
-                                Debug.log "    NO QUEUE, CONTINUING" futureEvent
-
                             new =
                                 state
                                     |> transitionTo
@@ -1524,9 +1513,6 @@ visitAll2 toAnchor transitionTo details prev queue future state =
             case future of
                 [] ->
                     let
-                        _ =
-                            Debug.log "    NO FUTURE, CONTINUING" top
-
                         new =
                             transitionTo toAnchor
                                 prev
@@ -1547,7 +1533,7 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                         new
 
                 (Line futureStart futureEvent futureRemain) :: restOfFuture ->
-                    if Debug.log "  A PROPER TRANSITION" <| Time.thisBeforeThat futureStart (endTime top) then
+                    if Time.thisBeforeThat futureStart (endTime top) then
                         -- enroute to `top`, we are interrupted
                         -- so we transition to top (stopping at the interruption point)
                         -- then make another transition from where we were interrupted to
