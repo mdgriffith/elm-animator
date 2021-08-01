@@ -166,8 +166,8 @@ addDelayToSequence delay seqs captured =
         seq :: remain ->
             addDelayToSequence (Time.expand delay (getSequenceDuration seq))
                 remain
-                ((seq |> withDelay delay)
-                    :: captured
+                (push (seq |> withDelay delay)
+                    captured
                 )
 
 
@@ -229,6 +229,47 @@ toReal start end t =
     start + (t * (end - start))
 
 
+{-| Adds a new sequence to the top of the sequence stack.
+
+If possible, will combine with the previous stack.
+
+Sequences are combineable when:
+
+1.  There is no delay between them (top delay == existing sequence duration)
+2.  They have the same repeat value
+
+-}
+push : Sequence value -> List (Sequence value) -> List (Sequence value)
+push ((Sequence topI topDelay topDuration topSteps) as top) stack =
+    case stack of
+        [] ->
+            top :: stack
+
+        (Sequence seqI seqDelay seqDuration steps) :: others ->
+            if topI - seqI == 0 && Quantity.equalWithin (Quantity.Quantity 0.1) topDelay seqDuration then
+                let
+                    transitionDuration =
+                        Time.expand seqDuration topDuration
+                in
+                Sequence seqI seqDelay transitionDuration (steps ++ topSteps) :: others
+
+            else
+                top :: stack
+
+
+append : List (Sequence value) -> List (Sequence value) -> List (Sequence value)
+append first stack =
+    case first of
+        [] ->
+            stack
+
+        [ top ] ->
+            push top stack
+
+        _ ->
+            first ++ stack
+
+
 {-| Will start providing Splines as soon as we pass `now`.
 
 We are not continuing to another state, so we will report all of our splines.
@@ -274,7 +315,7 @@ sequences startTime targetTime now stopTime movement existingSequence =
                             [ Step transitionDuration trans value
                             ]
                 in
-                seq :: existingSequence
+                push seq existingSequence
 
             Pos trans value [ Sequence 1 delay dur steps ] ->
                 let
@@ -293,8 +334,8 @@ sequences startTime targetTime now stopTime movement existingSequence =
                                 :: steps
                             )
                 in
-                transitionSequence
-                    :: existingSequence
+                push transitionSequence
+                    existingSequence
 
             Pos trans value dwell ->
                 let
@@ -308,9 +349,9 @@ sequences startTime targetTime now stopTime movement existingSequence =
                             [ Step transitionDuration trans value
                             ]
                 in
-                transitionSequence
-                    :: addDelayToSequence (Time.expand durationToNow transitionDuration) dwell []
-                    ++ existingSequence
+                existingSequence
+                    |> push transitionSequence
+                    |> append (addDelayToSequence (Time.expand durationToNow transitionDuration) dwell [])
 
     else if after startTime stopTime now movement then
         -- we've completely passed this state, no splines are returned
@@ -338,9 +379,11 @@ sequences startTime targetTime now stopTime movement existingSequence =
                         [ newSequence.base ]
 
                     Just following ->
-                        [ newSequence.base
-                        , following |> withDelay (getSequenceDuration newSequence.base)
-                        ]
+                        [ newSequence.base ]
+                            |> push
+                                (following
+                                    |> withDelay (getSequenceDuration newSequence.base)
+                                )
 
             Pos trans value [ Sequence 1 delay dur steps ] ->
                 let
@@ -361,9 +404,9 @@ sequences startTime targetTime now stopTime movement existingSequence =
                         ]
 
                     Just following ->
-                        [ new.base
-                        , following |> withDelay (getSequenceDuration new.base)
-                        ]
+                        [ new.base ]
+                            |> push
+                                (following |> withDelay (getSequenceDuration new.base))
 
             Pos trans value dwell ->
                 let
@@ -389,14 +432,16 @@ sequences startTime targetTime now stopTime movement existingSequence =
                                 delayToFollowing =
                                     getSequenceDuration new.base
                             in
-                            new.base
-                                :: (following |> withDelay delayToFollowing)
-                                :: addDelayToSequence
-                                    (Time.expand (getSequenceDuration following)
-                                        delayToFollowing
+                            [ new.base ]
+                                |> push (following |> withDelay delayToFollowing)
+                                |> append
+                                    (addDelayToSequence
+                                        (Time.expand (getSequenceDuration following)
+                                            delayToFollowing
+                                        )
+                                        dwell
+                                        []
                                     )
-                                    dwell
-                                    []
 
 
 takeAfterSequenceList :
@@ -888,24 +933,6 @@ zeroDuration =
 
 
 {- CSS KEYFRAMES -}
--- push : Sequence value -> List (Sequence value) -> List (Sequence value)
--- push top stack =
---     case top of
---         Sequence 1 topDelay topDuration topSteps ->
---             case stack of
---                 [] ->
---                     top :: stack
---                 (Sequence 1 seqDelay seqDuration steps) :: others ->
---                     let
---                         transitionDuration =
---                             topDuration
---                                 |> Time.expand seqDuration
---                     in
---                     Sequence 1 transitionDuration (steps ++ topSteps) :: others
---                 _ ->
---                     top :: stack
---         nonMergable ->
---             nonMergable :: stack
 
 
 mapTransition fn movement =
@@ -933,7 +960,7 @@ keyframes : String -> value -> (value -> String) -> Sequence value -> String -> 
 keyframes name startPos toString (Sequence _ _ dur steps) rendered =
     keyframeHelper name
         startPos
-        toString
+        (\v -> name ++ ":" ++ toString v)
         dur
         zeroDuration
         steps
@@ -956,11 +983,8 @@ keyframeHelper name startPos toString sequenceDuration currentDur steps rendered
 
         (Step dur transition val) :: [] ->
             let
-                toPropString v =
-                    name ++ ":" ++ toString v
-
                 last =
-                    "100% { " ++ (toPropString val ++ ";}")
+                    "100% { " ++ (toString val ++ ";}")
 
                 domain =
                     { start =
@@ -980,7 +1004,7 @@ keyframeHelper name startPos toString sequenceDuration currentDur steps rendered
                         domain
                         startPercent
                         endPercent
-                        toPropString
+                        toString
                         transition
             in
             rendered ++ frames ++ last
