@@ -3,7 +3,7 @@ module Internal.Transition exposing
     , linear, standard, wobble
     , initialVelocity, atX
     , split, before
-    , hash, keyframes, compoundKeyframes
+    , hash, keyframes
     , splines
     , atX2, isStandard, takeAfter, withVelocities
     )
@@ -18,7 +18,7 @@ module Internal.Transition exposing
 
 @docs split, before
 
-@docs hash, keyframes, compoundKeyframes
+@docs hash, keyframes
 
 @docs splines
 
@@ -713,8 +713,8 @@ keyframes : { start : value, end : value } -> Float -> Float -> (value -> String
 keyframes domain startPercent endPercent toString transition =
     case transition of
         Transition spline ->
-            splineKeyframes startPercent
-                endPercent
+            splineKeyframes
+                startPercent
                 domain.start
                 toString
                 spline
@@ -747,17 +747,9 @@ keyframes domain startPercent endPercent toString transition =
             ""
 
 
-splineKeyframes : Float -> Float -> value -> (value -> String) -> Bezier.Spline -> String
-splineKeyframes startPercent endPercent start toString spline =
-    let
-        total =
-            endPercent - startPercent
-
-        percent =
-            ((Bezier.firstX spline * total) + startPercent)
-                |> floor
-    in
-    String.fromInt 0
+splineKeyframes : Float -> value -> (value -> String) -> Bezier.Spline -> String
+splineKeyframes percent start toString spline =
+    String.fromInt (floor percent)
         ++ "% {"
         ++ toString start
         ++ ";animation-timing-function:"
