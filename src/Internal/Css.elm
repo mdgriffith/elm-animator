@@ -334,11 +334,7 @@ transformToCssHelper :
     Time.Absolute
     -> Transform
     -> TransformPropDetails
-    ->
-        List
-            { delay : Duration.Duration
-            , sequence : Move.Sequence Transform
-            }
+    -> List (Move.Sequence Transform)
     -> CssAnim
     -> CssAnim
 transformToCssHelper now startPos details sections anim =
@@ -358,7 +354,7 @@ transformToCssHelper now startPos details sections anim =
 
         sequence :: remain ->
             transformToCssHelper now
-                (Move.lastPosOr startPos sequence.sequence)
+                (Move.lastPosOr startPos sequence)
                 details
                 remain
                 (combine
@@ -366,12 +362,11 @@ transformToCssHelper now startPos details sections anim =
                     -- it affects the order of the animation statements in CSS
                     -- If they are out of order they can cancel each other out in weird ways.
                     (Move.css now
-                        sequence.delay
                         startPos
                         "transform"
                         transformToString
                         transformToHash
-                        sequence.sequence
+                        sequence
                     )
                     anim
                 )
@@ -434,11 +429,7 @@ colorToCssHelper :
     Time.Absolute
     -> Color.Color
     -> RenderedColorPropDetails
-    ->
-        List
-            { delay : Duration.Duration
-            , sequence : Move.Sequence Color.Color
-            }
+    -> List (Move.Sequence Color.Color)
     -> CssAnim
     -> CssAnim
 colorToCssHelper now startPos details sections anim =
@@ -458,7 +449,7 @@ colorToCssHelper now startPos details sections anim =
 
         sequence :: remain ->
             colorToCssHelper now
-                (Move.lastPosOr startPos sequence.sequence)
+                (Move.lastPosOr startPos sequence)
                 details
                 remain
                 (combine
@@ -466,12 +457,11 @@ colorToCssHelper now startPos details sections anim =
                     -- it affects the order of the animation statements in CSS
                     -- If they are out of order they can cancel each other out in weird ways.
                     (Move.css now
-                        sequence.delay
                         startPos
                         details.name
                         Color.toCssString
                         Internal.Css.Props.colorHash
-                        sequence.sequence
+                        sequence
                     )
                     anim
                 )
@@ -481,11 +471,7 @@ propToCssHelper :
     Time.Absolute
     -> Float
     -> RenderedPropDetails
-    ->
-        List
-            { delay : Duration.Duration
-            , sequence : Move.Sequence Float
-            }
+    -> List (Move.Sequence Float)
     -> CssAnim
     -> CssAnim
 propToCssHelper now startPos details sections anim =
@@ -510,7 +496,7 @@ propToCssHelper now startPos details sections anim =
 
         sequence :: remain ->
             propToCssHelper now
-                (Move.lastPosOr startPos sequence.sequence)
+                (Move.lastPosOr startPos sequence)
                 details
                 remain
                 (combine
@@ -518,12 +504,11 @@ propToCssHelper now startPos details sections anim =
                     -- it affects the order of the animation statements in CSS
                     -- If they are out of order they can cancel each other out in weird ways.
                     (Move.css now
-                        sequence.delay
                         startPos
                         details.name
                         (Internal.Css.Props.format details.format)
                         Move.floatToString
-                        sequence.sequence
+                        sequence
                     )
                     anim
                 )
@@ -837,9 +822,6 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                 targetProps
                                 Transition.standard
 
-                        _ =
-                            Debug.log "STATE" details.state
-
                         targets =
                             { x =
                                 transformOrDefault Internal.Css.Props.ids.x
@@ -854,38 +836,34 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                 transformOrDefault Internal.Css.Props.ids.rotation
                                     targetProps
                             }
-                                |> Debug.log "Targets"
 
                         fastestVelocity =
                             firstNonZero
-                                (Debug.log "vels"
-                                    [ normalizeVelocity
-                                        startTime
-                                        targetTime
-                                        (Pixels.inPixels details.state.x.position)
-                                        targets.x
-                                        details.state.x.velocity
-                                    , normalizeVelocity
-                                        startTime
-                                        targetTime
-                                        (Pixels.inPixels details.state.y.position)
-                                        targets.y
-                                        details.state.y.velocity
-                                    , normalizeVelocity
-                                        startTime
-                                        targetTime
-                                        (Pixels.inPixels details.state.rotation.position)
-                                        targets.rotation
-                                        details.state.rotation.velocity
-                                    , normalizeVelocity
-                                        startTime
-                                        targetTime
-                                        (Pixels.inPixels details.state.scale.position)
-                                        targets.scale
-                                        details.state.scale.velocity
-                                    ]
-                                )
-                                |> Debug.log "Largest velocity"
+                                [ normalizeVelocity
+                                    startTime
+                                    targetTime
+                                    (Pixels.inPixels details.state.x.position)
+                                    targets.x
+                                    details.state.x.velocity
+                                , normalizeVelocity
+                                    startTime
+                                    targetTime
+                                    (Pixels.inPixels details.state.y.position)
+                                    targets.y
+                                    details.state.y.velocity
+                                , normalizeVelocity
+                                    startTime
+                                    targetTime
+                                    (Pixels.inPixels details.state.rotation.position)
+                                    targets.rotation
+                                    details.state.rotation.velocity
+                                , normalizeVelocity
+                                    startTime
+                                    targetTime
+                                    (Pixels.inPixels details.state.scale.position)
+                                    targets.scale
+                                    details.state.scale.velocity
+                                ]
 
                         commonMovement =
                             Move.toWith commonTransition targets
@@ -1078,10 +1056,7 @@ type RenderedProp
 
 type alias TransformPropDetails =
     { sections :
-        List
-            { delay : Duration.Duration
-            , sequence : Move.Sequence Transform
-            }
+        List (Move.Sequence Transform)
     , state : TransformState
     }
 
@@ -1110,10 +1085,7 @@ type alias RenderedColorPropDetails =
     { name : String
     , color : Color.Color
     , sections :
-        List
-            { delay : Duration.Duration
-            , sequence : Move.Sequence Color.Color
-            }
+        List (Move.Sequence Color.Color)
     }
 
 
@@ -1122,10 +1094,7 @@ type alias RenderedPropDetails =
     , name : String
     , format : Internal.Css.Props.Format
     , sections :
-        List
-            { delay : Duration.Duration
-            , sequence : Move.Sequence Float
-            }
+        List (Move.Sequence Float)
     , state : Interpolate.State
     }
 
