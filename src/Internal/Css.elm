@@ -378,133 +378,8 @@ type alias Renderer =
 renderers : List Renderer
 renderers =
     [ transform
-    , colors
     , scalars
     ]
-
-
-colors : Renderer
-colors now renderedProps =
-    case renderedProps of
-        [] ->
-            Nothing
-
-        (RenderedColorProp details) :: remain ->
-            let
-                rendered =
-                    renderColorSection now details.name details.color details.sections emptyAnim
-            in
-            case colors now remain of
-                Nothing ->
-                    Just ( rendered, remain )
-
-                Just ( renderedColors, left ) ->
-                    Just
-                        ( combine renderedColors rendered
-                        , left
-                        )
-
-        _ ->
-            Nothing
-
-
-{-| -}
-renderColorSection : Time.Absolute -> String -> Color.Color -> List ColorSection -> CssAnim -> CssAnim
-renderColorSection now name backup sections anim =
-    case sections of
-        [] ->
-            if isEmptyAnim anim then
-                { anim | props = ( name, Color.toCssString backup ) :: anim.props }
-
-            else
-                anim
-
-        top :: remain ->
-            let
-                end =
-                    top.start
-                        |> Time.advanceBy top.duration
-            in
-            if Time.thisBeforeThat end now then
-                renderColorSection
-                    now
-                    name
-                    backup
-                    remain
-                    anim
-
-            else if Time.thisBeforeThat top.start now && Time.thisAfterThat end now then
-                case splitColorSection now top of
-                    ( before_, after ) ->
-                        renderColorSection
-                            now
-                            name
-                            backup
-                            remain
-                            (combine anim
-                                (renderColorSectionToCss now name after)
-                            )
-
-            else
-                renderColorSection
-                    now
-                    name
-                    backup
-                    remain
-                    (combine anim
-                        (renderColorSectionToCss now name top)
-                    )
-
-
-renderColorSectionToCss : Time.Absolute -> String -> ColorSection -> CssAnim
-renderColorSectionToCss now name section =
-    let
-        animationName =
-            name
-                ++ "-"
-                ++ multiColorHash section.steps ""
-
-        durationStr =
-            (Duration.inMilliseconds section.duration
-                |> round
-                |> String.fromInt
-            )
-                ++ "ms"
-
-        delay =
-            Time.duration now section.start
-                |> Duration.inMilliseconds
-                |> round
-                |> String.fromInt
-                |> (\s -> s ++ "ms")
-
-        n =
-            "1"
-
-        -- @keyframes duration | easing-function | delay |
-        --      iteration-count | direction | fill-mode | play-state | name */
-        -- animation: 3s ease-in 1s 2 reverse both paused slidein;
-        animation =
-            (durationStr ++ " ")
-                -- we specify an easing function here because it we have to
-                -- , but it is overridden by the one in keyframes
-                ++ "linear "
-                ++ delay
-                ++ " "
-                ++ n
-                ++ " normal forwards running "
-                ++ animationName
-
-        keyframes =
-            ("@keyframes " ++ animationName ++ " {\n")
-                ++ colorFrames name section.steps ""
-                ++ "\n}"
-    in
-    { hash = animationName
-    , animation = animation
-    , keyframes = keyframes
-    , props = []
-    }
 
 
 multiColorHash :
@@ -1029,9 +904,16 @@ scalarHelper now renderedProps anim =
             -- handled by transform renderer
             scalarHelper now remain anim
 
-        (RenderedColorProp _) :: remain ->
-            -- handled by color renderer
-            scalarHelper now remain anim
+        (RenderedColorProp details) :: remain ->
+            scalarHelper now
+                remain
+                (colorToCssHelper now
+                    details.color
+                    details
+                    (List.reverse details.sections)
+                    emptyAnim
+                    |> combine anim
+                )
 
         (TransformProp details) :: remain ->
             scalarHelper now
@@ -1043,35 +925,6 @@ scalarHelper now renderedProps anim =
                     emptyAnim
                     |> combine anim
                 )
-
-
-stateToTransform state =
-    { x =
-        Pixels.inPixels state.x.position
-    , y =
-        Pixels.inPixels state.y.position
-    , scale =
-        Pixels.inPixels state.scale.position
-    , rotation =
-        Pixels.inPixels state.rotation.position
-    }
-
-
-
--- scalarHelper now remain anim
-
-
-renderTransformState state =
-    "translate("
-        ++ String.fromFloat (Pixels.inPixels state.x.position)
-        ++ ", "
-        ++ String.fromFloat (Pixels.inPixels state.y.position)
-        ++ ") rotate("
-        ++ String.fromFloat (Pixels.inPixels state.rotation.position)
-        ++ "turns)"
-        ++ " scale("
-        ++ String.fromFloat (Pixels.inPixels state.scale.position)
-        ++ ")"
 
 
 transformToCssHelper :
@@ -1132,17 +985,93 @@ transformToHash trans =
         ++ Move.floatToString trans.scale
 
 
+stateToTransform state =
+    { x =
+        Pixels.inPixels state.x.position
+    , y =
+        Pixels.inPixels state.y.position
+    , scale =
+        Pixels.inPixels state.scale.position
+    , rotation =
+        Pixels.inPixels state.rotation.position
+    }
+
+
+
+-- scalarHelper now remain anim
+
+
+renderTransformState state =
+    "translate("
+        ++ String.fromFloat (Pixels.inPixels state.x.position)
+        ++ "px, "
+        ++ String.fromFloat (Pixels.inPixels state.y.position)
+        ++ "px) rotate("
+        ++ String.fromFloat (Pixels.inPixels state.rotation.position)
+        ++ "turn)"
+        ++ " scale("
+        ++ String.fromFloat (Pixels.inPixels state.scale.position)
+        ++ ")"
+
+
 transformToString trans =
     "translate("
         ++ String.fromFloat trans.x
-        ++ ", "
+        ++ "px, "
         ++ String.fromFloat trans.y
-        ++ ") rotate("
+        ++ "px) rotate("
         ++ String.fromFloat trans.rotation
-        ++ "turns)"
+        ++ "turn)"
         ++ " scale("
         ++ String.fromFloat trans.scale
         ++ ")"
+
+
+colorToCssHelper :
+    Time.Absolute
+    -> Color.Color
+    -> RenderedColorPropDetails
+    ->
+        List
+            { delay : Duration.Duration
+            , sequence : Move.Sequence Color.Color
+            }
+    -> CssAnim
+    -> CssAnim
+colorToCssHelper now startPos details sections anim =
+    case sections of
+        [] ->
+            if isEmptyAnim anim then
+                { anim
+                    | props =
+                        ( details.name
+                        , Color.toCssString details.color
+                        )
+                            :: anim.props
+                }
+
+            else
+                anim
+
+        sequence :: remain ->
+            colorToCssHelper now
+                (Move.lastPosOr startPos sequence.sequence)
+                details
+                remain
+                (combine
+                    -- NOTE, this order is important!
+                    -- it affects the order of the animation statements in CSS
+                    -- If they are out of order they can cancel each other out in weird ways.
+                    (Move.css now
+                        sequence.delay
+                        startPos
+                        details.name
+                        Color.toCssString
+                        Internal.Css.Props.colorHash
+                        sequence.sequence
+                    )
+                    anim
+                )
 
 
 propToCssHelper :
@@ -1642,35 +1571,46 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                 Internal.Css.Props.transparent
                                 (lookup (Timeline.getEvent prev))
 
-                        newColor =
+                        targetColor =
                             colorOrDefault details.name
                                 Internal.Css.Props.transparent
                                 (lookup (Timeline.getEvent target))
+
+                        halfTime =
+                            startTime
+                                |> Time.advanceBy
+                                    (Time.duration startTime endTime
+                                        |> Quantity.divideBy 2
+                                    )
                     in
                     RenderedColorProp
-                        { details
-                            | color = newColor
-                            , sections =
-                                if finished then
-                                    details.sections
+                        { name = details.name
+                        , sections =
+                            if finished then
+                                details.sections
 
-                                else
-                                    { start = startTime
-                                    , duration =
-                                        Time.duration startTime targetTime
-                                    , steps =
-                                        [ { percent = 0
-                                          , color = previousColor
-                                          }
-                                        , { percent = 50
-                                          , color = Interpolate.color 0.5 previousColor newColor
-                                          }
-                                        , { percent = 100
-                                          , color = newColor
-                                          }
-                                        ]
-                                    }
-                                        :: details.sections
+                            else
+                                details.sections
+                                    |> Move.sequences
+                                        startTime
+                                        halfTime
+                                        now
+                                        endTime
+                                        (Move.toWith Transition.linear
+                                            (Interpolate.color 0.5
+                                                previousColor
+                                                targetColor
+                                            )
+                                        )
+                                    |> Move.sequences
+                                        halfTime
+                                        targetTime
+                                        now
+                                        endTime
+                                        (Move.toWith Transition.linear targetColor)
+                        , color =
+                            -- This should likely be the `current` color instead
+                            targetColor
                         }
 
                 RenderedProp rendered ->
@@ -2013,17 +1953,10 @@ type alias Transform =
 type alias RenderedColorPropDetails =
     { name : String
     , color : Color.Color
-    , sections : List ColorSection
-    }
-
-
-type alias ColorSection =
-    { start : Time.Absolute
-    , duration : Time.Duration
-    , steps :
+    , sections :
         List
-            { percent : Int
-            , color : Color.Color
+            { delay : Duration.Duration
+            , sequence : Move.Sequence Color.Color
             }
     }
 
@@ -2092,37 +2025,6 @@ type alias Keyframe =
             , spline : Bezier.Spline
             }
     }
-
-
-splitColorSection : Time.Absolute -> ColorSection -> ( ColorSection, ColorSection )
-splitColorSection at colorSection =
-    let
-        end =
-            colorSection.start
-                |> Time.advanceBy colorSection.duration
-
-        atPercent =
-            round (Time.progress colorSection.start end at * 100)
-
-        before =
-            { start = colorSection.start
-            , duration = Time.duration colorSection.start at
-            , steps =
-                colorSection.steps
-                    |> renormalizeBefore atPercent
-            }
-
-        after =
-            { start = at
-            , duration = Time.duration at end
-            , steps =
-                colorSection.steps
-                    |> renormalizeAfter atPercent
-            }
-    in
-    ( before
-    , after
-    )
 
 
 {-| Taking a list of elements and slicing it so that it only contains frames before the checkpoint.

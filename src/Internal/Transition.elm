@@ -684,16 +684,11 @@ keyframes : { start : value, end : value } -> Float -> Float -> (value -> String
 keyframes domain startPercent endPercent toString transition =
     case transition of
         Transition spline ->
-            let
-                normalized =
-                    spline
-            in
             splineKeyframes startPercent
                 endPercent
                 domain.start
-                domain.end
                 toString
-                normalized
+                spline
 
         -- ++ finalFrame toString normalized
         Trail trail ->
@@ -723,8 +718,8 @@ keyframes domain startPercent endPercent toString transition =
             ""
 
 
-splineKeyframes : Float -> Float -> value -> value -> (value -> String) -> Bezier.Spline -> String
-splineKeyframes startPercent endPercent start end toString spline =
+splineKeyframes : Float -> Float -> value -> (value -> String) -> Bezier.Spline -> String
+splineKeyframes startPercent endPercent start toString spline =
     let
         total =
             endPercent - startPercent
@@ -735,9 +730,10 @@ splineKeyframes startPercent endPercent start end toString spline =
     in
     String.fromInt 0
         ++ "% {"
-        ++ (toString start ++ ";")
-        ++ ("animation-timing-function:" ++ Bezier.cssTimingString spline ++ ";")
-        ++ "}"
+        ++ toString start
+        ++ ";animation-timing-function:"
+        ++ Bezier.cssTimingString spline
+        ++ ";}"
 
 
 finalFrame : value -> (value -> String) -> String
