@@ -1,4 +1,4 @@
-module Internal.Bits exposing (Bits, store4, store4Float, value)
+module Internal.Bits exposing (Bits, has, init, off, on, store4, store4Float, value, zeroes)
 
 {-| Let's make storing values within a single Int a bit easier to do while not compromising performance.
 
@@ -32,16 +32,45 @@ type Offset
     = Offset
 
 
-flag : Int -> Bool -> Bits bits -> Bits bits
-flag offset on (Bits b) =
+
+-- flip : Int -> Bool -> Bits bits -> Bits bits
+-- flip offset on (Bits b) =
+--     b
+--         |> store offset 1 (bool on)
+--         |> Bits
+
+
+init : Bits bits
+init =
+    Bits zeroes
+
+
+has : Int -> Bits bits -> Bool
+has offset (Bits b) =
+    let
+        target =
+            zeroes |> store offset 1 ones
+    in
+    Bitwise.and target b - target == 0
+
+
+on : Int -> Bits bits -> Bits bits
+on offset (Bits b) =
     b
-        |> store offset 1 (bool on)
+        |> store offset 1 ones
+        |> Bits
+
+
+off : Int -> Bits bits -> Bits bits
+off offset (Bits b) =
+    b
+        |> store offset 1 zeroes
         |> Bits
 
 
 bool : Bool -> Int
-bool on =
-    if on then
+bool yes =
+    if yes then
         ones
 
     else

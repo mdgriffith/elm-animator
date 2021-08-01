@@ -6,6 +6,7 @@ import Color
 import Duration
 import Html.Attributes exposing (id)
 import Internal.Bezier as Bezier
+import Internal.Bits as Bits
 import Internal.Css.Props
 import Internal.Interpolate as Interpolate
 import Internal.Move as Move
@@ -57,17 +58,17 @@ type Prop
       -- they are only really necessary for `transforms`
       -- props defined by the user use the prop name for identity
       Prop Id String (Move.Move Float) Internal.Css.Props.Format
-    | ColorProp String (Move.Move Float) Color.Color
+    | ColorProp String (Move.Move Color.Color)
 
 
-applyToMovement : (Move.Move Float -> Move.Move Float) -> Prop -> Prop
-applyToMovement fn prop =
-    case prop of
-        Prop id name m format ->
-            Prop id name (fn m) format
 
-        ColorProp name movement clr ->
-            ColorProp name (fn movement) clr
+-- applyToMovement : (Move.Move value -> Move.Move value) -> Prop -> Prop
+-- applyToMovement fn prop =
+--     case prop of
+--         Prop id name m format ->
+--             Prop id name (fn m) format
+--         ColorProp name movement ->
+--             ColorProp name (fn movement)
 
 
 cssFromProps : Timeline.Timeline state -> (state -> List Prop) -> CssAnim
@@ -158,7 +159,7 @@ toInitialProps props (( maybeTransform, rendered ) as untouched) =
                     )
                 )
 
-        (ColorProp name movement color) :: remaining ->
+        (ColorProp name (Move.Pos _ color _)) :: remaining ->
             toInitialProps remaining
                 ( maybeTransform
                 , RenderedColorProp
@@ -247,7 +248,7 @@ addInitialProps props (( maybeTransform, rendered ) as untouched) =
             toInitialProps remaining
                 new
 
-        (ColorProp name movement color) :: remaining ->
+        (ColorProp name (Move.Pos _ color _)) :: remaining ->
             let
                 new =
                     if List.any (\renderedProp -> matchColor name renderedProp) rendered then
@@ -661,7 +662,11 @@ denormalize startTime targetTime startPosition targetPosition state =
                         , y = targetPosition - startPosition
                         }
         in
-        Pixels.pixelsPerSecond (scaled.y / scaled.x)
+        if scaled.x == 0 then
+            Pixels.pixelsPerSecond 0
+
+        else
+            Pixels.pixelsPerSecond (scaled.y / scaled.x)
     }
 
 
@@ -717,12 +722,12 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                 Internal.Css.Props.transparent
                                 (lookup (Timeline.getEvent target))
 
-                        halfTime =
-                            startTime
-                                |> Time.advanceBy
-                                    (Time.duration startTime endTime
-                                        |> Quantity.divideBy 2
-                                    )
+                        -- halfTime =
+                        --     startTime
+                        --         |> Time.advanceBy
+                        --             (Time.duration startTime endTime
+                        --                 |> Quantity.divideBy 2
+                        --             )
                     in
                     RenderedColorProp
                         { name = details.name
@@ -732,26 +737,28 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
 
                             else
                                 details.sections
+                                    --
+                                    -- |> Move.sequences
+                                    --     startTime
+                                    --     halfTime
+                                    --     now
+                                    --     endTime
+                                    --     (Move.toWith Transition.linear
+                                    -- (Interpolate.color 0.5
+                                    --     previousColor
+                                    --     targetColor
+                                    -- )
+                                    --     )
                                     |> Move.sequences
                                         startTime
-                                        halfTime
-                                        now
-                                        endTime
-                                        (Move.toWith Transition.linear
-                                            (Interpolate.color 0.5
-                                                previousColor
-                                                targetColor
-                                            )
-                                        )
-                                    |> Move.sequences
-                                        halfTime
                                         targetTime
                                         now
                                         endTime
                                         (Move.toWith Transition.linear targetColor)
                         , color =
-                            -- This should likely be the `current` color instead
-                            targetColor
+                            Interpolate.color progress
+                                previousColor
+                                targetColor
                         }
 
                 RenderedProp rendered ->
@@ -825,9 +832,13 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                             Timeline.getEvent target
                                 |> lookup
 
-                        commonTransition : Transition.Transition
                         commonTransition =
-                            getCommonTransformTransition targetProps
+                            getCommonTransformTransition
+                                targetProps
+                                Transition.standard
+
+                        _ =
+                            Debug.log "STATE" details.state
 
                         targets =
                             { x =
@@ -843,6 +854,46 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                 transformOrDefault Internal.Css.Props.ids.rotation
                                     targetProps
                             }
+                                |> Debug.log "Targets"
+
+                        fastestVelocity =
+                            firstNonZero
+                                (Debug.log "vels"
+                                    [ normalizeVelocity
+                                        startTime
+                                        targetTime
+                                        (Pixels.inPixels details.state.x.position)
+                                        targets.x
+                                        details.state.x.velocity
+                                    , normalizeVelocity
+                                        startTime
+                                        targetTime
+                                        (Pixels.inPixels details.state.y.position)
+                                        targets.y
+                                        details.state.y.velocity
+                                    , normalizeVelocity
+                                        startTime
+                                        targetTime
+                                        (Pixels.inPixels details.state.rotation.position)
+                                        targets.rotation
+                                        details.state.rotation.velocity
+                                    , normalizeVelocity
+                                        startTime
+                                        targetTime
+                                        (Pixels.inPixels details.state.scale.position)
+                                        targets.scale
+                                        details.state.scale.velocity
+                                    ]
+                                )
+                                |> Debug.log "Largest velocity"
+
+                        commonMovement =
+                            Move.toWith commonTransition targets
+                                |> Move.withVelocities fastestVelocity
+                                    -- If we do any transition smoothing
+                                    -- we'll need to normalize this velocity too
+                                    --Interpolate.velocityAtTarget lookupState target future
+                                    0
                     in
                     TransformProp
                         { sections =
@@ -855,9 +906,7 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                     targetTime
                                     now
                                     endTime
-                                    (Move.toWith commonTransition
-                                        targets
-                                    )
+                                    commonMovement
                                     details.sections
                         , state =
                             { x =
@@ -898,21 +947,35 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
         cursor
 
 
-getCommonTransformTransition : List Prop -> Transition.Transition
-getCommonTransformTransition props =
-    case props of
+firstNonZero : List Float -> Float
+firstNonZero list =
+    case list of
         [] ->
-            Transition.standard
+            0
 
-        (Prop _ _ (Move.Pos trans _ _) _) :: remain ->
-            if Transition.isStandard trans then
-                getCommonTransformTransition remain
+        top :: remain ->
+            if top /= 0 then
+                top
 
             else
-                trans
+                firstNonZero remain
 
-        (ColorProp _ (Move.Pos trans _ _) _) :: remain ->
-            getCommonTransformTransition remain
+
+getCommonTransformTransition : List Prop -> Transition.Transition -> Transition.Transition
+getCommonTransformTransition props currentTrans =
+    case props of
+        [] ->
+            currentTrans
+
+        (Prop id _ (Move.Pos trans _ _) _) :: remain ->
+            if Transition.isStandard trans then
+                getCommonTransformTransition remain currentTrans
+
+            else
+                getCommonTransformTransition remain trans
+
+        (ColorProp _ (Move.Pos trans _ _)) :: remain ->
+            getCommonTransformTransition remain trans
 
 
 {-| -}
@@ -931,7 +994,7 @@ transformOrDefault targetId props =
             else
                 transformOrDefault targetId remain
 
-        (ColorProp name movement clr) :: remain ->
+        (ColorProp name movement) :: remain ->
             transformOrDefault targetId remain
 
 
@@ -956,7 +1019,7 @@ stateOrDefault targetId targetName props =
             else
                 stateOrDefault targetId targetName remain
 
-        (ColorProp name movement clr) :: remain ->
+        (ColorProp name movement) :: remain ->
             stateOrDefault targetId targetName remain
 
 
@@ -970,7 +1033,7 @@ colorOrDefault targetName default props =
         (Prop id _ move _) :: remain ->
             colorOrDefault targetName default remain
 
-        (ColorProp name movement clr) :: remain ->
+        (ColorProp name (Move.Pos _ clr _)) :: remain ->
             if targetName == name then
                 clr
 
@@ -984,7 +1047,7 @@ matchForMovement onlyId onlyName props =
         [] ->
             Nothing
 
-        (ColorProp name move clr) :: remain ->
+        (ColorProp name move) :: remain ->
             matchForMovement onlyId onlyName remain
 
         ((Prop id name movement _) as top) :: remain ->
@@ -1037,6 +1100,10 @@ type alias Transform =
     , scale : Float
     , rotation : Float
     }
+
+
+type alias TransformPresence =
+    Bits.Bits Transform
 
 
 type alias RenderedColorPropDetails =

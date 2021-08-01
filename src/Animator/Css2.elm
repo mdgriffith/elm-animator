@@ -284,8 +284,7 @@ float name n =
 color : String -> Color.Color -> Property
 color name colorValue =
     Css.ColorProp name
-        (Move.to 1)
-        colorValue
+        (Move.to colorValue)
 
 
 {--}
