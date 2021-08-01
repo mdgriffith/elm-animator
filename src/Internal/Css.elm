@@ -76,12 +76,14 @@ cssFromProps timeline lookup =
     let
         present =
             getInitial timeline lookup
+                |> Debug.log "INITIAL"
 
         renderedProps =
             Timeline.foldpAll2 lookup
                 (\_ -> present)
                 toPropCurves2
                 timeline
+                |> Debug.log "RENDERED PROPS"
     in
     renderCss (Timeline.getCurrentTime timeline) renderers renderedProps
 
@@ -245,7 +247,7 @@ addInitialProps props (( maybeTransform, rendered ) as untouched) =
                             :: rendered
                         )
             in
-            toInitialProps remaining
+            addInitialProps remaining
                 new
 
         (ColorProp name (Move.Pos _ color _)) :: remaining ->
@@ -264,7 +266,7 @@ addInitialProps props (( maybeTransform, rendered ) as untouched) =
                             :: rendered
                         )
             in
-            toInitialProps remaining
+            addInitialProps remaining
                 new
 
 
