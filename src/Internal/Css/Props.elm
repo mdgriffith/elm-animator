@@ -18,6 +18,7 @@ module Internal.Css.Props exposing
 
 -}
 
+import Bitwise
 import Color
 import Internal.Interpolate as Interpolate
 import Internal.Move as Move
@@ -218,7 +219,7 @@ defaultPosition id =
 
         3 ->
             -- rotation
-            1
+            0
 
         4 ->
             -- scale
@@ -257,7 +258,25 @@ colorHash color =
         rgba =
             Color.toRgba color
     in
-    (String.fromInt (round (rgba.red * 255)) ++ "-")
-        ++ (String.fromInt (round (rgba.green * 255)) ++ "-")
-        ++ (String.fromInt (round (rgba.blue * 255)) ++ "-")
-        ++ (String.fromInt (round (rgba.alpha * 255)) ++ "-")
+    String.fromInt (encode4 rgba.red rgba.green rgba.blue rgba.alpha)
+
+
+encode4 : Float -> Float -> Float -> Float -> Int
+encode4 one two three four =
+    Bitwise.and top8 (round (one * 255))
+        |> Bitwise.or
+            (Bitwise.shiftLeftBy 8 (Bitwise.and top8 (round (two * 255))))
+        |> Bitwise.or
+            (Bitwise.shiftLeftBy 16 (Bitwise.and top8 (round (three * 255))))
+        |> Bitwise.or
+            (Bitwise.shiftLeftBy 24 (Bitwise.and top8 (round (four * 255))))
+
+
+top8 : Int
+top8 =
+    Bitwise.shiftRightZfBy (32 - 8) ones
+
+
+ones : Int
+ones =
+    Bitwise.complement 0
