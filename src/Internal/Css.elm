@@ -70,59 +70,6 @@ applyToMovement fn prop =
             ColorProp name (fn movement) clr
 
 
-add :
-    List Prop
-    -> List Prop
-    -> Set String
-    -> Set Id
-    ->
-        { props : List Prop
-        , cache :
-            { name : Set String
-            , id : Set Id
-            }
-        }
-add new existingProps names ids =
-    case new of
-        [] ->
-            { props = existingProps
-            , cache =
-                { name = names
-                , id = ids
-                }
-            }
-
-        ((Prop id name _ _) as prop) :: remain ->
-            if (id - Internal.Css.Props.noId) == 0 then
-                if Set.member name names then
-                    add remain existingProps names ids
-
-                else
-                    add remain
-                        (prop :: existingProps)
-                        (Set.insert name names)
-                        ids
-
-            else if Set.member id ids then
-                add remain existingProps names ids
-
-            else
-                add remain
-                    (prop :: existingProps)
-                    names
-                    (Set.insert id ids)
-
-        ((ColorProp name movement clr) as prop) :: remain ->
-            if Set.member name names then
-                add remain existingProps names ids
-
-            else
-                add remain
-                    (prop :: existingProps)
-                    (Set.insert name names)
-                    ids
-
-
 cssFromProps : Timeline.Timeline state -> (state -> List Prop) -> CssAnim
 cssFromProps timeline lookup =
     let
@@ -953,7 +900,19 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
 
 getCommonTransformTransition : List Prop -> Transition.Transition
 getCommonTransformTransition props =
-    Transition.standard
+    case props of
+        [] ->
+            Transition.standard
+
+        (Prop _ _ (Move.Pos trans _ _) _) :: remain ->
+            if Transition.isStandard trans then
+                getCommonTransformTransition remain
+
+            else
+                trans
+
+        (ColorProp _ (Move.Pos trans _ _) _) :: remain ->
+            getCommonTransformTransition remain
 
 
 {-| -}

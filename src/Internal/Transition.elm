@@ -5,7 +5,7 @@ module Internal.Transition exposing
     , split, before
     , hash, keyframes, compoundKeyframes
     , splines
-    , atX2, takeAfter, withVelocities
+    , atX2, isStandard, takeAfter, withVelocities
     )
 
 {-|
@@ -152,6 +152,35 @@ linear =
             { x = 1
             , y = 1
             }
+
+
+isStandard : Transition -> Bool
+isStandard trans =
+    case trans of
+        Transition (Bezier.Spline one two three four) ->
+            (one
+                == { x = 0
+                   , y = 0
+                   }
+            )
+                && (two
+                        == { x = 0.4
+                           , y = 0
+                           }
+                   )
+                && (three
+                        == { x = 0.2
+                           , y = 1
+                           }
+                   )
+                && (four
+                        == { x = 1
+                           , y = 1
+                           }
+                   )
+
+        _ ->
+            False
 
 
 type alias TimeDomain =
