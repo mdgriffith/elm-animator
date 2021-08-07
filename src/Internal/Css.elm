@@ -85,7 +85,7 @@ cssFromProps timeline lookup =
                 timeline
                 |> Debug.log "RENDERED PROPS"
     in
-    renderCss (Timeline.getCurrentTime timeline) renderers renderedProps
+    props2Css (Timeline.getCurrentTime timeline) renderedProps emptyAnim
 
 
 getInitial : Timeline.Timeline event -> (event -> List Prop) -> List RenderedProp
@@ -270,36 +270,14 @@ addInitialProps props (( maybeTransform, rendered ) as untouched) =
                 new
 
 
-{-| RenderdProp's are required to be ordered!
--}
-type alias Renderer =
-    Time.Absolute -> List RenderedProp -> Maybe ( CssAnim, List RenderedProp )
-
-
-renderers : List Renderer
-renderers =
-    [ scalars
-    ]
-
-
-scalars : Renderer
-scalars now renderedProps =
+props2Css : Time.Absolute -> List RenderedProp -> CssAnim -> CssAnim
+props2Css now renderedProps anim =
     case renderedProps of
         [] ->
-            Nothing
-
-        top :: remain ->
-            Just (scalarHelper now renderedProps emptyAnim)
-
-
-scalarHelper : Time.Absolute -> List RenderedProp -> CssAnim -> ( CssAnim, List RenderedProp )
-scalarHelper now renderedProps anim =
-    case renderedProps of
-        [] ->
-            ( anim, [] )
+            anim
 
         (RenderedProp details) :: remain ->
-            scalarHelper now
+            props2Css now
                 remain
                 (propToCssHelper now
                     (Pixels.inPixels details.state.position)
@@ -310,7 +288,7 @@ scalarHelper now renderedProps anim =
                 )
 
         (RenderedColorProp details) :: remain ->
-            scalarHelper now
+            props2Css now
                 remain
                 (colorToCssHelper now
                     details.color
@@ -321,7 +299,7 @@ scalarHelper now renderedProps anim =
                 )
 
         (TransformProp details) :: remain ->
-            scalarHelper now
+            props2Css now
                 remain
                 (transformToCssHelper now
                     (stateToTransform details.state)
@@ -395,10 +373,6 @@ stateToTransform state =
     , rotation =
         Pixels.inPixels state.rotation.position
     }
-
-
-
--- scalarHelper now remain anim
 
 
 renderTransformState state =
@@ -531,30 +505,6 @@ splineListHash splines str =
             splineListHash remain (str ++ Bezier.hash top)
 
 
-{-| Colors ->
-r,g,b,a -> Quad
-
-    We need either rgb, or rgba
-
-Opacity ->
-Single
-
-Transform ->
-Normally:
-x,y,rotation,scale
-
-    Sometimes:
-    x,y,z,rotation,scaleX,scaleY,scaleZ,facingX,facingY,facingZ
-
--}
-renderCss : Time.Absolute -> List Renderer -> List RenderedProp -> CssAnim
-renderCss now renderFns props =
-    renderCssHelper now
-        renderFns
-        props
-        emptyAnim
-
-
 isEmptyAnim : { css | keyframes : String } -> Bool
 isEmptyAnim anim =
     case anim.keyframes of
@@ -572,32 +522,6 @@ emptyAnim =
     , keyframes = ""
     , props = []
     }
-
-
-renderCssHelper : Time.Absolute -> List Renderer -> List RenderedProp -> CssAnim -> CssAnim
-renderCssHelper now renderer props cssAnim =
-    case renderer of
-        [] ->
-            cssAnim
-
-        render :: remain ->
-            case props of
-                [] ->
-                    cssAnim
-
-                _ ->
-                    case render now props of
-                        Nothing ->
-                            renderCssHelper now
-                                remain
-                                props
-                                cssAnim
-
-                        Just ( newCss, newProps ) ->
-                            renderCssHelper now
-                                remain
-                                newProps
-                                (combine newCss cssAnim)
 
 
 normalizeVelocity :
@@ -708,13 +632,6 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                             colorOrDefault details.name
                                 Internal.Css.Props.transparent
                                 (lookup (Timeline.getEvent target))
-
-                        -- halfTime =
-                        --     startTime
-                        --         |> Time.advanceBy
-                        --             (Time.duration startTime endTime
-                        --                 |> Quantity.divideBy 2
-                        --             )
                     in
                     RenderedColorProp
                         { name = details.name
@@ -724,18 +641,6 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
 
                             else
                                 details.sections
-                                    --
-                                    -- |> Move.sequences
-                                    --     startTime
-                                    --     halfTime
-                                    --     now
-                                    --     endTime
-                                    --     (Move.toWith Transition.linear
-                                    -- (Interpolate.color 0.5
-                                    --     previousColor
-                                    --     targetColor
-                                    -- )
-                                    --     )
                                     |> Move.sequences
                                         startTime
                                         targetTime
@@ -744,7 +649,7 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                         (Move.toWith Transition.linear targetColor)
                         , color =
                             Interpolate.color progress
-                                previousColor
+                                details.color
                                 targetColor
                         }
 
