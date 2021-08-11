@@ -1,4 +1,9 @@
-module Internal.Css exposing (..)
+module Internal.Css exposing
+    ( Prop(..)
+    , RenderedProp(..)
+    , cssFromProps
+    , propsToRenderedProps
+    )
 
 {-| -}
 
@@ -71,19 +76,29 @@ type Prop
 --             ColorProp name (fn movement)
 
 
+propsToRenderedProps : Timeline.Timeline state -> (state -> List Prop) -> List RenderedProp
+propsToRenderedProps timeline lookup =
+    let
+        present =
+            getInitial timeline lookup
+    in
+    Timeline.foldpAll2 lookup
+        (\_ -> present)
+        toPropCurves2
+        timeline
+
+
 cssFromProps : Timeline.Timeline state -> (state -> List Prop) -> CssAnim
 cssFromProps timeline lookup =
     let
         present =
             getInitial timeline lookup
-                |> Debug.log "INITIAL"
 
         renderedProps =
             Timeline.foldpAll2 lookup
                 (\_ -> present)
                 toPropCurves2
                 timeline
-                |> Debug.log "RENDERED PROPS"
     in
     props2Css (Timeline.getCurrentTime timeline) renderedProps emptyAnim
 
@@ -352,6 +367,7 @@ transformToCssHelper now startPos details sections anim =
                 )
 
 
+transformToHash : { a | x : Float, y : Float, rotation : Float, scale : Float } -> String
 transformToHash trans =
     "t-"
         ++ String.fromInt (round trans.x)
@@ -375,6 +391,14 @@ stateToTransform state =
     }
 
 
+renderTransformState :
+    { a
+        | x : { b | position : Quantity.Quantity Float Pixels.Pixels }
+        , y : { c | position : Quantity.Quantity Float Pixels.Pixels }
+        , rotation : { d | position : Quantity.Quantity Float Pixels.Pixels }
+        , scale : { e | position : Quantity.Quantity Float Pixels.Pixels }
+    }
+    -> String
 renderTransformState state =
     "translate("
         ++ String.fromFloat (Pixels.inPixels state.x.position)
@@ -584,13 +608,6 @@ denormalize startTime targetTime startPosition targetPosition state =
 {-| -}
 toPropCurves2 : Timeline.Transition state (List Prop) (List RenderedProp)
 toPropCurves2 lookup prev target now startTime endTime future cursor =
-    {-
-       1. always track `state`
-       2. only start to record sections if they're not done
-       3. If there are
-
-
-    -}
     let
         -- _ =
         --     Debug.log "   TO PROPS"
@@ -623,11 +640,6 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
             case prop of
                 RenderedColorProp details ->
                     let
-                        previousColor =
-                            colorOrDefault details.name
-                                Internal.Css.Props.transparent
-                                (lookup (Timeline.getEvent prev))
-
                         targetColor =
                             colorOrDefault details.name
                                 Internal.Css.Props.transparent
@@ -662,22 +674,28 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                 |> stateOrDefault rendered.id
                                     rendered.name
 
-                        -- adjust the transition if necessary by taking into account
-                        -- the intro and exit velocity
                         finalProp =
-                            targetProp
-                                |> Move.withVelocities
-                                    (normalizeVelocity
-                                        startTime
-                                        targetTime
-                                        startPosition
-                                        targetPosition
-                                        rendered.state.velocity
-                                    )
-                                    -- If we do any transition smoothing
-                                    -- we'll need to normalize this velocity too
-                                    --Interpolate.velocityAtTarget lookupState target future
-                                    0
+                            -- this is the check for being a transition
+                            if not (Time.equal (Timeline.endTime prev) startTime) then
+                                -- adjust the transition by taking into account
+                                -- the intro and exit velocity
+                                -- but only if this is an interruption
+                                targetProp
+                                    |> Move.withVelocities
+                                        (normalizeVelocity
+                                            startTime
+                                            targetTime
+                                            startPosition
+                                            targetPosition
+                                            rendered.state.velocity
+                                        )
+                                        -- If we do any transition smoothing
+                                        -- we'll need to normalize this velocity too
+                                        --Interpolate.velocityAtTarget lookupState target future
+                                        0
+
+                            else
+                                targetProp
 
                         startPosition =
                             Pixels.inPixels rendered.state.position
@@ -744,41 +762,47 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                     targetProps
                             }
 
-                        fastestVelocity =
-                            firstNonZero
-                                [ normalizeVelocity
-                                    startTime
-                                    targetTime
-                                    (Pixels.inPixels details.state.x.position)
-                                    targets.x
-                                    details.state.x.velocity
-                                , normalizeVelocity
-                                    startTime
-                                    targetTime
-                                    (Pixels.inPixels details.state.y.position)
-                                    targets.y
-                                    details.state.y.velocity
-                                , normalizeVelocity
-                                    startTime
-                                    targetTime
-                                    (Pixels.inPixels details.state.rotation.position)
-                                    targets.rotation
-                                    details.state.rotation.velocity
-                                , normalizeVelocity
-                                    startTime
-                                    targetTime
-                                    (Pixels.inPixels details.state.scale.position)
-                                    targets.scale
-                                    details.state.scale.velocity
-                                ]
-
                         commonMovement =
-                            Move.toWith commonTransition targets
-                                |> Move.withVelocities fastestVelocity
-                                    -- If we do any transition smoothing
-                                    -- we'll need to normalize this velocity too
-                                    --Interpolate.velocityAtTarget lookupState target future
-                                    0
+                            if not (Time.equal (Timeline.endTime prev) startTime) then
+                                -- this is a transition, we want to adjust the curve so it matches the transition
+                                let
+                                    fastestVelocity =
+                                        firstNonZero
+                                            [ normalizeVelocity
+                                                startTime
+                                                targetTime
+                                                (Pixels.inPixels details.state.x.position)
+                                                targets.x
+                                                details.state.x.velocity
+                                            , normalizeVelocity
+                                                startTime
+                                                targetTime
+                                                (Pixels.inPixels details.state.y.position)
+                                                targets.y
+                                                details.state.y.velocity
+                                            , normalizeVelocity
+                                                startTime
+                                                targetTime
+                                                (Pixels.inPixels details.state.rotation.position)
+                                                targets.rotation
+                                                details.state.rotation.velocity
+                                            , normalizeVelocity
+                                                startTime
+                                                targetTime
+                                                (Pixels.inPixels details.state.scale.position)
+                                                targets.scale
+                                                details.state.scale.velocity
+                                            ]
+                                in
+                                Move.toWith commonTransition targets
+                                    |> Move.withVelocities fastestVelocity
+                                        -- If we do any transition smoothing
+                                        -- we'll need to normalize this velocity too
+                                        --Interpolate.velocityAtTarget lookupState target future
+                                        0
+
+                            else
+                                Move.toWith commonTransition targets
                     in
                     TransformProp
                         { sections =
@@ -961,6 +985,24 @@ type RenderedProp
     | TransformProp TransformPropDetails
 
 
+type alias RenderedPropDetails =
+    { id : Id
+    , name : String
+    , format : Internal.Css.Props.Format
+    , sections :
+        List (Move.Sequence Float)
+    , state : Interpolate.State
+    }
+
+
+type alias RenderedColorPropDetails =
+    { name : String
+    , color : Color.Color
+    , sections :
+        List (Move.Sequence Color.Color)
+    }
+
+
 type alias TransformPropDetails =
     { sections :
         List (Move.Sequence Transform)
@@ -986,24 +1028,6 @@ type alias Transform =
 
 type alias TransformPresence =
     Bits.Bits Transform
-
-
-type alias RenderedColorPropDetails =
-    { name : String
-    , color : Color.Color
-    , sections :
-        List (Move.Sequence Color.Color)
-    }
-
-
-type alias RenderedPropDetails =
-    { id : Id
-    , name : String
-    , format : Internal.Css.Props.Format
-    , sections :
-        List (Move.Sequence Float)
-    , state : Interpolate.State
-    }
 
 
 {-| Slightly different than CssAnim in that we can also have style properties
