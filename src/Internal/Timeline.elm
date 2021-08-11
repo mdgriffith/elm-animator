@@ -1543,8 +1543,20 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                             --    Debug.log "    INTERRUPTED" futureEvent
                             new =
                                 state
-                                    |> transitionTo toAnchor prev top details.now (endTime prev) futureStart remain
-                                    |> transitionTo toAnchor prev futureEvent details.now futureStart (endTime futureEvent) futureRemain
+                                    |> transitionTo toAnchor
+                                        prev
+                                        top
+                                        details.now
+                                        (endTime prev)
+                                        futureStart
+                                        remain
+                                    |> transitionTo toAnchor
+                                        prev
+                                        futureEvent
+                                        details.now
+                                        futureStart
+                                        (endTime futureEvent)
+                                        futureRemain
                         in
                         visitAll2
                             toAnchor
