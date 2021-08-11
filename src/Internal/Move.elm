@@ -328,7 +328,7 @@ sequences startTime targetTime now stopTime movement existingSequence =
 
                     transitionSequence =
                         Sequence 1
-                            durationToNow
+                            (Time.expand durationToNow delay)
                             transitionDuration
                             (Step stepDuration trans value
                                 :: steps
@@ -535,6 +535,11 @@ takeAfter durationToNow ((Sequence n delay duration steps) as seq) =
         , following = Nothing
         }
 
+    else if durationToNow |> Quantity.lessThanOrEqualTo delay then
+        { base = Sequence n (delay |> Quantity.minus durationToNow) duration steps
+        , following = Nothing
+        }
+
     else
         let
             durationToNowMs =
@@ -561,7 +566,7 @@ takeAfter durationToNow ((Sequence n delay duration steps) as seq) =
         in
         { base =
             Sequence 1
-                delay
+                Quantity.zero
                 remainingDuration
                 (takeStepsAfter durationOfUnrolledSeq steps)
         , following =
@@ -571,13 +576,17 @@ takeAfter durationToNow ((Sequence n delay duration steps) as seq) =
             else
                 Just
                     (Sequence (newN - 1)
-                        Quantity.zero
+                        remainingDuration
                         duration
                         steps
                     )
         }
 
 
+takeStepsAfter :
+    Time.Duration
+    -> List (Step value)
+    -> List (Step value)
 takeStepsAfter durationToNow steps =
     case steps of
         [] ->
