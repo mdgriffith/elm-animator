@@ -891,11 +891,16 @@ takeAfter t transition =
                 ( _, afterT ) =
                     Bezier.splitAtX t spline
             in
-            Transition afterT
+            Transition (Bezier.normalize afterT)
 
         Trail trail ->
             -- split an existing spline
-            Trail (Bezier.takeAfter t trail)
+            case Bezier.takeAfter t trail of
+                [] ->
+                    Trail []
+
+                top :: remain ->
+                    Trail (Bezier.normalize top :: remain)
 
         Wobble wob ->
             -- convert to splines and store s `Trail`
