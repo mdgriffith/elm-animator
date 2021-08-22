@@ -3,8 +3,8 @@ module Internal.Move exposing
     , Sequence
     , Step, step, stepWith, set
     , sequences, goto, continue
-    , css
-    , atX, floatToString, initialSequenceVelocity, lastPosOr, mapTransition, normalizeOver, toReal, withVelocities
+    , css, addSequence
+    , atX, floatToString, initialSequenceVelocity, lastPosOr, normalizeOver, toReal, withDelay, withVelocities, withWobble
     )
 
 {-|
@@ -54,7 +54,7 @@ module Internal.Move exposing
             -> Move Float
                 State
 
-@docs css
+@docs css, addSequence
 
 -}
 
@@ -70,6 +70,19 @@ import Quantity
 {-| -}
 type Move value
     = Pos Transition.Transition value (List (Sequence value))
+
+
+withDelay : Duration.Duration -> Move value -> Move value
+withDelay dur (Pos trans value sequence) =
+    Pos trans value sequence
+
+
+withWobble : Float -> Move value -> Move value
+withWobble wob (Pos trans value sequence) =
+    Pos
+        (Transition.wobble wob)
+        value
+        sequence
 
 
 {-| A sequence is something that can be easily
@@ -108,13 +121,18 @@ toWith t v =
     Pos t v []
 
 
+addSequence : Int -> Duration.Duration -> List (Step value) -> Move value -> Move value
+addSequence n dur steps (Pos transition value seq) =
+    Pos transition value (seq ++ [ Sequence n Time.zeroDuration dur steps ])
+
+
 getSequenceDuration : Sequence value -> Duration.Duration
 getSequenceDuration (Sequence i delay dur steps) =
     dur
 
 
-withDelay : Duration.Duration -> Sequence value -> Sequence value
-withDelay delay (Sequence i _ dur steps) =
+withSequenceDelay : Duration.Duration -> Sequence value -> Sequence value
+withSequenceDelay delay (Sequence i _ dur steps) =
     Sequence i delay dur steps
 
 
@@ -166,7 +184,7 @@ addDelayToSequence delay seqs captured =
         seq :: remain ->
             addDelayToSequence (Time.expand delay (getSequenceDuration seq))
                 remain
-                (push (seq |> withDelay delay)
+                (push (seq |> withSequenceDelay delay)
                     captured
                 )
 
@@ -382,7 +400,7 @@ sequences startTime targetTime now stopTime movement existingSequence =
                         [ newSequence.base ]
                             |> push
                                 (following
-                                    |> withDelay (getSequenceDuration newSequence.base)
+                                    |> withSequenceDelay (getSequenceDuration newSequence.base)
                                 )
 
             Pos trans value [ Sequence 1 delay dur steps ] ->
@@ -406,7 +424,7 @@ sequences startTime targetTime now stopTime movement existingSequence =
                     Just following ->
                         [ new.base ]
                             |> push
-                                (following |> withDelay (getSequenceDuration new.base))
+                                (following |> withSequenceDelay (getSequenceDuration new.base))
 
             Pos trans value dwell ->
                 let
@@ -433,7 +451,7 @@ sequences startTime targetTime now stopTime movement existingSequence =
                                     getSequenceDuration new.base
                             in
                             [ new.base ]
-                                |> push (following |> withDelay delayToFollowing)
+                                |> push (following |> withSequenceDelay delayToFollowing)
                                 |> append
                                     (addDelayToSequence
                                         (Time.expand (getSequenceDuration following)
@@ -478,7 +496,7 @@ takeAfterSequenceList durationToNow seqs =
                                     getSequenceDuration new.base
                             in
                             new.base
-                                :: (following |> withDelay delayToFollowing)
+                                :: (following |> withSequenceDelay delayToFollowing)
                                 :: addDelayToSequence
                                     (Time.expand
                                         (getSequenceDuration following)
@@ -514,7 +532,7 @@ takeAfterSequenceList durationToNow seqs =
                                     getSequenceDuration new.base
                             in
                             new.base
-                                :: (following |> withDelay delayToFollowing)
+                                :: (following |> withSequenceDelay delayToFollowing)
                                 :: addDelayToSequence
                                     (Time.expand
                                         (getSequenceDuration following)
@@ -942,12 +960,6 @@ zeroDuration =
 
 
 {- CSS KEYFRAMES -}
-
-
-mapTransition fn movement =
-    case movement of
-        Pos p f seq ->
-            Pos (fn p) f seq
 
 
 initialSequenceVelocity : Sequence value -> PixelsPerSecond

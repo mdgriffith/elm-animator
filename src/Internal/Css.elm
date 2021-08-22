@@ -2,7 +2,9 @@ module Internal.Css exposing
     ( Prop(..)
     , RenderedProp(..)
     , cssFromProps
+    , match
     , propsToRenderedProps
+    , toCss
     )
 
 {-| -}
@@ -12,7 +14,7 @@ import Duration
 import Html.Attributes exposing (id)
 import Internal.Bezier as Bezier
 import Internal.Bits as Bits
-import Internal.Css.Props
+import Internal.Css.Props as Props
 import Internal.Interpolate as Interpolate
 import Internal.Move as Move
 import Internal.Time as Time
@@ -62,18 +64,32 @@ type Prop
     = -- binary id for comparisons
       -- they are only really necessary for `transforms`
       -- props defined by the user use the prop name for identity
-      Prop Id String (Move.Move Float) Internal.Css.Props.Format
+      Prop Id String (Move.Move Float) Props.Format
     | ColorProp String (Move.Move Color.Color)
 
 
+match : Prop -> Prop -> Bool
+match one two =
+    case one of
+        Prop id name _ _ ->
+            case two of
+                Prop twoId twoName _ _ ->
+                    if Props.noId - id == 0 && Props.noId - twoId == 0 then
+                        name == twoName
 
--- applyToMovement : (Move.Move value -> Move.Move value) -> Prop -> Prop
--- applyToMovement fn prop =
---     case prop of
---         Prop id name m format ->
---             Prop id name (fn m) format
---         ColorProp name movement ->
---             ColorProp name (fn movement)
+                    else
+                        id - twoId == 0
+
+                _ ->
+                    False
+
+        ColorProp name _ ->
+            case two of
+                ColorProp twoName _ ->
+                    name == twoName
+
+                _ ->
+                    False
 
 
 propsToRenderedProps : Timeline.Timeline state -> (state -> List Prop) -> List RenderedProp
@@ -86,6 +102,11 @@ propsToRenderedProps timeline lookup =
         (\_ -> present)
         toPropCurves2
         timeline
+
+
+toCss : Time.Absolute -> List RenderedProp -> CssAnim
+toCss now renderedProps =
+    props2Css now renderedProps emptyAnim
 
 
 cssFromProps : Timeline.Timeline state -> (state -> List Prop) -> CssAnim
@@ -141,10 +162,10 @@ toInitialProps props (( maybeTransform, rendered ) as untouched) =
             let
                 state =
                     Interpolate.moving.start
-                        (Internal.Css.Props.default id)
+                        (Props.default id)
             in
             toInitialProps remaining
-                (if Internal.Css.Props.isTransformId id then
+                (if Props.isTransformId id then
                     case maybeTransform of
                         Nothing ->
                             ( Just
@@ -188,6 +209,7 @@ toInitialProps props (( maybeTransform, rendered ) as untouched) =
                 )
 
 
+matchProp : Id -> RenderedProp -> Bool
 matchProp id renderedProp =
     case renderedProp of
         RenderedProp details ->
@@ -200,6 +222,7 @@ matchProp id renderedProp =
             False
 
 
+matchColor : String -> RenderedProp -> Bool
 matchColor name renderedProp =
     case renderedProp of
         RenderedProp details ->
@@ -223,7 +246,7 @@ addInitialProps props (( maybeTransform, rendered ) as untouched) =
         (Prop id name movement format) :: remaining ->
             let
                 new =
-                    if Internal.Css.Props.isTransformId id then
+                    if Props.isTransformId id then
                         case maybeTransform of
                             Nothing ->
                                 ( Just
@@ -249,7 +272,7 @@ addInitialProps props (( maybeTransform, rendered ) as untouched) =
                         let
                             state =
                                 Interpolate.moving.start
-                                    (Internal.Css.Props.default id)
+                                    (Props.default id)
                         in
                         ( maybeTransform
                         , RenderedProp
@@ -460,7 +483,7 @@ colorToCssHelper now startPos details sections anim =
                         startPos
                         details.name
                         Color.toCssString
-                        Internal.Css.Props.colorHash
+                        Props.colorHash
                         sequence
                     )
                     anim
@@ -481,7 +504,7 @@ propToCssHelper now startPos details sections anim =
                 let
                     value =
                         Pixels.inPixels details.state.position
-                            |> Internal.Css.Props.format details.format
+                            |> Props.format details.format
                 in
                 { anim
                     | props =
@@ -506,7 +529,7 @@ propToCssHelper now startPos details sections anim =
                     (Move.css now
                         startPos
                         details.name
-                        (Internal.Css.Props.format details.format)
+                        (Props.format details.format)
                         Move.floatToString
                         sequence
                     )
@@ -642,7 +665,7 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                     let
                         targetColor =
                             colorOrDefault details.name
-                                Internal.Css.Props.transparent
+                                Props.transparent
                                 (lookup (Timeline.getEvent target))
                     in
                     RenderedColorProp
@@ -749,16 +772,16 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
 
                         targets =
                             { x =
-                                transformOrDefault Internal.Css.Props.ids.x
+                                transformOrDefault Props.ids.x
                                     targetProps
                             , y =
-                                transformOrDefault Internal.Css.Props.ids.y
+                                transformOrDefault Props.ids.y
                                     targetProps
                             , scale =
-                                transformOrDefault Internal.Css.Props.ids.scale
+                                transformOrDefault Props.ids.scale
                                     targetProps
                             , rotation =
-                                transformOrDefault Internal.Css.Props.ids.rotation
+                                transformOrDefault Props.ids.rotation
                                     targetProps
                             }
 
@@ -892,7 +915,7 @@ transformOrDefault : Id -> List Prop -> Float
 transformOrDefault targetId props =
     case props of
         [] ->
-            Internal.Css.Props.defaultPosition targetId
+            Props.defaultPosition targetId
 
         (Prop id name move _) :: remain ->
             if id - targetId == 0 then
@@ -912,10 +935,10 @@ stateOrDefault : Id -> String -> List Prop -> Move.Move Float
 stateOrDefault targetId targetName props =
     case props of
         [] ->
-            Internal.Css.Props.default targetId
+            Props.default targetId
 
         (Prop id name move _) :: remain ->
-            if (targetId - Internal.Css.Props.noId) == 0 then
+            if (targetId - Props.noId) == 0 then
                 if name == targetName then
                     move
 
@@ -988,7 +1011,7 @@ type RenderedProp
 type alias RenderedPropDetails =
     { id : Id
     , name : String
-    , format : Internal.Css.Props.Format
+    , format : Props.Format
     , sections :
         List (Move.Sequence Float)
     , state : Interpolate.State

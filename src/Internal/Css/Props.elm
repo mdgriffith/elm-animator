@@ -22,7 +22,6 @@ import Bitwise
 import Color
 import Internal.Interpolate as Interpolate
 import Internal.Move as Move
-import Internal.Transition as Transition
 
 
 roundFloat : Float -> Float
