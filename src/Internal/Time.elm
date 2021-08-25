@@ -2,7 +2,7 @@ module Internal.Time exposing
     ( thisBeforeOrEqualThat, thisAfterOrEqualThat, equal
     , Absolute, AbsoluteTime(..), Duration, absolute, duration, progress
     , inMilliseconds
-    , latest, earliest, toPosix
+    , latest, earliest, toPosix, durationToString, reduceDurationBy
     , advanceBy, expand, isZeroDuration, maxDuration, millis, numberOfFrames, positiveDuration, progressWithin, rollbackBy, thisAfterThat, thisBeforeThat, zeroDuration
     )
 
@@ -14,7 +14,7 @@ module Internal.Time exposing
 
 @docs inMilliseconds
 
-@docs latest, earliest, toPosix
+@docs latest, earliest, toPosix, durationToString, reduceDurationBy
 
 -}
 
@@ -33,6 +33,15 @@ type alias Absolute =
 
 type alias Duration =
     Duration.Duration
+
+
+durationToString : Duration -> String
+durationToString dur =
+    dur
+        |> Duration.inMilliseconds
+        |> round
+        |> String.fromInt
+        |> (\s -> s ++ "ms")
 
 
 maxDuration : Duration -> Duration -> Duration
@@ -63,6 +72,11 @@ absolute posix =
 expand : Duration -> Duration -> Duration
 expand one two =
     Quantity.plus one two
+
+
+reduceDurationBy : Duration -> Duration -> Duration
+reduceDurationBy one two =
+    Quantity.minus one two
 
 
 advanceBy : Duration -> Absolute -> Absolute

@@ -317,76 +317,78 @@ props2Css now renderedProps anim =
         (RenderedProp details) :: remain ->
             props2Css now
                 remain
-                (propToCssHelper now
-                    (Pixels.inPixels details.state.position)
-                    details
-                    (List.reverse details.sections)
-                    emptyAnim
-                    |> combine anim
+                (case details.sections of
+                    [] ->
+                        let
+                            value =
+                                Pixels.inPixels details.state.position
+                                    |> Props.format details.format
+                        in
+                        { anim
+                            | props =
+                                ( details.name
+                                , value
+                                )
+                                    :: anim.props
+                        }
+
+                    _ ->
+                        Move.cssForSections now
+                            (Pixels.inPixels details.state.position)
+                            details.name
+                            (Props.format details.format)
+                            Move.floatToString
+                            (List.reverse details.sections)
+                            emptyAnim
+                            |> combine anim
                 )
 
         (RenderedColorProp details) :: remain ->
             props2Css now
                 remain
-                (colorToCssHelper now
-                    details.color
-                    details
-                    (List.reverse details.sections)
-                    emptyAnim
-                    |> combine anim
+                (case details.sections of
+                    [] ->
+                        { anim
+                            | props =
+                                ( details.name
+                                , Color.toCssString details.color
+                                )
+                                    :: anim.props
+                        }
+
+                    _ ->
+                        Move.cssForSections now
+                            details.color
+                            details.name
+                            Color.toCssString
+                            Props.colorHash
+                            (List.reverse details.sections)
+                            emptyAnim
+                            |> combine anim
                 )
 
         (TransformProp details) :: remain ->
             props2Css now
                 remain
-                (transformToCssHelper now
-                    (stateToTransform details.state)
-                    details
-                    (List.reverse details.sections)
-                    emptyAnim
-                    |> combine anim
-                )
+                (case details.sections of
+                    [] ->
+                        { anim
+                            | props =
+                                ( "transform"
+                                , renderTransformState details.state
+                                )
+                                    :: anim.props
+                        }
 
-
-transformToCssHelper :
-    Time.Absolute
-    -> Transform
-    -> TransformPropDetails
-    -> List (Move.Sequence Transform)
-    -> CssAnim
-    -> CssAnim
-transformToCssHelper now startPos details sections anim =
-    case sections of
-        [] ->
-            if isEmptyAnim anim then
-                { anim
-                    | props =
-                        ( "transform"
-                        , renderTransformState details.state
-                        )
-                            :: anim.props
-                }
-
-            else
-                anim
-
-        sequence :: remain ->
-            transformToCssHelper now
-                (Move.lastPosOr startPos sequence)
-                details
-                remain
-                (combine
-                    -- NOTE, this order is important!
-                    -- it affects the order of the animation statements in CSS
-                    -- If they are out of order they can cancel each other out in weird ways.
-                    (Move.css now
-                        startPos
-                        "transform"
-                        transformToString
-                        transformToHash
-                        sequence
-                    )
-                    anim
+                    _ ->
+                        Move.cssForSections now
+                            (stateToTransform details.state)
+                            "transform"
+                            transformToString
+                            transformToHash
+                            (List.reverse details.sections)
+                            emptyAnim
+                            |> combine anim
                 )
 
 
@@ -446,95 +448,6 @@ transformToString trans =
         ++ " scale("
         ++ String.fromFloat trans.scale
         ++ ")"
-
-
-colorToCssHelper :
-    Time.Absolute
-    -> Color.Color
-    -> RenderedColorPropDetails
-    -> List (Move.Sequence Color.Color)
-    -> CssAnim
-    -> CssAnim
-colorToCssHelper now startPos details sections anim =
-    case sections of
-        [] ->
-            if isEmptyAnim anim then
-                { anim
-                    | props =
-                        ( details.name
-                        , Color.toCssString details.color
-                        )
-                            :: anim.props
-                }
-
-            else
-                anim
-
-        sequence :: remain ->
-            colorToCssHelper now
-                (Move.lastPosOr startPos sequence)
-                details
-                remain
-                (combine
-                    -- NOTE, this order is important!
-                    -- it affects the order of the animation statements in CSS
-                    -- If they are out of order they can cancel each other out in weird ways.
-                    (Move.css now
-                        startPos
-                        details.name
-                        Color.toCssString
-                        Props.colorHash
-                        sequence
-                    )
-                    anim
-                )
-
-
-propToCssHelper :
-    Time.Absolute
-    -> Float
-    -> RenderedPropDetails
-    -> List (Move.Sequence Float)
-    -> CssAnim
-    -> CssAnim
-propToCssHelper now startPos details sections anim =
-    case sections of
-        [] ->
-            if isEmptyAnim anim then
-                let
-                    value =
-                        Pixels.inPixels details.state.position
-                            |> Props.format details.format
-                in
-                { anim
-                    | props =
-                        ( details.name
-                        , value
-                        )
-                            :: anim.props
-                }
-
-            else
-                anim
-
-        sequence :: remain ->
-            propToCssHelper now
-                (Move.lastPosOr startPos sequence)
-                details
-                remain
-                (combine
-                    -- NOTE, this order is important!
-                    -- it affects the order of the animation statements in CSS
-                    -- If they are out of order they can cancel each other out in weird ways.
-                    (Move.css now
-                        startPos
-                        details.name
-                        (Props.format details.format)
-                        Move.floatToString
-                        sequence
-                    )
-                    anim
-                )
 
 
 infinite : String

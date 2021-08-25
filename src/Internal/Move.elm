@@ -4,7 +4,7 @@ module Internal.Move exposing
     , Step, step, stepWith, set
     , sequences
     , css, addSequence
-    , atX, floatToString, initialSequenceVelocity, lastPosOr, normalizeOver, toReal, withDelay, withVelocities, withWobble
+    , atX, cssForSections, floatToString, initialSequenceVelocity, lastPosOr, normalizeOver, toReal, withDelay, withVelocities, withWobble
     )
 
 {-|
@@ -717,6 +717,287 @@ initialSequenceVelocity seq =
                 |> Pixels.pixelsPerSecond
 
 
+hash : String -> Sequence value -> (value -> String) -> String
+hash name (Sequence n delay dur steps) toString =
+    name ++ String.fromInt n ++ stepHash steps toString ""
+
+
+stepHash : List (Step value) -> (value -> String) -> String -> String
+stepHash steps toString hashed =
+    case steps of
+        [] ->
+            hashed
+
+        (Step dur trans v) :: remain ->
+            stepHash
+                remain
+                toString
+                (hashed
+                    ++ "--"
+                    ++ hashDuration dur
+                    ++ "-"
+                    ++ Transition.hash trans
+                    ++ "-"
+                    ++ toString v
+                )
+
+
+roundFloat : Float -> Float
+roundFloat f =
+    toFloat (round (f * 100)) / 100
+
+
+floatToString : Float -> String
+floatToString f =
+    String.fromFloat (roundFloat f)
+
+
+hashDuration : Duration.Duration -> String
+hashDuration dur =
+    String.fromInt
+        (round (Duration.inSeconds dur))
+
+
+lastPosOr : value -> Sequence value -> value
+lastPosOr x (Sequence _ _ _ steps) =
+    case steps of
+        [] ->
+            x
+
+        _ ->
+            lastPosOrHelper x steps
+
+
+lastPosOrHelper : value -> List (Step value) -> value
+lastPosOrHelper x steps =
+    case steps of
+        [] ->
+            x
+
+        (Step _ _ v) :: [] ->
+            v
+
+        (Step _ _ _) :: (Step _ _ v) :: [] ->
+            v
+
+        (Step _ _ _) :: (Step _ _ _) :: (Step _ _ v) :: [] ->
+            v
+
+        (Step _ _ _) :: (Step _ _ _) :: (Step _ _ _) :: (Step _ _ v) :: [] ->
+            v
+
+        (Step _ _ _) :: (Step _ _ _) :: (Step _ _ _) :: (Step _ _ v) :: remain ->
+            lastPosOrHelper v remain
+
+
+type alias CssAnim =
+    { hash : String
+    , animation : String
+    , keyframes : String
+    , props : List ( String, String )
+    }
+
+
+{-|
+
+    - For the first curve of the first step of the first sequence
+        -> we can render a `transition` and render a property equal to the end of the transition.
+        -> this transition has it's own timing function and everything
+        -> Create a new `Sequence` for the tail
+
+    - We then render the rest of the sequences
+
+-}
+cssForSections :
+    Time.Absolute
+    -> value
+    -> String
+    -> (value -> String)
+    -> (value -> String)
+    -> List (Sequence value)
+    -> CssAnim
+    -> CssAnim
+cssForSections now startPos name toString toHashString sections anim =
+    case sections of
+        [] ->
+            anim
+
+        (Sequence 1 delay dur [ Step stepDur (Transition.Transition spline) v ]) :: rest ->
+            -- most common situation
+            toCssKeyframes
+                now
+                startPos
+                name
+                toString
+                toHashString
+                rest
+                { anim
+                    | props =
+                        renderTransition name delay stepDur spline
+                            :: ( name, toString v )
+                            :: anim.props
+                }
+
+        (Sequence 1 delay dur [ Step stepDur (Transition.Trail []) v ]) :: rest ->
+            -- make trail a nonempty list to avoid this situation
+            anim
+
+        (Sequence 1 delay _ [ Step stepDur (Transition.Trail (spline :: trail)) v ]) :: rest ->
+            let
+                trailSectionDur =
+                    Debug.todo "Needs to be the dur for spline"
+
+                subsequentDuration =
+                    stepDur |> Time.reduceDurationBy trailSectionDur
+            in
+            cssForSections now
+                startPos
+                name
+                toString
+                toHashString
+                (Sequence 1 delay trailSectionDur [ Step trailSectionDur (Transition.Transition spline) v ]
+                    :: Sequence 1 (Time.expand delay trailSectionDur) subsequentDuration [ Step subsequentDuration (Transition.Trail trail) v ]
+                    :: rest
+                )
+                anim
+
+        (Sequence 1 delay dur [ Step stepDur (Transition.Wobble wob) v ]) :: rest ->
+            Debug.todo "figure out where to split the wob into a trail"
+
+        (Sequence i delay dur (((Step stepDur trans v) :: remainingSteps) as allSteps)) :: rest ->
+            let
+                subsequentDuration =
+                    dur |> Time.reduceDurationBy stepDur
+            in
+            cssForSections now
+                startPos
+                name
+                toString
+                toHashString
+                (Sequence 1 delay stepDur [ Step stepDur trans v ]
+                    :: Sequence 1 (Time.expand delay stepDur) subsequentDuration remainingSteps
+                    :: Sequence (i - 1)
+                        (Time.expand delay dur)
+                        dur
+                        allSteps
+                    :: rest
+                )
+                anim
+
+        (Sequence i delay dur steps) :: rest ->
+            -- there are no steps in this sequence
+            anim
+
+
+renderTransition : String -> Duration.Duration -> Duration.Duration -> Bezier.Spline -> ( String, String )
+renderTransition prop delay duration spline =
+    ( "transition"
+    , prop
+        ++ " "
+        ++ Time.durationToString duration
+        ++ " "
+        ++ Bezier.cssTimingString spline
+        ++ " "
+        ++ Time.durationToString delay
+    )
+
+
+{-|
+
+    1. renders a transition for the first step in the first sequence
+
+-}
+toCssKeyframes :
+    Time.Absolute
+    -> value
+    -> String
+    -> (value -> String)
+    -> (value -> String)
+    -> List (Sequence value)
+    -> CssAnim
+    -> CssAnim
+toCssKeyframes now startPos name toString toHashString sections anim =
+    case sections of
+        [] ->
+            anim
+
+        seq :: remain ->
+            toCssKeyframes
+                now
+                startPos
+                name
+                toString
+                toHashString
+                remain
+                (combine
+                    (css now startPos name toString toHashString seq)
+                    anim
+                )
+
+
+css :
+    Time.Absolute
+    -> value
+    -> String
+    -> (value -> String)
+    -> (value -> String)
+    -> Sequence value
+    ->
+        { hash : String
+        , animation : String
+        , keyframes : String
+        , props : List a
+        }
+css now startPos name toString toHashString seq =
+    let
+        animationName =
+            -- we need to encode the current time in the animations name so the browser doesn't cache anything
+            -- IM LOOKIN AT YOU, CHROME
+            hash (name ++ String.fromInt (round <| Time.inMilliseconds now))
+                seq
+                toHashString
+
+        n =
+            case seq of
+                Sequence i _ _ _ ->
+                    if i <= 0 then
+                        "1"
+
+                    else if isInfinite (toFloat i) then
+                        "infinite"
+
+                    else
+                        String.fromInt i
+
+        durationStr =
+            case seq of
+                Sequence _ _ dur _ ->
+                    Time.durationToString dur
+
+        delayStr =
+            case seq of
+                Sequence _ delay _ _ ->
+                    Time.durationToString delay
+    in
+    { hash = animationName
+    , animation =
+        (durationStr ++ " ")
+            -- we specify an easing function here because it we have to
+            -- , but it is overridden by the one in keyframes
+            ++ "linear "
+            ++ delayStr
+            ++ " "
+            ++ n
+            ++ " normal forwards running "
+            ++ animationName
+    , keyframes =
+        ("@keyframes " ++ animationName ++ " {\n")
+            ++ keyframes name startPos toString seq ""
+            ++ "\n}"
+    , props = []
+    }
+
+
 keyframes : String -> value -> (value -> String) -> Sequence value -> String -> String
 keyframes name startPos toString (Sequence _ _ dur steps) rendered =
     keyframeHelper name
@@ -804,145 +1085,26 @@ keyframeHelper name startPos toString sequenceDuration currentDur steps rendered
                 (rendered ++ frames)
 
 
-hash : String -> Sequence value -> (value -> String) -> String
-hash name (Sequence n delay dur steps) toString =
-    name ++ String.fromInt n ++ stepHash steps toString ""
-
-
-stepHash : List (Step value) -> (value -> String) -> String -> String
-stepHash steps toString hashed =
-    case steps of
-        [] ->
-            hashed
-
-        (Step dur trans v) :: remain ->
-            stepHash
-                remain
-                toString
-                (hashed
-                    ++ "--"
-                    ++ hashDuration dur
-                    ++ "-"
-                    ++ Transition.hash trans
-                    ++ "-"
-                    ++ toString v
-                )
-
-
-roundFloat : Float -> Float
-roundFloat f =
-    toFloat (round (f * 100)) / 100
-
-
-floatToString : Float -> String
-floatToString f =
-    String.fromFloat (roundFloat f)
-
-
-hashDuration : Duration.Duration -> String
-hashDuration dur =
-    String.fromInt
-        (round (Duration.inSeconds dur))
-
-
-lastPosOr : value -> Sequence value -> value
-lastPosOr x (Sequence _ _ _ steps) =
-    case steps of
-        [] ->
-            x
-
-        _ ->
-            lastPosOrHelper x steps
-
-
-lastPosOrHelper : value -> List (Step value) -> value
-lastPosOrHelper x steps =
-    case steps of
-        [] ->
-            x
-
-        (Step _ _ v) :: [] ->
-            v
-
-        (Step _ _ _) :: (Step _ _ v) :: [] ->
-            v
-
-        (Step _ _ _) :: (Step _ _ _) :: (Step _ _ v) :: [] ->
-            v
-
-        (Step _ _ _) :: (Step _ _ _) :: (Step _ _ _) :: (Step _ _ v) :: [] ->
-            v
-
-        (Step _ _ _) :: (Step _ _ _) :: (Step _ _ _) :: (Step _ _ v) :: remain ->
-            lastPosOrHelper v remain
-
-
-css :
-    Time.Absolute
-    -> value
-    -> String
-    -> (value -> String)
-    -> (value -> String)
-    -> Sequence value
-    ->
-        { hash : String
-        , animation : String
-        , keyframes : String
-        , props : List a
-        }
-css now startPos name toString toHashString seq =
-    let
-        animationName =
-            -- we need to encode the current time in the animations name so the browser doesn't cache anything
-            -- IM LOOKIN AT YOU, CHROME
-            hash (name ++ String.fromInt (round <| Time.inMilliseconds now))
-                seq
-                toHashString
-
-        n =
-            case seq of
-                Sequence i _ _ _ ->
-                    if i <= 0 then
-                        "1"
-
-                    else if isInfinite (toFloat i) then
-                        "infinite"
-
-                    else
-                        String.fromInt i
-
-        durationStr =
-            case seq of
-                Sequence _ _ dur _ ->
-                    dur
-                        |> Duration.inMilliseconds
-                        |> round
-                        |> String.fromInt
-                        |> (\s -> s ++ "ms")
-
-        delayStr =
-            case seq of
-                Sequence _ delay _ _ ->
-                    delay
-                        |> Duration.inMilliseconds
-                        |> round
-                        |> String.fromInt
-                        |> (\s -> s ++ "ms")
-    in
-    { hash = animationName
-    , animation =
-        (durationStr ++ " ")
-            -- we specify an easing function here because it we have to
-            -- , but it is overridden by the one in keyframes
-            ++ "linear "
-            ++ delayStr
-            ++ " "
-            ++ n
-            ++ " normal forwards running "
-            ++ animationName
-    , keyframes =
-        ("@keyframes " ++ animationName ++ " {\n")
-            ++ keyframes name startPos toString seq ""
-            ++ "\n}"
+emptyAnim : CssAnim
+emptyAnim =
+    { hash = ""
+    , animation = ""
+    , keyframes = ""
     , props = []
     }
+
+
+combine : CssAnim -> CssAnim -> CssAnim
+combine one two =
+    if String.isEmpty one.hash && List.isEmpty one.props then
+        two
+
+    else if String.isEmpty two.hash && List.isEmpty two.props then
+        one
+
+    else
+        { hash = one.hash ++ two.hash
+        , animation = two.animation ++ ", " ++ one.animation
+        , keyframes = one.keyframes ++ "\n" ++ two.keyframes
+        , props = one.props ++ two.props
+        }

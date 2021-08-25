@@ -1,5 +1,5 @@
 module Internal.Transition exposing
-    ( Transition
+    ( Transition(..)
     , linear, standard, wobble
     , initialVelocity, atX
     , split, before
