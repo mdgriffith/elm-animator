@@ -3,7 +3,7 @@ module Animator.Css2 exposing
     , rotation, x, y, scale, scaleX, scaleY
     , color, px, int, float
     , withWobble
-    , keyframes, loop, loopFor
+    , transition, keyframes, loop, loopFor
     , set, wait, step
     , onTimeline, onTimelineWith
     , div, node
@@ -27,7 +27,7 @@ module Animator.Css2 exposing
 
 # Sequences
 
-@docs keyframes, loop, loopFor
+@docs transition, keyframes, loop, loopFor
 
 @docs set, wait, step
 
@@ -753,10 +753,15 @@ css =
 {-| -}
 stylesheet : String -> Html msg
 stylesheet str =
-    Html.node "style"
-        []
-        [ Html.text str
-        ]
+    case str of
+        "" ->
+            Html.text ""
+
+        _ ->
+            Html.node "style"
+                []
+                [ Html.text str
+                ]
 
 
 {--}
