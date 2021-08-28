@@ -661,8 +661,20 @@ div :
     -> List (Html.Attribute msg)
     -> List (Html msg)
     -> Html msg
-div =
-    node "div"
+div (Animation now renderedProps) attrs children =
+    let
+        rendered =
+            Debug.log "STYLE" (Css.toCss now renderedProps)
+
+        styles =
+            List.map (\( propName, val ) -> Attr.style propName val)
+                (( "animation", rendered.animation ) :: rendered.props)
+    in
+    Html.div
+        (styles ++ attrs)
+        (stylesheet rendered.keyframes
+            :: children
+        )
 
 
 {-| -}
