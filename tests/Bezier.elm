@@ -89,133 +89,132 @@ import Test exposing (..)
 -}
 suite : Test
 suite =
-    only <|
-        describe "Bezier adjustments"
-            [ test "Transition.atX == Move.atX at 0.5" <|
-                \_ ->
-                    let
-                        targetPosition =
-                            300
+    describe "Bezier adjustments"
+        [ test "Transition.atX == Move.atX at 0.5" <|
+            \_ ->
+                let
+                    targetPosition =
+                        300
 
-                        args =
-                            { progress = 0.3
-                            , startPosition = 0
-                            , targetPosition = targetPosition
-                            , target = Move.to targetPosition
-                            , startTime = Time.millis 0
-                            , targetTime = Time.millis 2000
-                            }
-
-                        moveXNewState =
-                            usingMoveX
-                                args
-
-                        transitionNewState =
-                            usingTransitionX args
-                    in
-                    Expect.all
-                        [ \state ->
-                            Expect.within
-                                (Absolute 1)
-                                (Pixels.inPixels state.move.position)
-                                (Pixels.inPixels state.transitionX.position)
-                        , \state ->
-                            Expect.within
-                                (Absolute 1)
-                                (Debug.log "VELOCITY" (Pixels.inPixelsPerSecond state.move.velocity))
-                                (Pixels.inPixelsPerSecond state.transitionX.velocity)
-                        ]
-                        { move = moveXNewState
-                        , transitionX = transitionNewState
+                    args =
+                        { progress = 0.3
+                        , startPosition = 0
+                        , targetPosition = targetPosition
+                        , target = Move.to targetPosition
+                        , startTime = Time.millis 0
+                        , targetTime = Time.millis 2000
                         }
-            , fuzz (Fuzz.floatRange 0 1) "Transition.atX == Move.atX with Fuzz" <|
-                \progress ->
-                    let
-                        targetPosition =
-                            300
 
-                        args =
-                            { progress = progress
-                            , startPosition = 0
-                            , targetPosition = targetPosition
-                            , target = Move.to targetPosition
-                            , startTime = Time.millis 0
-                            , targetTime = Time.millis 2000
-                            }
+                    moveXNewState =
+                        usingMoveX
+                            args
 
-                        moveXNewState =
-                            usingMoveX
-                                args
+                    transitionNewState =
+                        usingTransitionX args
+                in
+                Expect.all
+                    [ \state ->
+                        Expect.within
+                            (Absolute 1)
+                            (Pixels.inPixels state.move.position)
+                            (Pixels.inPixels state.transitionX.position)
+                    , \state ->
+                        Expect.within
+                            (Absolute 1)
+                            (Debug.log "VELOCITY" (Pixels.inPixelsPerSecond state.move.velocity))
+                            (Pixels.inPixelsPerSecond state.transitionX.velocity)
+                    ]
+                    { move = moveXNewState
+                    , transitionX = transitionNewState
+                    }
+        , fuzz (Fuzz.floatRange 0 1) "Transition.atX == Move.atX with Fuzz" <|
+            \progress ->
+                let
+                    targetPosition =
+                        300
 
-                        transitionNewState =
-                            usingTransitionX args
-                    in
-                    Expect.all
-                        [ \state ->
-                            Expect.within
-                                (Absolute 1)
-                                (Pixels.inPixels state.move.position)
-                                (Pixels.inPixels state.transitionX.position)
-                        , \state ->
-                            Expect.within
-                                (Absolute 1)
-                                (Pixels.inPixelsPerSecond state.move.velocity)
-                                (Pixels.inPixelsPerSecond state.transitionX.velocity)
-                        ]
-                        { move = moveXNewState
-                        , transitionX = transitionNewState
+                    args =
+                        { progress = progress
+                        , startPosition = 0
+                        , targetPosition = targetPosition
+                        , target = Move.to targetPosition
+                        , startTime = Time.millis 0
+                        , targetTime = Time.millis 2000
                         }
-            , test "Adjusting bezier velocities" <|
-                \_ ->
-                    let
-                        startPosition =
-                            0
 
-                        targetPosition =
-                            300
+                    moveXNewState =
+                        usingMoveX
+                            args
 
-                        -- taken from the above test
-                        introVelocity =
-                            -- pixels per second
-                            410.143666198451
+                    transitionNewState =
+                        usingTransitionX args
+                in
+                Expect.all
+                    [ \state ->
+                        Expect.within
+                            (Absolute 1)
+                            (Pixels.inPixels state.move.position)
+                            (Pixels.inPixels state.transitionX.position)
+                    , \state ->
+                        Expect.within
+                            (Absolute 1)
+                            (Pixels.inPixelsPerSecond state.move.velocity)
+                            (Pixels.inPixelsPerSecond state.transitionX.velocity)
+                    ]
+                    { move = moveXNewState
+                    , transitionX = transitionNewState
+                    }
+        , test "Adjusting bezier velocities" <|
+            \_ ->
+                let
+                    startPosition =
+                        0
 
-                        introVelNormalized =
-                            (introVelocity * ((targetTime / 1000) - (startTime / 1000)))
-                                / (targetPosition - startPosition)
+                    targetPosition =
+                        300
 
-                        startTime =
-                            0
+                    -- taken from the above test
+                    introVelocity =
+                        -- pixels per second
+                        410.143666198451
 
-                        targetTime =
-                            2000
+                    introVelNormalized =
+                        (introVelocity * ((targetTime / 1000) - (startTime / 1000)))
+                            / (targetPosition - startPosition)
 
-                        args =
-                            { progress = 0.001
-                            , startPosition = startPosition
-                            , targetPosition = targetPosition
-                            , target =
-                                Move.to targetPosition
-                                    |> Move.withVelocities
-                                        introVelNormalized
-                                        0
-                            , startTime = Time.millis startTime
-                            , targetTime = Time.millis targetTime
-                            }
+                    startTime =
+                        0
 
-                        moveXNewState =
-                            usingMoveX
-                                args
-                    in
-                    Expect.all
-                        [ \state ->
-                            Expect.within
-                                (Absolute 1)
-                                (Pixels.inPixelsPerSecond state.move.velocity)
-                                introVelocity
-                        ]
-                        { move = moveXNewState
+                    targetTime =
+                        2000
+
+                    args =
+                        { progress = 0.001
+                        , startPosition = startPosition
+                        , targetPosition = targetPosition
+                        , target =
+                            Move.to targetPosition
+                                |> Move.withVelocities
+                                    introVelNormalized
+                                    0
+                        , startTime = Time.millis startTime
+                        , targetTime = Time.millis targetTime
                         }
-            ]
+
+                    moveXNewState =
+                        usingMoveX
+                            args
+                in
+                Expect.all
+                    [ \state ->
+                        Expect.within
+                            (Absolute 1)
+                            (Pixels.inPixelsPerSecond state.move.velocity)
+                            introVelocity
+                    ]
+                    { move = moveXNewState
+                    }
+        ]
 
 
 usingMoveX :
@@ -236,7 +235,6 @@ usingMoveX args =
             Move.atX
                 args.progress
                 args.target
-                |> Debug.log "AT X"
     in
     { position =
         Pixels.pixels

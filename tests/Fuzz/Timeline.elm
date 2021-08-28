@@ -31,8 +31,8 @@ Timeline Fuzzer:
 -}
 
 import Animator
+import Animator.Timeline
 import Fuzz exposing (Fuzzer, float, int, list, string)
-import Internal.Interpolate as Interpolate
 import Internal.Time as Time
 import Internal.Timeline as Timeline
 import Time
@@ -104,22 +104,22 @@ toTimeline { gc } (InstructionTimeline startTime startEvent instructions) =
             case instruction of
                 Queue start events ->
                     myTimeline
-                        |> Animator.queue (List.map instructionToEvent events)
+                        |> Animator.Timeline.queue (List.map instructionToEvent events)
                         |> update (Time.millisToPosix start)
 
                 Interruption start events ->
                     myTimeline
-                        |> Animator.interrupt (List.map instructionToEvent events)
+                        |> Animator.Timeline.interrupt (List.map instructionToEvent events)
                         |> update (Time.millisToPosix start)
     in
-    Animator.init startEvent
+    Animator.Timeline.init startEvent
         |> update (Time.millisToPosix startTime)
         |> addInstructions
 
 
-instructionToEvent : ( Int, b ) -> Animator.Step b
+instructionToEvent : ( Int, b ) -> Animator.Timeline.Step b
 instructionToEvent ( i, event ) =
-    Animator.transitionTo (Animator.millis (toFloat i)) event
+    Animator.Timeline.transitionTo (Animator.Timeline.ms (toFloat i)) event
 
 
 listOneToFive : Fuzzer a -> Fuzzer (List a)
