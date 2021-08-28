@@ -3,6 +3,8 @@ module Internal.Estimation exposing (velocity)
 {-| -}
 
 import Animator
+import Animator.Timeline
+import Animator.Value
 import Internal.Interpolate as Interpolate
 import Internal.Timeline as Timeline
 import Time
@@ -14,7 +16,7 @@ mapTime fn time =
 
 {-| Estimate velocity in pixels/second
 -}
-velocity : Int -> Time.Posix -> Animator.Timeline event -> (event -> Animator.Movement) -> Float
+velocity : Int -> Time.Posix -> Animator.Timeline.Timeline event -> (event -> Animator.Value.Movement) -> Float
 velocity resolution time timeline toPosition =
     let
         before =
