@@ -1,1354 +1,732 @@
 module Animator exposing
-    ( Timeline, init
-    , current, previous, upcoming, upcomingWith, arrived, arrivedAt, arrivedAtWith
-    , Animator
-    , animator, watching, watchingWith
-    , toSubscription, update
-    , updateTimeline
-    , go
-    , Duration, immediately, veryQuickly, quickly, slowly, verySlowly, millis, seconds
-    , Step, wait, transitionTo
-    , interrupt, queue
-    , color
-    , Movement, at, move, xy, xyz
-    , withWobble, withImpulse
-    , Oscillator, wave, wrap, zigzag
-    , loop, once, repeat
-    , frames
-    , Frames, frame, hold, walk, framesWith
-    , Resting, FramesPerSecond, fps, cycle, cycleN
+    ( transition
+    , opacity
+    , rotation, x, y, scale, scaleX, scaleY
+    , color, px, int, float
+    , withWobble, withBezier
+    , Duration, ms
+    , spinning, pulsing, bouncing, pinging
+    , keyframes, loop, loopFor
+    , set, wait, step
+    , onTimeline, onTimelineWith
+    , div, node
+    , Css, css
+    , watching
+    , xAsSingleProp
     )
 
 {-|
 
+@docs Property
 
-# Getting started
+@docs transition
 
-`elm-animator` is about taking pieces of your model, turning them into **Timelines** of values, and animate between their states
+@docs opacity
 
-@docs Timeline, init
+@docs rotation, x, y, scale, scaleX, scaleY
 
+@docs color, px, int, float
 
-# Reading the timeline
+@docs withWobble, withBezier
 
-You might be wondering, 'How do we get our value "out" of a `Timeline`?'
+@docs Duration, ms
 
-Well, we can ask the `Timeline` all sorts of questions.
 
-@docs current, previous, upcoming, upcomingWith, arrived, arrivedAt, arrivedAtWith
+# Premade
 
+Here are some premade animations.
 
-# Wiring up the animation
+There's nothing special about them, they're just convenient!
 
-Once we have a `Timeline`, we need a way to update it.
+Check out how their defined if you want to make your own.
 
-That's the job of the `Animator`!
+@docs spinning, pulsing, bouncing, pinging
 
-@docs Animator
 
-@docs animator, watching, watchingWith
+# Sequences
 
-@docs toSubscription, update
+@docs keyframes, loop, loopFor
 
-@docs updateTimeline
+@docs set, wait, step
 
+@docs onTimeline, onTimelineWith
 
-# Transitioning to a new state
 
-Now that we have a `Timeline` set up, we likely want to set a new **value**.
+# Rendering
 
-In order to do that we need to specify both —
+@docs div, node
 
-  - the new state we want to be in
-  - a `Duration` for how long this transition should take.
+@docs Css, css
 
-@docs go
-
-@docs Duration, immediately, veryQuickly, quickly, slowly, verySlowly, millis, seconds
-
-
-# Interruptions and Queueing
-
-In some more **advanced** cases you might want to define a _series_ of states to animate through instead of just going to one directly.
-
-    Animator.interrupt
-        [ Animator.wait (Animator.millis 300)
-
-        -- after waiting 300 milliseconds,
-        -- start transitioning to a new state, Griffyndor
-        -- Take 1 whole second to make the transition
-        , Animator.transitionTo (Animator.seconds 1) Griffyndor
-
-        -- Once we've arrived at Griffyndor,
-        -- immediately start transitioning to Slytherin
-        -- and take half a second to make the transition
-        , Animator.transitionTo (Animator.seconds 0.5) Slytherin
-        ]
-
-@docs Step, wait, transitionTo
-
-@docs interrupt, queue
-
-
-# Animating
-
-Finally, animating!
-
-This part of the package is for animating color and number **values** directly.
-
-_However!_ You're probably more interested in animating `CSS` or `Inline` styles.
-
-Those things live in the `Animator.Css`and `Animator.Inline` modules.
-
-Check them out on the side bar 👉
-
-Though you should also check out the 👇 [Transition Personality](#transition-personality) section as well.
-
-@docs color
-
-@docs Movement, at, move, xy, xyz
-
-
-# Transition personality
-
-While there are some nice defaults baked in, sometimes you might want to adjust how an animation happens.
-
-These adjustments talk about _arriving_ or _leaving_. That's referring to the part of the animation that is arriving to or departing from a certain state.
-
-So, for this code example:
-
-     case state of
-        True ->
-            Animator.at 0
-                |> Animator.leaveSmoothely 0.2
-
-        False ->
-           Animator.at 50
-
-If we're at a state of `True` and go to any other state, we're going to leave `True` a little later than the normal time.
-
-**Note** — These adjustments all take a `Float` between `0` and `1`. Behind the scenes they will be clamped at those values.
-
-@docs withWobble, withImpulse
-
-
-# Resting at a state
-
-We've mostly talked about **transitioning** from one state to another, like moving from `True` to `False`.
-
-But what if we want an animation when we're just **resting** at a state?
-
-An obvious example would be an icon that spins when we're `Loading`.
-
-Well, in that case you can use an `Oscillator`.
-
-    case state of
-        Loaded ->
-            Animator.at 0
-
-        Loading ->
-            -- animate from 0deg to 360deg and
-            -- then wrap back around to 0deg
-            -- we're using radians here, so 2 * pi == 360deg
-            Animator.wrap 0 (2 * pi)
-                -- loop every 700ms
-                |> Animator.loop (Animator.millis 700)
-
-@docs Oscillator, wave, wrap, zigzag
-
-Once we've created an oscillator, we need to specify how long it should take and how many times it should repeat.
-
-@docs loop, once, repeat
-
-
-# Sprites
-
-Ok! What else could there be?
-
-What about the wonderful world of Sprite animation?
-
-Sprite animation is where we literally have a list of images and flip through them like a flip-book.
-
-Like Mario! In fact we have a [Mario example](https://github.com/mdgriffith/elm-animator/blob/master/examples/Mario.elm)!
-
-Here's an abreviated example of what the code looks like:
-
-    Animator.frames model.mario <|
-        \(Mario action) ->
-            case action of
-                Walking ->
-                    -- if we're in a `Walking` state,
-                    -- then we're cycling through
-                    -- the following frames at
-                    -- 15 frames per second:
-                    --  step1, step2, stand
-                    Animator.framesWith
-                        { transition =
-                            sprite.tail.stand
-                        , resting =
-                            Animator.cycle
-                                (Animator.fps 15)
-                                [ sprite.tail.step1
-                                , sprite.tail.step2
-                                , sprite.tail.stand
-                                ]
-                        }
-
-                Jumping ->
-                    -- show a single frame
-                    sprite.tail.jump
-
-                Ducking ->
-                    sprite.tail.duck
-
-                Standing ->
-                    sprite.tail.stand
-
-@docs frames
-
-@docs Frames, frame, hold, walk, framesWith
-
-@docs Resting, FramesPerSecond, fps, cycle, cycleN
+@docs watching
 
 -}
 
-import Browser.Events
-import Color exposing (Color)
+import Animator.Timeline exposing (Timeline)
+import Animator.Watcher as Watcher exposing (Animator)
+import Color
 import Duration
-import Internal.Interpolate as Interpolate
+import Html exposing (Html)
+import Html.Attributes as Attr
+import Internal.Css as Css
+import Internal.Css.Props
 import Internal.Move as Move
 import Internal.Time as Time
 import Internal.Timeline as Timeline
-import Internal.Transition as Transition
 import Quantity
 import Time
 
 
-{-| A timeline of `state` values.
+{-| -}
+type alias Property =
+    Css.Prop
+
+
+{-| -}
+opacity : Float -> Property
+opacity o =
+    Css.Prop
+        Internal.Css.Props.ids.opacity
+        "opacity"
+        (Move.to o)
+        Internal.Css.Props.float
+
+
+{-| -}
+xAsSingleProp : Float -> Property
+xAsSingleProp o =
+    Css.Prop
+        Internal.Css.Props.ids.opacity
+        "transform"
+        (Move.to o)
+        Internal.Css.Props.translateX
+
+
+{-| -}
+scale : Float -> Property
+scale s =
+    Css.Prop
+        Internal.Css.Props.ids.scale
+        ""
+        (Move.to s)
+        Internal.Css.Props.float
+
+
+{-| -}
+scaleX : Float -> Property
+scaleX s =
+    Css.Prop
+        Internal.Css.Props.ids.scaleX
+        ""
+        (Move.to s)
+        Internal.Css.Props.float
+
+
+{-| -}
+scaleY : Float -> Property
+scaleY s =
+    Css.Prop
+        Internal.Css.Props.ids.scaleY
+        ""
+        (Move.to s)
+        Internal.Css.Props.float
+
+
+{-| -}
+rotation : Float -> Property
+rotation n =
+    Css.Prop
+        Internal.Css.Props.ids.rotation
+        ""
+        (Move.to n)
+        Internal.Css.Props.float
+
+
+{-| -}
+x : Float -> Property
+x n =
+    Css.Prop
+        Internal.Css.Props.ids.x
+        ""
+        (Move.to n)
+        Internal.Css.Props.float
+
+
+{-| -}
+y : Float -> Property
+y n =
+    Css.Prop
+        Internal.Css.Props.ids.y
+        ""
+        (Move.to n)
+        Internal.Css.Props.float
+
+
+{-| -}
+withBezier : Float -> Float -> Float -> Float -> Property -> Property
+withBezier one two three four prop =
+    case prop of
+        Css.Prop id name move format ->
+            Css.Prop id name (Move.withBezier one two three four move) format
+
+        Css.ColorProp name move ->
+            Css.ColorProp name (Move.withBezier one two three four move)
+
+
+{-| -}
+withWobble : Float -> Property -> Property
+withWobble wob prop =
+    case prop of
+        Css.Prop id name move format ->
+            Css.Prop id name (Move.withWobble wob move) format
 
-Behind the scenes this is roughly a list of states and the times that they should occur!
+        Css.ColorProp name move ->
+            Css.ColorProp name (Move.withWobble wob move)
 
--}
-type alias Timeline state =
-    Timeline.Timeline state
 
-
-{-| Create a timeline with an initial `state`.
-
-So, if you previously had a `Bool` in your model:
-
-    type alias Model = { checked : Bool }
-
-    -- created via
-    { checked = False }
-
-You could replace that with an `Animator.Timeline Bool`
-
-    type alias Model = { checked : Animator.Timeline Bool }
-
-    -- created via
-    { checked = Animator.init False }
-
--}
-init : state -> Timeline state
-init first =
-    Timeline.Timeline
-        { initial = first
-        , now = Time.absolute (Time.millisToPosix 0)
-        , delay = Duration.milliseconds 0
-        , scale = 1
-        , events =
-            Timeline.Timetable []
-        , queued = Nothing
-        , interruption = []
-        , running = True
-        }
-
-
-{-| Delay the events of a timeline.
-
-This is generally used in your view function to add a bit of variety when animating multiple elements.
-
-        Animator.move (Animator.delay (Animator.millis 200) timeline) <|
-            \state ->
-                if state then
-                    Animator.at 0
-
-                else
-                    Animator.at 1
-
-This has a maximum value of 5 seconds.
-
-If you need a longer delay, it's likely you want to create a separate timeline.
-
--}
-delay : Duration -> Timeline state -> Timeline state
-delay dur (Timeline.Timeline details) =
-    Timeline.Timeline
-        { details | delay = Time.maxDuration (Duration.milliseconds 5000) (Time.expand details.delay (Time.positiveDuration dur)) }
-
-
-{-| Speedup or slowdown a timeline.
-
-    0.5 -> half speed
-    1.0 -> normal
-    2.0 -> twice as fast
-
-**Note** - 0.1 is the lowest number allowed, and 5 is the highest.
-
-This is generally used in your view function to add a bit of variety when animating multiple elements.
-
--}
-scale : Float -> Timeline state -> Timeline state
-scale factor (Timeline.Timeline details) =
-    Timeline.Timeline
-        { details | scale = min 5 (max 0.1 factor) }
-
-
-{-| Get the current `state` of the timeline.
-
-This value will switch to a new value when a transition begins.
-
-If you had a timeline that went from A to B to C, here's what `current` would be at various points on the timeline.
-
-```ascii
-          A---------B---------C
-               ^    ^    ^    ^
-current:       B    B    C    C
-```
-
-**Note** — If you want to detect the moment when you arrive at a new state, try using [`arrivedAt`](#arrivedAt)
-
--}
-current : Timeline state -> state
-current =
-    Timeline.current
-
-
-{-| Subtley different than [`current`](#current), this will provide the new state as soon as the transition has _finished_.
-
-```ascii
-          A---------B---------C
-               ^    ^    ^    ^
-arrived:       A    B    B    C
-```
-
--}
-arrived : Timeline state -> state
-arrived =
-    Timeline.arrived
-
-
-{-| Sometimes we want to know when we've arrived at a state so we can trigger some other work.
-
-You can use `arrivedAt` in the `Tick` branch of your update to see if you will arrive at an event on this tick.
-
-    Tick time ->
-        if Animator.arrivedAt MyState time model.timeline then
-            --...do something special
-
--}
-arrivedAt : state -> Time.Posix -> Timeline state -> Bool
-arrivedAt state =
-    Timeline.arrivedAt ((==) state)
-
-
-{-| Again, sometimes you'll want to supply your own equality function!
--}
-arrivedAtWith : (state -> Bool) -> Time.Posix -> Timeline state -> Bool
-arrivedAtWith =
-    Timeline.arrivedAt
-
-
-{-| Get the previous `state` on this timeline.
-
-As you'll see in the [Loading example](https://github.com/mdgriffith/elm-animator/blob/master/examples/Loading.elm), it means we can use `previous` to refer to data that we've already "deleted" or set to `Nothing`.
-
-How cool!
-
-```ascii
-          A---------B---------C
-               ^    ^    ^
-previous:      A    A    B
-```
-
--}
-previous : Timeline state -> state
-previous =
-    Timeline.previous
-
-
-{-| Check to see if a `state` is upcoming on a timeline.
-
-**Note** — This can be used to ensure a set of states can only be [`queued`](#queue) if they aren't already running.
-
-**Note 2** — This only checks if an event is in the _future_, but does not check the value you're currently at. You might need to use [`arrived`](#arrived) as well if you also care about the current state.
-
--}
-upcoming : state -> Timeline state -> Bool
-upcoming state =
-    Timeline.upcoming ((==) state)
-
-
-{-| For complicated values it can be computationally expensive to use `==`.
-
-`upcomingWith` allows you to specify your own equality function, so you can be smarter in checking how two value are equal.
-
--}
-upcomingWith : (state -> Bool) -> Timeline state -> Bool
-upcomingWith =
-    Timeline.upcoming
-
-
-
--- future : Timeline state -> List ( TIme.Posix, state )
-
-
-{-| Choosing a nice duration can depend on:
-
-  - The size of the thing moving
-  - The type of movement
-  - The distance it's traveling.
-
-So, start with a nice default and adjust it as you start to understand your specific needs.
-
-**Note** — Here's [a very good overview on animation durations and speeds](https://uxdesign.cc/the-ultimate-guide-to-proper-use-of-animation-in-ux-10bd98614fa9).
-
--}
 type alias Duration =
     Time.Duration
 
 
 {-| -}
-millis : Float -> Duration
-millis =
+ms : Float -> Duration
+ms =
     Duration.milliseconds
 
 
-{-| -}
-seconds : Float -> Duration
-seconds =
-    Duration.seconds
+
+-- {-|
+-- Transition to this state
+-- -}
+-- withImpulse : Float -> Property -> Property
+-- withImpulse impulse prop =
+--     case prop of
+--         Css.Prop id name move format ->
+--             Css.Prop id name (Move.withImpulse impulse move) format
+--         Css.ColorProp name move ->
+--             Css.ColorProp name (Move.withImpulse impulse move)
 
 
 {-| -}
-minutes : Float -> Duration
-minutes =
-    Duration.minutes
+withDelay : Duration -> Property -> Property
+withDelay dur p =
+    case p of
+        Css.Prop id name move format ->
+            Css.Prop id name (Move.withDelay dur move) format
+
+        Css.ColorProp name move ->
+            Css.ColorProp name (Move.withDelay dur move)
+
+
+
+-- {-| -}
+-- withCurve : Bezier.Spline -> Property -> Property
+-- withCurve spline p =
+--     p
+
+
+type Animation
+    = Animation Time.Absolute (List Css.RenderedProp)
+
+
+type alias Attribute =
+    List Property
+
+
+type Step
+    = Step Duration (List Property)
+
+
+set : List Property -> Step
+set attrs =
+    step Time.zeroDuration attrs
+
+
+wait : Duration -> Step
+wait dur =
+    step dur []
+
+
+step : Duration -> List Property -> Step
+step =
+    Step
 
 
 {-| -}
-type Step state
-    = Wait Duration
-    | TransitionTo Duration state
+keyframes : List Step -> Animation
+keyframes steps =
+    let
+        imminent =
+            Time.absolute (Time.millisToPosix 1)
+
+        ( ( afterFirst, firstOccurring ), remaining ) =
+            case steps of
+                [] ->
+                    ( ( imminent, Timeline.Occurring [] imminent imminent ), [] )
+
+                first :: r ->
+                    ( toOccurring imminent first, r )
+
+        timeline =
+            Timeline.Timeline
+                { initial = []
+                , now = imminent
+                , delay = Time.zeroDuration
+                , scale = 1
+                , events =
+                    Timeline.Timetable
+                        [ Timeline.Line
+                            imminent
+                            firstOccurring
+                            (List.foldl
+                                (\currentStep ( time, occurs ) ->
+                                    let
+                                        ( newTime, occur ) =
+                                            toOccurring time currentStep
+                                    in
+                                    ( newTime, occur :: occurs )
+                                )
+                                ( afterFirst, [] )
+                                remaining
+                                |> Tuple.second
+                            )
+                        ]
+                , queued = Nothing
+                , interruption = []
+                , running = True
+                }
+    in
+    Animation
+        (Timeline.getCurrentTime timeline)
+        (Css.propsToRenderedProps timeline identity)
+
+
+toOccurring : Time.Absolute -> Step -> ( Time.Absolute, Timeline.Occurring (List Property) )
+toOccurring currentTime (Step dur props) =
+    let
+        time =
+            Time.advanceBy dur currentTime
+    in
+    ( time, Timeline.Occurring props time time )
 
 
 {-| -}
-transitionTo : Duration -> state -> Step state
-transitionTo =
-    TransitionTo
+loop : List Step -> Step
+loop steps =
+    -- abusing infinite here :/ don't look at me!
+    loopFor (1 // 0) steps
 
 
 {-| -}
-wait : Duration -> Step state
-wait =
-    Wait
+loopFor : Int -> List Step -> Step
+loopFor n steps =
+    let
+        initialProps =
+            getInitialProps Time.zeroDuration steps []
+    in
+    addSequence n
+        steps
+        initialProps
 
 
-{-| Wait until the current timeline is **finished** and then continue with these new steps.
--}
-queue : List (Step state) -> Timeline state -> Timeline state
-queue steps (Timeline.Timeline tl) =
-    Timeline.Timeline
-        { tl
-            | running = True
-            , queued =
-                case tl.queued of
-                    Nothing ->
-                        case initializeSchedule (millis 0) steps of
-                            Nothing ->
-                                tl.queued
-
-                            Just ( schedule, otherSteps ) ->
-                                Just (List.foldl stepsToEvents schedule otherSteps)
-
-                    Just queued ->
-                        Just (List.foldl stepsToEvents queued steps)
-        }
-
-
-{-| 0ms
--}
-immediately : Duration
-immediately =
-    millis 0
-
-
-{-| _100ms_.
--}
-veryQuickly : Duration
-veryQuickly =
-    millis 100
-
-
-{-| _200ms_ - Likely a good place to start!
--}
-quickly : Duration
-quickly =
-    millis 200
-
-
-{-| Go to a new state!
-
-You'll need to specify a `Duration` as well. Try starting with `Animator.quickly` and adjust up or down as necessary.
-
--}
-go : Duration -> state -> Timeline state -> Timeline state
-go duration ev timeline =
-    interrupt [ transitionTo duration ev ] timeline
-
-
-{-| _400ms_.
--}
-slowly : Duration
-slowly =
-    millis 400
-
-
-{-| _500ms_.
--}
-verySlowly : Duration
-verySlowly =
-    millis 500
-
-
-{-| Interrupt what's currently happening with a new list.
--}
-interrupt : List (Step state) -> Timeline state -> Timeline state
-interrupt steps (Timeline.Timeline tl) =
-    Timeline.Timeline
-        { tl
-            | running = True
-            , interruption =
-                case initializeSchedule (millis 0) steps of
-                    Nothing ->
-                        tl.interruption
-
-                    Just ( schedule, otherSteps ) ->
-                        -- **NOTE** - if we recieve a new interruption, we throw away the existing one!
-                        -- This was leading to issues when the same event was added to the `interrupted` queue
-                        -- multiple times in before being scheduled.
-                        -- So, I imagine it does make sense to dedup these
-                        -- But does it ALWAYS make sense to replace the currently scheduled interruption?
-                        [ List.foldl stepsToEvents schedule otherSteps ]
-        }
-
-
-initializeSchedule : Time.Duration -> List (Step state) -> Maybe ( Schedule state, List (Step state) )
-initializeSchedule waiting steps =
+getInitialProps : Time.Duration -> List Step -> List Property -> List Property
+getInitialProps durationTillThisStep steps props =
     case steps of
+        [] ->
+            props
+
+        (Step dur stepProps) :: remaining ->
+            let
+                newProps =
+                    addIfNew durationTillThisStep stepProps props
+            in
+            getInitialProps (Time.expand durationTillThisStep dur)
+                remaining
+                newProps
+
+
+addIfNew :
+    Time.Duration
+    -> List Property
+    -> List Property
+    -> List Property
+addIfNew durationTillThisStep stepProps props =
+    case props of
+        [] ->
+            stepProps
+
+        _ ->
+            case stepProps of
+                [] ->
+                    props
+
+                topStep :: remainingSteps ->
+                    if List.any (Css.match topStep) props then
+                        addIfNew durationTillThisStep remainingSteps props
+
+                    else
+                        addIfNew durationTillThisStep
+                            remainingSteps
+                            -- Note::  we aren't doing anything special for defaults here
+                            -- However, ultimately we could get clever and stub in a default from the node itself
+                            (topStep :: props)
+
+
+addSequence : Int -> List Step -> List Property -> Step
+addSequence n steps prop =
+    let
+        fullDuration =
+            sumStepDuration Time.zeroDuration steps
+    in
+    prop
+        |> List.map (addSequenceSteps n fullDuration steps)
+        |> Step fullDuration
+
+
+sumStepDuration : Time.Duration -> List Step -> Time.Duration
+sumStepDuration dur steps =
+    case steps of
+        [] ->
+            dur
+
+        (Step stepDur _) :: remain ->
+            sumStepDuration (Time.expand stepDur dur) remain
+
+
+addSequenceSteps : Int -> Time.Duration -> List Step -> Property -> Property
+addSequenceSteps n fullDuration steps prop =
+    case prop of
+        Css.Prop id name movement format ->
+            let
+                formattedSteps =
+                    formatSteps steps prop []
+            in
+            Css.Prop id
+                name
+                (Move.addSequence n fullDuration formattedSteps movement)
+                format
+
+        Css.ColorProp name movement ->
+            let
+                formattedSteps =
+                    formatColorSteps steps prop []
+            in
+            Css.ColorProp name
+                (Move.addSequence n fullDuration formattedSteps movement)
+
+
+formatColorSteps :
+    List Step
+    -> Property
+    -> List (Move.Step Color.Color)
+    -> List (Move.Step Color.Color)
+formatColorSteps steps prop pastSteps =
+    case steps of
+        [] ->
+            List.reverse pastSteps
+
+        (Step dur props) :: next ->
+            case firstMatch prop props of
+                Nothing ->
+                    List.reverse pastSteps
+
+                Just (Css.Prop id name _ format) ->
+                    formatColorSteps next
+                        prop
+                        pastSteps
+
+                Just (Css.ColorProp name (Move.Pos trans value _)) ->
+                    formatColorSteps next
+                        prop
+                        (Move.stepWith dur trans value :: pastSteps)
+
+
+formatSteps :
+    List Step
+    -> Property
+    -> List (Move.Step Float)
+    -> List (Move.Step Float)
+formatSteps steps prop pastSteps =
+    case steps of
+        [] ->
+            List.reverse pastSteps
+
+        (Step dur props) :: next ->
+            case firstMatch prop props of
+                Nothing ->
+                    List.reverse pastSteps
+
+                Just (Css.Prop id name (Move.Pos trans value _) format) ->
+                    formatSteps next
+                        prop
+                        (Move.stepWith dur trans value :: pastSteps)
+
+                Just (Css.ColorProp name movement) ->
+                    formatSteps next
+                        prop
+                        pastSteps
+
+
+firstMatch : Property -> List Property -> Maybe Property
+firstMatch prop props =
+    case props of
         [] ->
             Nothing
 
-        (Wait additionalWait) :: moreSteps ->
-            initializeSchedule
-                (Quantity.plus waiting additionalWait)
-                moreSteps
+        next :: remain ->
+            if Css.match prop next then
+                Just next
 
-        (TransitionTo dur checkpoint) :: moreSteps ->
-            Just ( Timeline.Schedule waiting (Timeline.Event dur checkpoint Nothing) [], moreSteps )
-
-
-stepsToEvents : Step state -> Timeline.Schedule state -> Timeline.Schedule state
-stepsToEvents currentStep (Timeline.Schedule delayTime startEvent events) =
-    case events of
-        [] ->
-            case currentStep of
-                Wait waiting ->
-                    Timeline.Schedule
-                        delayTime
-                        (Timeline.extendEventDwell waiting startEvent)
-                        events
-
-                TransitionTo dur checkpoint ->
-                    Timeline.Schedule
-                        delayTime
-                        startEvent
-                        [ Timeline.Event dur checkpoint Nothing ]
-
-        (Timeline.Event durationTo recentEvent maybeDwell) :: remaining ->
-            case currentStep of
-                Wait dur ->
-                    Timeline.Schedule
-                        delayTime
-                        startEvent
-                        (Timeline.Event durationTo recentEvent (Timeline.addToDwell dur maybeDwell) :: remaining)
-
-                TransitionTo dur checkpoint ->
-                    if checkpoint == recentEvent then
-                        Timeline.Schedule
-                            delayTime
-                            startEvent
-                            (Timeline.Event durationTo recentEvent (Timeline.addToDwell dur maybeDwell) :: remaining)
-
-                    else
-                        Timeline.Schedule
-                            delayTime
-                            startEvent
-                            (Timeline.Event dur checkpoint Nothing :: events)
+            else
+                firstMatch prop remain
 
 
 {-| -}
-type alias Event state =
-    Timeline.Event state
+px : String -> Float -> Property
+px name n =
+    Css.Prop
+        Internal.Css.Props.noId
+        name
+        (Move.to n)
+        Internal.Css.Props.px
 
 
 {-| -}
-type alias Schedule state =
-    Timeline.Schedule state
-
-
-
-{- Interpolations -}
-
-
-type alias Description state =
-    Timeline.Description state
+int : String -> Float -> Property
+int name n =
+    Css.Prop
+        Internal.Css.Props.noId
+        name
+        (Move.to n)
+        Internal.Css.Props.int
 
 
 {-| -}
-color : Timeline state -> (state -> Color) -> Color
-color timeline lookup =
-    Timeline.foldp
-        lookup
-        Interpolate.coloring
-        timeline
-
-
-
--- {-| Interpolate linearly between destinations. This is a shortcut to help you out.
--- You can do this with `move` by doing
---     Animator.move timeline <|
---         \state ->
---             if state then
---                 Animator.at 0
---                     |> Animator.leaveSmoothly 0
---                     |> Animator.arriveSmoothly 0
---             else
---                 Animator.at 1
---                     |> Animator.leaveSmoothly 0
---                     |> Animator.arriveSmoothly 0
--- Which is equivalent to
---     Animator.linear timeline <|
---         \state ->
---             if state then
---                 Animator.at 0
---             else
---                 Animator.at 1
--- -}
--- linear : Timeline state -> (state -> Movement) -> Float
--- linear timeline lookup =
---     .position <|
---         Interpolate.details timeline
---             (Interpolate.withLinearDefault << lookup)
+float : String -> Float -> Property
+float name n =
+    Css.Prop
+        Internal.Css.Props.noId
+        name
+        (Move.to n)
+        Internal.Css.Props.float
 
 
 {-| -}
-move : Timeline state -> (state -> Movement) -> Float
-move timeline lookup =
-    .position <|
-        Interpolate.details timeline lookup
+color : String -> Color.Color -> Property
+color name colorValue =
+    Css.ColorProp name
+        (Move.to colorValue)
 
 
-{-| -}
-xy :
+spinning : Duration -> Animation
+spinning dur =
+    keyframes
+        [ loop
+            [ set
+                [ rotation 0
+                ]
+            , step dur
+                [ rotation 1
+                ]
+            ]
+        ]
+
+
+pulsing : Duration -> Animation
+pulsing dur =
+    keyframes
+        [ loop
+            [ set
+                [ opacity 1
+                ]
+            , step dur
+                [ opacity 0.5
+                ]
+            ]
+        ]
+
+
+bouncing : Duration -> Float -> Animation
+bouncing dur distance =
+    if Time.isZeroDuration dur then
+        keyframes []
+
+    else
+        let
+            half =
+                dur |> Quantity.divideBy 2
+
+            startingY =
+                y 0
+                    |> withBezier 0.8 0 1 1
+        in
+        keyframes
+            [ loop
+                [ set
+                    [ startingY ]
+                , step half
+                    [ y distance
+                        |> withBezier 0 0 0.2 1
+                    ]
+                , step half
+                    [ startingY
+                    ]
+                ]
+            ]
+
+
+pinging : Duration -> Animation
+pinging dur =
+    keyframes
+        [ loop
+            [ set
+                [ rotation 0
+                , opacity 1
+                ]
+            , step dur
+                [ rotation 1
+                , opacity 0
+                ]
+            ]
+        ]
+
+
+onTimeline : Timeline state -> (state -> List Property) -> Animation
+onTimeline timeline toProps =
+    Animation
+        (Timeline.getCurrentTime timeline)
+        (Css.propsToRenderedProps timeline toProps)
+
+
+onTimelineWith :
     Timeline state
     ->
         (state
-         ->
-            { x : Movement
-            , y : Movement
-            }
+         -> ( List Property, List Step )
         )
-    -> { x : Float, y : Float }
-xy timeline lookup =
-    { x =
-        Timeline.foldp
-            (lookup >> .x)
-            Interpolate.moving
-            timeline
-            |> unwrapUnits
-            |> .position
-    , y =
-        Timeline.foldp
-            (lookup >> .y)
-            Interpolate.moving
-            timeline
-            |> unwrapUnits
-            |> .position
-    }
-
-
-{-| -}
-xyz : Timeline state -> (state -> { x : Movement, y : Movement, z : Movement }) -> { x : Float, y : Float, z : Float }
-xyz timeline lookup =
-    { x =
-        Timeline.foldp
-            (lookup >> .x)
-            Interpolate.moving
-            timeline
-            |> unwrapUnits
-            |> .position
-    , y =
-        Timeline.foldp
-            (lookup >> .y)
-            Interpolate.moving
-            timeline
-            |> unwrapUnits
-            |> .position
-    , z =
-        Timeline.foldp
-            (lookup >> .z)
-            Interpolate.moving
-            timeline
-            |> unwrapUnits
-            |> .position
-    }
-
-
-unwrapUnits { position, velocity } =
-    { position =
-        case position of
-            Quantity.Quantity val ->
-                val
-    , velocity =
-        case velocity of
-            Quantity.Quantity val ->
-                val
-    }
-
-
-{-| -}
-type alias Movement =
-    Interpolate.Movement
-
-
-{-| -}
-at : Float -> Movement
-at =
-    Move.to
-
-
-
--- withDefault toDef currentDefault =
---     case currentDefault of
---         Interpolate.FullDefault ->
---             Interpolate.PartialDefault (toDef Interpolate.emptyDefaults)
---         Interpolate.PartialDefault thing ->
---             Interpolate.PartialDefault (toDef thing)
--- applyOption toOption movement =
---     case movement of
---         Interpolate.Position personality pos ->
---             Interpolate.Position
---                 (withDefault
---                     toOption
---                     personality
---                 )
---                 pos
---         Interpolate.Oscillate personality pos period points ->
---             Interpolate.Oscillate
---                 (withDefault
---                     toOption
---                     personality
---                 )
---                 pos
---                 period
---                 points
-{- PERSONALITY -}
-
-
-{-| This will make the transition use a spring!
-
-  - `withWobble 0` - absolutely no wobble
-  - `withWobble 1` - all the wobble
-
--}
-withWobble : Float -> Movement -> Movement
-withWobble w movement =
-    Debug.todo "Move to Transitions"
-
-
-{-| Leave a state with some initial velocity.
-
-This is given as a velocity (as value/second). Usually this is pixels per second, but depends what you're animating.
-
-  - `withImpulse 0` - No initial velocity (the default)
-  - `withImpulse 200` - 200 units per second towards
-  - `withImpulse -200` - Negative values work too!
-
--}
-withImpulse : Float -> Movement -> Movement
-withImpulse p movement =
-    Debug.todo "Move to Transitions"
-
-
-
--- {-| -}
--- smooth : Float
--- smooth =
---     0.4
--- {-| -}
--- verySmooth : Float
--- verySmooth =
---     0.8
--- {-| Even though the transition officially starts at a certain time on the timeline, we can leave a little late.
---   - `0` means we leave at the normal time.
---   - `0.2` means we'll leave when the transition is at 20%.
---   - `1` means we leave at the end of the transition and instantly flip to the new state at that time.
--- -}
--- leaveLate : Float -> Movement -> Movement
--- leaveLate p movement =
---     applyOption (\def -> { def | departLate = Interpolate.Specified (clamp 0 1 p) }) movement
--- {-| We can also arrive early to this state.
---   - `0` means we arrive at the normal time.
---   - `0.2` means we'll arrive early by 20% of the total duration.
---   - `1` means we arrive at the start of the transition. So basically we instantly transition over.
--- **Weird math note** — `arriveEarly` and `leaveLate` will collaborate to figure out how the transition happens. If `arriveEarly` and `leaveLate` sum up to more `1` for a transition, then their sum will be the new maximum. Likely you don't need to worry about this :D.
--- The intended use for `arriveEarly` and `leaveLate` is for staggering items in a list. In those cases, these values are pretty small `~0.1`.
--- -}
--- arriveEarly : Float -> Movement -> Movement
--- arriveEarly p movement =
---     applyOption (\def -> { def | arriveEarly = Interpolate.Specified (clamp 0 1 p) }) movement
--- {-| Underneath the hood this library uses [Bézier curves](https://en.wikipedia.org/wiki/B%C3%A9zier_curve) to model motion.
--- Because of this you can adjust the "smoothness" of the curve that's ultimately used.
---   - `leaveSmoothly 0` is essentially linear animation.
---   - `leaveSmoothly 1` means the animation will start slowly and smoothly begin to accelerate.
---     Here's a general diagram of what's going on:
---     ![](https://mdgriffith.github.io/elm-animator/images/default-personality.png)
---     **Note** — The values in the above diagram are the built in defaults for most movements in `elm-animator`. They come from [`Material Design`](https://material.io/design/motion/speed.html#easing).
---     **Note 2** — An [interactive version of the above diagram](https://ellie-app.com/8s2yjQzQmZda1) is also available.
--- -}
--- leaveSmoothly : Float -> Movement -> Movement
--- leaveSmoothly s movement =
---     Interpolate.mapTransition
---         (\personality -> { personality | departSlowly = clamp 0 1 s })
---         movement
--- {-| We can also smooth out our arrival.
---   - `arriveSmoothly 0` means no smoothing, which means more of a linear animation.
---   - `arriveSmoothly 1` means the animation will "ease out" or "arrive slowly".
--- -}
--- arriveSmoothly : Float -> Movement -> Movement
--- arriveSmoothly s movement =
---     Interpolate.mapTransition
---         (\personality -> { personality | arriveSlowly = clamp 0 1 s })
---         movement
-
-
-{-| -}
-type alias Oscillator =
-    Interpolate.Oscillator
-
-
-within : Float -> Float -> Float -> Bool
-within tolerance anchor val =
+    -> Animation
+onTimelineWith timeline toPropsAndSteps =
     let
-        low =
-            anchor - tolerance
-
-        high =
-            anchor + tolerance
-    in
-    val >= low && val <= high
-
-
-{-| -}
-once : Duration -> Oscillator -> Movement
-once activeDuration osc =
-    -- case osc of
-    --     Interpolate.Resting i ->
-    --         at i
-    --     Interpolate.Oscillator start points ->
-    --         Interpolate.Pos
-    --             Interpolate.standardDefault
-    --             start
-    --             (Just
-    --                 (Interpolate.Repeat 1)
-    --             )
-    --             (Timeline.Repeat 1 activeDuration)
-    --             points
-    Debug.todo "once"
-
-
-{-| -}
-loop : Duration -> Oscillator -> Movement
-loop activeDuration osc =
-    -- case osc of
-    --     Interpolate.Resting i ->
-    --         at i
-    --     Interpolate.Oscillator start points ->
-    --         Interpolate.Pos
-    --             Interpolate.standardDefault
-    --             start
-    --             -- (Timeline.Loop activeDuration)
-    --             -- points
-    --             (Interpolate.Loop)
-    Debug.todo "loop"
-
-
-{-| -}
-repeat : Int -> Duration -> Oscillator -> Movement
-repeat n activeDuration osc =
-    -- case osc of
-    --     Interpolate.Resting i ->
-    --         at i
-    --     Interpolate.Oscillator start points ->
-    --         Interpolate.Osc
-    --             Interpolate.standardDefault
-    --             start
-    --             (Timeline.Repeat n activeDuration)
-    --             points
-    Debug.todo "repeat"
-
-
-
--- {-| Shift an oscillator over by a certain amount.
--- It's expecting a number between 0 and 1.
--- -}
--- shift : Float -> Oscillator -> Oscillator
--- shift x osc =
---     case osc of
---         Interpolate.Oscillator pauses fn ->
---             Interpolate.Oscillator
---                 pauses
---                 (\u -> fn (wrapToUnit (u + x)))
---         Interpolate.Resting _ ->
---             osc
-
-
-wrapToUnit : Float -> Float
-wrapToUnit x =
-    x - toFloat (floor x)
-
-
-
--- {-| Pause the the oscillator is at a certain point.
--- This pause time will be added to the time you specify using `loop`, so that you can adjust the pause without disturbing the original duration of the oscillator.
--- -}
--- pause : Duration -> Float -> Oscillator -> Oscillator
--- pause forDuration val osc =
---     case osc of
---         Timeline.Oscillator pauses fn ->
---             Timeline.Oscillator
---                 (Timeline.Pause forDuration val :: pauses)
---                 fn
---         Timeline.Resting _ ->
---             osc
-
-
-{-| Start at one number and move linearly to another, then immediately start again at the first.
-
-This was originally intended for animating rotation where you'd want 360deg to "wrap" to 0deg.
-
--}
-wrap : Float -> Float -> Oscillator
-wrap start end =
-    let
-        total =
-            end - start
-    in
-    -- Interpolate.Oscillator start
-    --     [ { value = end
-    --       , timing = Interpolate.Linear
-    --       , time = 1
-    --       }
-    --     ]
-    Debug.todo "wrap"
-
-
-{-| This is basically a sine wave! It will "wave" between the two numbers you give it.
--}
-wave : Float -> Float -> Oscillator
-wave start end =
-    let
-        top =
-            max start end
-
-        bottom =
-            min start end
-
-        total =
-            top - bottom
-    in
-    -- Interpolate.Oscillator start
-    -- TODO! What are the bezier control points for a sin wave?
-    -- (\u ->
-    --     let
-    --         normalized =
-    --             (cos (turns (0.5 + u)) + 1) / 2
-    --     in
-    --     start + total * normalized
-    -- )
-    -- [ { value = end
-    --   , timing =
-    --         -- Interpolate.Bezier (Interpolate.Spline 0 0.2 0.8 1)
-    --         Interpolate.Linear
-    --   , time = 0.5
-    --   }
-    -- , { value = start
-    --   , timing =
-    --         -- Interpolate.Bezier (Interpolate.Spline 0 0.2 0.8 1)
-    --         Interpolate.Linear
-    --   , time = 1
-    --   }
-    -- ]
-    Debug.todo "wave"
-
-
-{-| Start at one number, move linearly to another, and then linearly back.
--}
-zigzag : Float -> Float -> Oscillator
-zigzag start end =
-    -- let
-    --     total =
-    --         end - start
-    -- in
-    -- Interpolate.Oscillator start
-    --     [ { value = end
-    --       , timing = Interpolate.Linear
-    --       , time = 0.5
-    --       }
-    --     , { value = start
-    --       , timing = Interpolate.Linear
-    --       , time = 1
-    --       }
-    --     ]
-    Debug.todo ""
-
-
-
-{- SPRITES -}
-
-
-{-| -}
-type alias Frames item =
-    Timeline.Frames item
-
-
-{-| -}
-type alias Resting item =
-    Timeline.Resting item
-
-
-{-| Show a single `sprite`.
--}
-frame : sprite -> Frames sprite
-frame =
-    Timeline.Single
-
-
-{-| Show this `sprite` for a number of frames. Only really useful if you're using [`walk`](#walk) or [`cycle`](#cycle).
--}
-hold : Int -> sprite -> Frames sprite
-hold =
-    Timeline.Hold
-
-
-{-| Walk through a list of frames as we're transitioning to this state.
--}
-walk : sprite -> List (Frames sprite) -> Frames sprite
-walk =
-    Timeline.Walk
-
-
-{-| Here we have the same distinction of **transition** and **resting** that the rest of the library has.
-
-With `framesWith` we can define the frames it takes to transition to this state, as well as what to do when we're in this state (maybe we want to loop through a number of frames when we're in this state).
-
--}
-framesWith :
-    { transition : Frames item
-    , resting : Resting item
-    }
-    -> Frames item
-framesWith cfg =
-    Timeline.WithRest
-        cfg.resting
-        cfg.transition
-
-
-{-| -}
-type FramesPerSecond
-    = FramesPerSecond Float
-
-
-{-| -}
-fps : Float -> FramesPerSecond
-fps =
-    FramesPerSecond
-
-
-{-| While we're at this specific state, `cycle` through a list of frames at this `fps`.
--}
-cycle : FramesPerSecond -> List (Frames sprite) -> Resting sprite
-cycle (FramesPerSecond framesPerSecond) steps =
-    let
-        duration =
-            Duration.seconds (toFloat (List.length steps) / framesPerSecond)
-    in
-    Timeline.Cycle (Timeline.Loop duration) steps
-
-
-{-| Same as `cycle`, but only for `n` number of times.
--}
-cycleN : Int -> FramesPerSecond -> List (Frames sprite) -> Resting sprite
-cycleN n (FramesPerSecond framesPerSecond) steps =
-    let
-        duration =
-            Duration.seconds (toFloat (List.length steps) / framesPerSecond)
-    in
-    Timeline.Cycle (Timeline.Repeat n duration) steps
-
-
-{-| -}
-frames : Timeline state -> (state -> Frames sprite) -> sprite
-frames timeline lookup =
-    let
-        progress =
-            Timeline.progress timeline
-
-        currentFrameSet =
-            lookup (current timeline)
-    in
-    if progress == 1 then
-        restFrames currentFrameSet (Timeline.dwellingTime timeline)
-
-    else
-        stepFrames currentFrameSet progress
-
-
-restFrames : Frames item -> Float -> item
-restFrames currentFrameSet restingTimeMs =
-    case currentFrameSet of
-        Timeline.Single item ->
-            item
-
-        Timeline.Hold i item ->
-            item
-
-        Timeline.Walk start sprites ->
+        toProps event =
             let
-                index =
-                    totalFrames sprites - 1
+                ( props, steps ) =
+                    toPropsAndSteps event
+
+                fullDuration =
+                    sumStepDuration Time.zeroDuration steps
             in
-            getItemAtIndex index (Timeline.Single start) 0 sprites
-
-        Timeline.WithRest (Timeline.Cycle period cycleFrameList) transitionFrames ->
-            let
-                len =
-                    totalFrames cycleFrameList
-            in
-            case period of
-                Timeline.Loop dur ->
-                    let
-                        iterationTimeMS =
-                            Duration.inMilliseconds dur
-
-                        progress =
-                            wrapToUnit (restingTimeMs / iterationTimeMS)
-
-                        targetIndex =
-                            floor (progress * toFloat len)
-                    in
-                    getItemAtIndex targetIndex transitionFrames 0 cycleFrameList
-
-                Timeline.Repeat n dur ->
-                    let
-                        iterationTimeMS =
-                            Duration.inMilliseconds dur
-
-                        iteration =
-                            floor (restingTimeMs / iterationTimeMS)
-
-                        progress =
-                            if iteration >= n then
-                                1
-
-                            else
-                                wrapToUnit (restingTimeMs / iterationTimeMS)
-
-                        targetIndex =
-                            floor (progress * toFloat len)
-                    in
-                    getItemAtIndex targetIndex transitionFrames 0 cycleFrameList
-
-
-stepFrames : Frames item -> Float -> item
-stepFrames currentFrameSet progress =
-    case currentFrameSet of
-        Timeline.Single item ->
-            item
-
-        Timeline.Hold i item ->
-            item
-
-        Timeline.Walk start sprites ->
-            let
-                frameCount =
-                    totalFrames sprites
-
-                index =
-                    floor (progress * toFloat frameCount) - 1
-            in
-            getItemAtIndex index (Timeline.Single start) 0 sprites
-
-        Timeline.WithRest _ newFrameSet ->
-            stepFrames newFrameSet progress
-
-
-totalFrames : List (Frames item) -> Int
-totalFrames steps =
-    List.foldl (\frm total -> total + frameSize frm) 0 steps
-
-
-frameSize : Frames item -> Int
-frameSize myFrame =
-    case myFrame of
-        Timeline.Single _ ->
-            1
-
-        Timeline.Hold i _ ->
-            i
-
-        Timeline.Walk i steps ->
-            List.foldl (\frm total -> total + frameSize frm) 0 steps
-
-        Timeline.WithRest _ newFrameSet ->
-            frameSize newFrameSet
-
-
-getItemAtIndex : Int -> Frames item -> Int -> List (Frames item) -> item
-getItemAtIndex targetIndex transitionFrame currentIndex cycleList =
-    case cycleList of
-        [] ->
-            lastFrame transitionFrame
-
-        top :: remain ->
-            case top of
-                Timeline.Single item ->
-                    if targetIndex == currentIndex then
-                        item
-
-                    else
-                        getItemAtIndex targetIndex transitionFrame (currentIndex + 1) remain
-
-                Timeline.Hold i item ->
-                    if currentIndex <= targetIndex && currentIndex + i >= targetIndex then
-                        item
-
-                    else
-                        getItemAtIndex targetIndex transitionFrame (currentIndex + i) remain
-
-                Timeline.Walk item allFrames ->
-                    let
-                        frameCount =
-                            totalFrames allFrames
-                    in
-                    if targetIndex < currentIndex + frameCount then
-                        getItemAtIndex targetIndex transitionFrame currentIndex allFrames
-
-                    else
-                        getItemAtIndex targetIndex transitionFrame (currentIndex + frameCount) remain
-
-                Timeline.WithRest _ frameList ->
-                    let
-                        frameCount =
-                            frameSize frameList
-                    in
-                    if targetIndex < currentIndex + frameCount then
-                        getItemAtIndex targetIndex transitionFrame currentIndex [ frameList ]
-
-                    else
-                        getItemAtIndex targetIndex transitionFrame (currentIndex + frameCount) remain
-
-
-lastFrame myFrame =
-    case myFrame of
-        Timeline.Single item ->
-            item
-
-        Timeline.Hold _ item ->
-            item
-
-        Timeline.Walk item remainingFrames ->
-            case List.head (List.reverse remainingFrames) of
-                Nothing ->
-                    item
-
-                Just last ->
-                    lastFrame last
-
-        Timeline.WithRest _ frmeeList ->
-            lastFrame frmeeList
-
-
-{-| An `Animator` knows how to read and write all the `Timelines` within your `Model`.
-
-Here's an animator from the [Checkbox.elm example](https://github.com/mdgriffith/elm-animator/blob/master/examples/Checkbox.elm),
-
-    animator : Animator.Animator Model
-    animator =
-        Animator.animator
-            |> Animator.watching
-                -- we tell the animator how
-                -- to get the checked timeline using .checked
-                .checked
-                -- and we tell the animator how
-                -- to update that timeline as well
-                (\newChecked model ->
-                    { model | checked = newChecked }
-                )
-
-Notice you could add any number of timelines to this animator:
-
-    animator : Animator.Animator Model
-    animator =
-        Animator.animator
-            |> Animator.watching
-                -- we tell the animator how
-                -- to get the checked timeline using .checked
-                .checked
-                -- and we tell the animator how
-                -- to update that timeline as well
-                (\newChecked model ->
-                    { model | checked = newChecked }
-                )
-            |> Animator.watching
-                .anotherChecked
-                (\anotherCheckboxState ->
-                    { model | anotherChecked = anotherCheckboxState }
-                )
-
-**Note** — You likely only need one animator for a given project.
-
-**Note 2** — Once we have an `Animator Model`, we have two more steps in order to set things up:
-
-  - [create a _subscription_](#toSubscription)
-  - [_update_ our model](#update)
-
--}
-type alias Animator model =
-    Timeline.Animator model
+            getInitialProps Time.zeroDuration steps props
+                |> List.map (addSequenceSteps 1 fullDuration steps)
+    in
+    Animation
+        (Timeline.getCurrentTime timeline)
+        (Css.propsToRenderedProps timeline toProps)
 
 
 {-| -}
-animator : Animator model
-animator =
-    Timeline.Animator (\_ -> { running = False, ping = Nothing }) (\now model -> model)
+transition : Animator.Timeline.Duration -> List Property -> Animation
+transition transitionDuration props =
+    let
+        imminent =
+            Time.absolute (Time.millisToPosix 1)
+
+        startTime =
+            Time.advanceBy transitionDuration imminent
+
+        timeline =
+            Timeline.Timeline
+                { initial = []
+                , now = imminent
+                , delay = Time.zeroDuration
+                , scale = 1
+                , events =
+                    Timeline.Timetable
+                        [ Timeline.Line
+                            imminent
+                            (Timeline.Occurring props startTime startTime)
+                            []
+                        ]
+                , queued = Nothing
+                , interruption = []
+                , running = True
+                }
+    in
+    Animation (Timeline.getCurrentTime timeline)
+        (Css.propsToRenderedProps timeline identity)
 
 
-{-| `watching` will ensure that [`AnimationFrame`](https://package.elm-lang.org/packages/elm/browser/latest/Browser-Events#onAnimationFrame) is running when the animator is transformed into a [`subscription`](#toSubscription).
+{--}
+div :
+    Animation
+    -> List (Html.Attribute msg)
+    -> List (Html msg)
+    -> Html msg
+div =
+    node "div"
 
-**Note** — It will actually make the animation frame subscription run all the time! At some point you'll probably want to optimize when the subscription runs, which means either using [`watchingWith`](#watchingWith) or `Animator.Css.watching`.
+
+{-| -}
+node :
+    String
+    -> Animation
+    -> List (Html.Attribute msg)
+    -> List (Html msg)
+    -> Html msg
+node name (Animation now renderedProps) attrs children =
+    let
+        rendered =
+            Debug.log "STYLE" (Css.toCss now renderedProps)
+
+        styles =
+            List.map (\( propName, val ) -> Attr.style propName val)
+                (( "animation", rendered.animation ) :: rendered.props)
+    in
+    Html.node name
+        (styles ++ attrs)
+        (stylesheet rendered.keyframes
+            :: children
+        )
+
+
+{-| -}
+type alias Css =
+    { hash : String
+
+    -- use single prop encoding:
+    -- https://developer.mozilla.org/en-US/docs/Web/CSS/animation
+    , animation : String
+    , keyframes : String
+    , props : List ( String, String )
+    }
+
+
+{-| -}
+css : Timeline state -> (state -> List Property) -> Css
+css =
+    Css.cssFromProps
+
+
+{-| -}
+stylesheet : String -> Html msg
+stylesheet str =
+    case str of
+        "" ->
+            Html.text ""
+
+        _ ->
+            Html.node "style"
+                []
+                [ Html.text str
+                ]
+
+
+{--}
+{- ANIMATOR -}
+
+
+{-| `Animator.watching` is different from `Watcher.watching` in that it will only ask for one frame when an animation is updated.
+
+In that one frame, we render the **entire CSS animation**, which can run without `Elm` needing to do a full rerender.
 
 -}
 watching :
@@ -1356,82 +734,7 @@ watching :
     -> (Timeline state -> model -> model)
     -> Animator model
     -> Animator model
-watching get set (Timeline.Animator getDetails updateModel) =
-    Timeline.Animator
-        -- always runs
-        (\model ->
-            { running = True
-            , ping = getDetails model |> .ping
-            }
-        )
-        (\now model ->
-            let
-                newModel =
-                    updateModel now model
-            in
-            set (Timeline.update now (get newModel)) newModel
-        )
-
-
-{-| -}
-watchingList :
-    (model -> List (Timeline state))
-    -> (List (Timeline state) -> model -> model)
-    -> Animator model
-    -> Animator model
-watchingList getItemTimelines setItemTimelines (Timeline.Animator getDetails updateModel) =
-    Timeline.Animator
-        -- always runs
-        (\model ->
-            { running = True
-            , ping = getDetails model |> .ping
-            }
-        )
-        (\now model ->
-            let
-                newModel =
-                    updateModel now model
-
-                timelines =
-                    getItemTimelines newModel
-            in
-            setItemTimelines
-                (List.map (Timeline.update now)
-                    timelines
-                )
-                newModel
-        )
-
-
-{-| `watchingWith` will allow you to have more control over when `AnimationFrame` runs.
-
-The main thing you need to do here is capture which states are animated when they're **resting**.
-
-Let's say we have a checkbox that, for whatever reason, we want to say is spinning forever when the value is `False`.
-
-    animator : Animator.Animator Model
-    animator =
-        Animator.animator
-            |> Animator.watchingWith .checked
-                (\newChecked model ->
-                    { model | checked = newChecked }
-                )
-                -- here is where we tell the animator that we still need
-                -- AnimationFrame when the timeline has a current value of `False`
-                (\checked ->
-                    checked == False
-                )
-
-**Note** — if you're using `Animator.Css` to generate keyframes along with `Animator.Css.watching`, you don't need to worry about this.
-
--}
-watchingWith :
-    (model -> Timeline state)
-    -> (Timeline state -> model -> model)
-    -> (state -> Bool)
-    -> Animator model
-    -> Animator model
-watchingWith get set eventIsRestable (Timeline.Animator isRunning updateModel) =
+watching get setValue (Timeline.Animator isRunning updateModel) =
     Timeline.Animator
         (\model ->
             let
@@ -1457,19 +760,17 @@ watchingWith get set eventIsRestable (Timeline.Animator isRunning updateModel) =
 
                                     else
                                         Just currentPing
+
+                running =
+                    if prev.running then
+                        True
+
+                    else
+                        Timeline.hasChanged timeline
+                            || Timeline.justInitialized timeline
             in
-            { running =
-                -- if we're already running, skip
-                if prev.running then
-                    prev.running
-
-                else if Timeline.needsUpdate timeline then
-                    True
-
-                else
-                    eventIsRestable (Timeline.current timeline)
-            , ping =
-                ping
+            { running = running
+            , ping = ping
             }
         )
         (\now model ->
@@ -1477,76 +778,5 @@ watchingWith get set eventIsRestable (Timeline.Animator isRunning updateModel) =
                 newModel =
                     updateModel now model
             in
-            set (Timeline.update now (get newModel)) newModel
+            setValue (Timeline.update now (get newModel)) newModel
         )
-
-
-{-| Convert an `Animator` to a subscription.
-
-This is where the animator will decide if a running animation needs another frame or not.
-
-    subscriptions model =
-        Animator.toSubscription Tick model animator
-
--}
-toSubscription : (Time.Posix -> msg) -> model -> Animator model -> Sub msg
-toSubscription toMsg model (Timeline.Animator getContext _) =
-    let
-        context =
-            getContext model
-    in
-    if context.running || not (context.ping == Nothing) then
-        Sub.batch
-            [ if context.running then
-                Browser.Events.onAnimationFrame
-                    toMsg
-
-              else
-                Sub.none
-            , case context.ping of
-                Just ping ->
-                    Time.every ping.delay
-                        (\time ->
-                            toMsg ping.target
-                        )
-
-                Nothing ->
-                    Sub.none
-            ]
-
-    else
-        Sub.none
-
-
-{-| When new messages come in, we then need to update our model. This looks something like this:
-
-    type Msg
-        = Tick Time.Posix
-
-    update msg model =
-        case msg of
-            Tick newTime ->
-                ( Animator.update newTime animator model
-                , Cmd.none
-                )
-
-And voilà, we can begin animating!
-
-**Note** — To animate more things, all you need to do is add a new `with` to your `Animator`.
-
--}
-update : Time.Posix -> Animator model -> model -> model
-update newTime (Timeline.Animator _ updateModel) model =
-    updateModel newTime model
-
-
-{-| If you're creating something like a game, you might want to update your `Timelines` manually instead of using an `Animator`.
-
-This will allow you to do whatever calculations you need while updating each `Timeline`.
-
-**Note** — You'll have to take care of subscribing to `Browser.Events.onAnimationFrame`.
-
--}
-updateTimeline : Time.Posix -> Timeline state -> Timeline state
-updateTimeline =
-    Timeline.update
