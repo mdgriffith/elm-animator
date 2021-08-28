@@ -95,19 +95,7 @@ There are likewise three situations a transition will be in.
 -}
 type Transition
     = Transition Bezier.Spline
-    | Trail
-        { total : Float
-        , first :
-            TrailStep
-        , tail : List TrailStep
-        }
     | Wobble { introVelocity : Float, wobble : Float }
-
-
-type alias TrailStep =
-    { spline : Bezier.Spline
-    , percent : Float
-    }
 
 
 bezier : Float -> Float -> Float -> Float -> Transition
@@ -248,9 +236,6 @@ atX progress domain introVelocity exitVelocity transition =
                     |> inTimeDomain domain introVelocity exitVelocity
                     |> posVel (toTimeProgress domain progress)
 
-        Trail trail ->
-            onTrail progress domain introVelocity exitVelocity (trail.first :: trail.tail)
-
         Wobble wob ->
             let
                 totalX =
@@ -289,11 +274,6 @@ atX2 progress transition =
                 Bezier.firstDerivative spline pos.t
             }
 
-        Trail trail ->
-            -- onTrail2 progress
-            -- (top :: trail)
-            Debug.todo "atX2 - Trail"
-
         Wobble wob ->
             -- let
             --     totalX =
@@ -312,43 +292,11 @@ atX2 progress transition =
             Debug.todo "atX2 - Wobble"
 
 
-onTrail2 :
-    Float
-    -> List Bezier.Spline
-    ->
-        { position : Bezier.Point
-        , velocity : Bezier.Point
-        }
-onTrail2 progress trail =
-    case trail of
-        [] ->
-            { position = Bezier.onePoint
-            , velocity = Bezier.zeroPoint
-            }
-
-        spline :: remain ->
-            if Bezier.firstX spline <= progress then
-                let
-                    pos =
-                        Bezier.atX progress spline
-                in
-                { position = pos.point
-                , velocity =
-                    Bezier.firstDerivative spline pos.t
-                }
-
-            else
-                onTrail2 progress remain
-
-
 withVelocities : Float -> Float -> Transition -> Transition
 withVelocities intro exit transition =
     case transition of
         Transition spline ->
             Transition (Bezier.withVelocities intro exit spline)
-
-        Trail trail ->
-            Debug.todo "Transition.withVelocities Trail"
 
         Wobble wob ->
             Wobble
@@ -402,33 +350,6 @@ posVel progress spline =
     }
 
 
-onTrail :
-    Float
-    -> TimeDomain
-    -> Units.PixelsPerSecond
-    -> Units.PixelsPerSecond
-    -> List TrailStep
-    ->
-        { position : Units.Pixels
-        , velocity : Units.PixelsPerSecond
-        }
-onTrail progress domain introVelocity exitVelocity trail =
-    case trail of
-        [] ->
-            { position = domain.end.y
-            , velocity = Units.zero
-            }
-
-        step :: remain ->
-            if Bezier.firstX step.spline <= progress then
-                step.spline
-                    |> inTimeDomain domain introVelocity exitVelocity
-                    |> posVel (toTimeProgress domain progress)
-
-            else
-                onTrail progress domain introVelocity exitVelocity remain
-
-
 zeroVelocity : Float
 zeroVelocity =
     0
@@ -443,19 +364,6 @@ initialVelocity transition =
                     -- at t == 0, the first derivative vector will always be 0,0
                     -- so we cheat in slightly.
                     Bezier.firstDerivative spline 0.001
-            in
-            if firstDeriv.x == 0 then
-                zeroVelocity
-
-            else
-                firstDeriv.y / firstDeriv.x
-
-        Trail trail ->
-            let
-                firstDeriv =
-                    -- at t == 0, the first derivative vector will always be 0,0
-                    -- so we cheat in slightly.
-                    Bezier.firstDerivative trail.first.spline 0.001
             in
             if firstDeriv.x == 0 then
                 zeroVelocity
@@ -668,10 +576,6 @@ hash transition =
         Transition spline ->
             Bezier.hash spline
 
-        Trail trail ->
-            List.map (.spline >> Bezier.hash) (trail.first :: trail.tail)
-                |> String.join "-"
-
         Wobble f ->
             "wob-" ++ String.fromFloat f.wobble
 
@@ -688,32 +592,6 @@ keyframes domain startPercent endPercent toString transition =
                 spline
 
         -- ++ finalFrame toString normalized
-        Trail trail ->
-            -- case trail.tail of
-            --     [] ->
-            --         splineKeyframes
-            --             startPercent
-            --             domain.start
-            --             toString
-            --             trail.first.spline
-            --     _ ->
-            --         trailKeyframes
-            --             startPercent
-            --             endPercent
-            --             trail.total
-            --             trail.first
-            --             trail.tail
-            --             ""
-            ""
-
-        -- renderTrailKeyframes
-        --     startPercent
-        --     endPercent
-        --     domain
-        --     toString
-        --     trail
-        --     ""
-        -- ""
         Wobble wob ->
             -- let
             --     params =
@@ -746,49 +624,6 @@ finalFrame finalValue toString =
     "100% {" ++ toString finalValue ++ ";}"
 
 
-
--- renderKeyframeList : Float -> Float -> (Float -> String) -> List Bezier.Spline -> String -> String
--- renderKeyframeList startPercent endPercent toString trail rendered =
---     case trail of
---         [] ->
---             rendered
---         spline :: [] ->
---             rendered
---                 ++ splineKeyframes startPercent endPercent toString spline
---         -- ++ finalFrame toString spline
---         spline :: remain ->
---             renderKeyframeList
---                 startPercent
---                 endPercent
---                 toString
---                 remain
---                 (splineKeyframes startPercent endPercent toString spline
---                     ++ rendered
---                 )
--- renderTrailKeyframes : Float -> Float -> Domain -> (Float -> String) -> List Bezier.Spline -> String -> String
--- renderTrailKeyframes startPercent endPercent domain toString trail rendered =
---     case trail of
---         [] ->
---             rendered
---         spline :: [] ->
---             let
---                 normalized =
---                     toDomain domain 0 0 spline
---             in
---             rendered
---                 ++ splineKeyframes startPercent endPercent toString normalized
---         -- ++ finalFrame toString normalized
---         spline :: remain ->
---             renderTrailKeyframes startPercent
---                 endPercent
---                 domain
---                 toString
---                 remain
---                 (splineKeyframes startPercent endPercent toString (toDomain domain 0 0 spline)
---                     ++ rendered
---                 )
-
-
 {-| -}
 before : Float -> Transition -> Transition
 before t transition =
@@ -812,15 +647,6 @@ takeAfter t transition =
                     Bezier.splitAtX t spline
             in
             Transition (Bezier.normalize afterT)
-
-        Trail trail ->
-            -- split an existing spline
-            -- case Bezier.takeAfter t (top :: trail) of
-            --     [] ->
-            --         transition
-            --     afterTop :: remain ->
-            --         Trail ( Bezier.normalize afterTop, remain )
-            Debug.todo "TAKE AFTER FOR TRAILS"
 
         Wobble wob ->
             -- convert to splines and store s `Trail`

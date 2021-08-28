@@ -846,45 +846,6 @@ cssForSections now startPos name toString toHashString sections anim =
                             :: anim.props
                 }
 
-        (Sequence 1 delay _ [ Step stepDur (Transition.Trail trail) v ]) :: rest ->
-            let
-                trailSectionDur =
-                    stepDur |> Quantity.multiplyBy trail.first.percent
-
-                subsequentDuration =
-                    stepDur |> Time.reduceDurationBy trailSectionDur
-            in
-            cssForSections now
-                startPos
-                name
-                toString
-                toHashString
-                (Sequence 1
-                    delay
-                    trailSectionDur
-                    [ Step trailSectionDur (Transition.Transition trail.first.spline) v ]
-                    :: (case trail.tail of
-                            [] ->
-                                rest
-
-                            newTrailTop :: trailRemain ->
-                                Sequence 1
-                                    (Time.expand delay trailSectionDur)
-                                    subsequentDuration
-                                    [ Step subsequentDuration
-                                        (Transition.Trail
-                                            { total = trail.total - trail.first.percent
-                                            , first = newTrailTop
-                                            , tail = trailRemain
-                                            }
-                                        )
-                                        v
-                                    ]
-                                    :: rest
-                       )
-                )
-                anim
-
         (Sequence 1 delay dur [ Step stepDur (Transition.Wobble wob) v ]) :: rest ->
             Debug.todo "figure out where to split the wob into a trail"
 
