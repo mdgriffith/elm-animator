@@ -111,7 +111,7 @@ capture style start finish toMotion interp timeline rendered =
             at =
                 timeline
                     |> Timeline.atTime (Time.millisToPosix start)
-                    |> Timeline.foldpOld toMotion interp
+                    |> Timeline.foldp toMotion interp
         in
         capture style
             (start + 10)

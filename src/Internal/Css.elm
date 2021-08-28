@@ -98,7 +98,7 @@ propsToRenderedProps timeline lookup =
         present =
             getInitial timeline lookup
     in
-    Timeline.foldpAll2 lookup
+    Timeline.foldpAll lookup
         (\_ -> present)
         toPropCurves2
         timeline
@@ -116,7 +116,7 @@ cssFromProps timeline lookup =
             getInitial timeline lookup
 
         renderedProps =
-            Timeline.foldpAll2 lookup
+            Timeline.foldpAll lookup
                 (\_ -> present)
                 toPropCurves2
                 timeline
@@ -128,7 +128,7 @@ getInitial : Timeline.Timeline event -> (event -> List Prop) -> List RenderedPro
 getInitial timeline lookup =
     let
         ( maybeTransform, renderedProps ) =
-            Timeline.foldpAll2 lookup
+            Timeline.foldpAll lookup
                 (\props ->
                     toInitialProps props ( Nothing, [] )
                 )
