@@ -838,14 +838,10 @@ cssForSections now startPos name toString toHashString sections anim =
                             :: anim.props
                 }
 
-        (Sequence 1 delay dur [ Step stepDur (Transition.Trail []) v ]) :: rest ->
-            -- make trail a nonempty list to avoid this situation
-            anim
-
-        (Sequence 1 delay _ [ Step stepDur (Transition.Trail (spline :: trail)) v ]) :: rest ->
+        (Sequence 1 delay _ [ Step stepDur (Transition.Trail trail) v ]) :: rest ->
             let
                 trailSectionDur =
-                    Debug.todo "Needs to be the dur for spline"
+                    stepDur |> Quantity.multiplyBy trail.first.percent
 
                 subsequentDuration =
                     stepDur |> Time.reduceDurationBy trailSectionDur
@@ -855,9 +851,29 @@ cssForSections now startPos name toString toHashString sections anim =
                 name
                 toString
                 toHashString
-                (Sequence 1 delay trailSectionDur [ Step trailSectionDur (Transition.Transition spline) v ]
-                    :: Sequence 1 (Time.expand delay trailSectionDur) subsequentDuration [ Step subsequentDuration (Transition.Trail trail) v ]
-                    :: rest
+                (Sequence 1
+                    delay
+                    trailSectionDur
+                    [ Step trailSectionDur (Transition.Transition trail.first.spline) v ]
+                    :: (case trail.tail of
+                            [] ->
+                                rest
+
+                            newTrailTop :: trailRemain ->
+                                Sequence 1
+                                    (Time.expand delay trailSectionDur)
+                                    subsequentDuration
+                                    [ Step subsequentDuration
+                                        (Transition.Trail
+                                            { total = trail.total - trail.first.percent
+                                            , first = newTrailTop
+                                            , tail = trailRemain
+                                            }
+                                        )
+                                        v
+                                    ]
+                                    :: rest
+                       )
                 )
                 anim
 
