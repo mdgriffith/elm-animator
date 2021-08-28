@@ -1,6 +1,6 @@
 module Internal.Transition exposing
     ( Transition(..)
-    , linear, standard, wobble
+    , linear, standard, wobble, bezier
     , initialVelocity, atX
     , split, before
     , hash, keyframes
@@ -11,7 +11,7 @@ module Internal.Transition exposing
 
 @docs Transition
 
-@docs linear, standard, wobble
+@docs linear, standard, wobble, bezier
 
 @docs initialVelocity, atX
 
@@ -108,6 +108,24 @@ type alias TrailStep =
     { spline : Bezier.Spline
     , percent : Float
     }
+
+
+bezier : Float -> Float -> Float -> Float -> Transition
+bezier one two three four =
+    Transition <|
+        Bezier.Spline
+            { x = 0
+            , y = 0
+            }
+            { x = one
+            , y = two
+            }
+            { x = three
+            , y = four
+            }
+            { x = 1
+            , y = 1
+            }
 
 
 {-| -}
@@ -671,15 +689,31 @@ keyframes domain startPercent endPercent toString transition =
 
         -- ++ finalFrame toString normalized
         Trail trail ->
-            -- renderTrailKeyframes
-            --     startPercent
-            --     endPercent
-            --     domain
-            --     toString
-            --     trail
-            --     ""
+            -- case trail.tail of
+            --     [] ->
+            --         splineKeyframes
+            --             startPercent
+            --             domain.start
+            --             toString
+            --             trail.first.spline
+            --     _ ->
+            --         trailKeyframes
+            --             startPercent
+            --             endPercent
+            --             trail.total
+            --             trail.first
+            --             trail.tail
+            --             ""
             ""
 
+        -- renderTrailKeyframes
+        --     startPercent
+        --     endPercent
+        --     domain
+        --     toString
+        --     trail
+        --     ""
+        -- ""
         Wobble wob ->
             -- let
             --     params =

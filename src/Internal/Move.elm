@@ -4,7 +4,7 @@ module Internal.Move exposing
     , Step, step, stepWith, set
     , sequences
     , css, addSequence
-    , atX, cssForSections, floatToString, initialSequenceVelocity, lastPosOr, normalizeOver, toReal, withDelay, withVelocities, withWobble
+    , atX, cssForSections, floatToString, initialSequenceVelocity, lastPosOr, normalizeOver, toReal, withBezier, withDelay, withVelocities, withWobble
     )
 
 {-|
@@ -81,6 +81,14 @@ withWobble : Float -> Move value -> Move value
 withWobble wob (Pos trans value sequence) =
     Pos
         (Transition.wobble wob)
+        value
+        sequence
+
+
+withBezier : Float -> Float -> Float -> Float -> Move value -> Move value
+withBezier one two three four (Pos trans value sequence) =
+    Pos
+        (Transition.bezier one two three four)
         value
         sequence
 
