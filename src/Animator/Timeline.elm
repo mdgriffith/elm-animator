@@ -67,14 +67,9 @@ Well, we can ask the `Timeline` all sorts of questions.
 
 -}
 
-import Browser.Events
-import Color exposing (Color)
 import Duration
-import Internal.Interpolate as Interpolate
-import Internal.Move as Move
 import Internal.Time as Time
 import Internal.Timeline as Timeline
-import Internal.Transition as Transition
 import Quantity
 import Time
 
