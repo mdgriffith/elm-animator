@@ -132,10 +132,6 @@ wrapUnitAfter dur total =
                 / toFloat periodDuration
 
 
-type alias Progress =
-    Float
-
-
 type alias State =
     { position : Pixels
     , velocity : PixelsPerSecond
@@ -148,12 +144,6 @@ equalState one two =
         && (Pixels.inPixelsPerSecond one.velocity - Pixels.inPixelsPerSecond two.velocity == 0)
 
 
-type alias XY thing =
-    { x : thing
-    , y : thing
-    }
-
-
 startMoving : Movement -> State
 startMoving movement =
     { position =
@@ -162,11 +152,6 @@ startMoving movement =
                 Pixels.pixels x
     , velocity = Pixels.pixelsPerSecond 0
     }
-
-
-zeroDuration : Duration.Duration
-zeroDuration =
-    Duration.milliseconds 0
 
 
 {-| -}
