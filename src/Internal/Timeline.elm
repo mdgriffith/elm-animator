@@ -4,7 +4,7 @@ module Internal.Timeline exposing
     , needsUpdate, update, updateWith
     , startTime, endTime, getEvent, extendEventDwell, hasDwell, isResting
     , addToDwell
-    , progress, dwellingTime, sendPing
+    , sendPing
     , current, arrivedAt, arrived, previous, upcoming
     , Line(..), Timetable(..)
     , foldp, foldpAll, captureTimeline
@@ -23,7 +23,7 @@ module Internal.Timeline exposing
 
 @docs addToDwell
 
-@docs progress, dwellingTime, sendPing
+@docs sendPing
 
 @docs current, arrivedAt, arrived, previous, upcoming
 
@@ -921,40 +921,6 @@ addToDwell duration maybeDwell =
                 Just (Quantity.plus duration existing)
 
 
-
--- {-| Focus allows you to focus on a specific piece of state.
--- Let's say you have a record with two fields
---     { one = 0
---     , two = -10
---     }
--- You being to transition `one` to 1.
---     { one = 0
---     , two = -10
---     }
---         --200ms-->
---         { one = 1
---         , two = -10
---         }
--- And while that's happening, you also schedule `two` to go to 0.
---     { one = 0 -> 1
---     , two = -10 -> 0
---     }
---         --x30ms->  (interrupted 30ms in)
---             { one = 1
---             , two = -10
---             }
---         --200ms->
---             { one = 1
---             , two = 0
---             }
--- Because we're watching the
--- The critical part of this is that
--- -}
--- focus : (state -> focus) -> Timeline state -> Timeline focus
--- focus toFocus (Timeline details) =
---     Debug.todo ""
-
-
 foldp :
     (state -> anchor)
     -> Interp state anchor motion
@@ -1092,8 +1058,8 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                                     prev
                                     futureEvent
                                     details.now
-                                    (endTime prev)
-                                    (endTime futureEvent)
+                                    futureStart
+                                    (startTime futureEvent)
                                     futureRemain
                     in
                     visitAll2
@@ -1190,8 +1156,6 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                         -- then make another transition from where we were interrupted to
                         -- our new destination
                         let
-                            --_ =
-                            --    Debug.log "    INTERRUPTED" futureEvent
                             new =
                                 state
                                     |> transitionTo toAnchor
@@ -1220,8 +1184,6 @@ visitAll2 toAnchor transitionTo details prev queue future state =
 
                     else
                         let
-                            --_ =
-                            --    Debug.log "NOT INTERRUPTED" futureEvent
                             new =
                                 transitionTo toAnchor
                                     prev
@@ -1927,105 +1889,83 @@ captureTimelineHelper lookup events futureLines summary =
                         captureTimelineHelper lookup remain futureLines (newEvent :: summary)
 
 
-type Status
-    = Dwelling Time.Duration
-    | Transitioning Float
-
-
 
 {- BOOKKEEPING -}
 
 
 arrived : Timeline event -> event
 arrived ((Timeline details) as timeline) =
-    foldp
-        identity
-        { start =
-            \_ ->
-                details.initial
-        , visit =
-            \lookup target targetTime maybeLookAhead state ->
+    foldpAll identity
+        (\_ -> details.initial)
+        (\lookup prev target now start end future state ->
+            -- This is the current event when
+            --      we have started toward an event or arrived at it.
+            -- A tricky aspect is that css timelines are only updated on transition
+            -- This means that now == start must be current, or else current will be wrong for the whole transition.
+            if Time.thisAfterOrEqualThat now end && (startTime target == end) then
                 getEvent target
-        , transition =
-            \prevEndTime prev target targetTime now maybeLookAhead state ->
-                prev
-        }
+
+            else
+                state
+        )
         timeline
 
 
 current : Timeline event -> event
 current ((Timeline details) as timeline) =
-    foldp
-        identity
-        { start =
-            \_ ->
-                details.initial
-        , visit =
-            \lookup target now maybeLookAhead state ->
+    foldpAll identity
+        (\_ -> details.initial)
+        (\lookup prev target now start end future state ->
+            -- This is the current event when
+            --      we have started toward an event or arrived at it.
+            -- A tricky aspect is that css timelines are only updated on transition
+            -- This means that now == start must be current, or else current will be wrong for the whole transition.
+            if
+                Time.thisBeforeOrEqualThat now end
+                    && Time.thisAfterOrEqualThat now start
+            then
                 getEvent target
-        , transition =
-            \_ maybePrevious target _ _ _ state ->
-                target
-        }
+
+            else if List.isEmpty future && Time.thisAfterThat now end then
+                getEvent target
+
+            else
+                state
+        )
         timeline
 
 
 previous : Timeline event -> event
 previous ((Timeline details) as timeline) =
-    foldp
-        identity
-        { start =
-            \start ->
-                { prev = start
-                , current = start
-                , transitioning = False
-                }
-        , visit =
-            \lookup target now maybeLookAhead state ->
-                { current = lookup (getEvent target)
-                , prev = state.current
-                , transitioning = False
-                }
-        , transition =
-            \lookup prev target _ _ _ state ->
-                -- if we've begun trasitioning to another state,
-                -- then the previous state is the last visited.
-                if state.transitioning then
-                    -- we've been interrupted a second time,
-                    -- this doesnt change the previous state
-                    state
+    foldpAll identity
+        (\_ -> details.initial)
+        (\lookup prev target now start end future state ->
+            if Time.thisAfterThat now (endTime target) then
+                case future of
+                    [] ->
+                        state
 
-                else
-                    -- we're transitioning, the previous state is the last visited
-                    { current = state.current
-                    , prev = state.current
-                    , transitioning = True
-                    }
-        }
+                    _ ->
+                        getEvent target
+
+            else
+                state
+        )
         timeline
-        |> .prev
 
 
 arrivedAt : (event -> Bool) -> Time.Posix -> Timeline event -> Bool
-arrivedAt matches newTime (Timeline details) =
-    foldp
-        identity
-        { start =
-            \_ ->
-                False
-        , visit =
-            \lookup target _ maybeLookAhead state ->
-                matches (getEvent target)
-                    && Time.thisBeforeThat details.now (startTime target)
-        , transition =
-            \_ _ target targetTime now _ state ->
-                state
-                    || (matches target
-                            && Time.thisBeforeOrEqualThat details.now targetTime
-                            && Time.thisAfterOrEqualThat (Time.absolute newTime) targetTime
-                       )
-        }
-        (Timeline details)
+arrivedAt matches newTime ((Timeline details) as tl) =
+    foldpAll identity
+        (\_ -> False)
+        (\lookup prev target now start end future state ->
+            state
+                || (matches (getEvent target)
+                        && Time.thisBeforeOrEqualThat details.now end
+                        && Time.thisAfterOrEqualThat (Time.absolute newTime) end
+                   )
+        )
+        tl
 
 
 onMaybe fn maybe =
@@ -2052,7 +1992,7 @@ anyScheduled matches (Schedule dur startEvent remainingEvents) =
 
 {-| -}
 upcoming : (event -> Bool) -> Timeline event -> Bool
-upcoming matches (Timeline details) =
+upcoming matches ((Timeline details) as tl) =
     -- we check both the queued and interruption caches
     -- This function is sometimes used to prevent queueing an action multiple times
     -- However if multiple msgs get fired in one frame, then there's still a subtle possibility that something will get double queued.
@@ -2063,97 +2003,15 @@ upcoming matches (Timeline details) =
         True
 
     else
-        foldp
-            identity
-            { start =
-                \_ ->
-                    False
-            , visit =
-                \lookup target _ maybeLookAhead state ->
-                    matches (getEvent target)
-                        && Time.thisBeforeThat details.now (startTime target)
-            , transition =
-                \_ _ target targetTime _ _ state ->
-                    state
-                        || (matches target
-                                && Time.thisBeforeThat details.now targetTime
-                           )
-            }
-            (Timeline { details | now = Time.millis (1 / 0) })
-
-
-status : Timeline event -> Status
-status ((Timeline details) as timeline) =
-    foldp
-        identity
-        { start =
-            \_ ->
-                Transitioning 0
-        , visit =
-            \lookup (Occurring event start eventEnd) now maybeLookAhead state ->
-                let
-                    dwellTime =
-                        case maybeLookAhead of
-                            Nothing ->
-                                Time.duration start now
-
-                            _ ->
-                                Time.duration start (Time.earliest now eventEnd)
-                in
-                if Time.isZeroDuration dwellTime then
-                    Transitioning 1
-
-                else
-                    Dwelling dwellTime
-        , transition =
-            \prevEndTime maybePrev target targetTime now maybeLookAhead state ->
-                -- target
-                -- Transitioning 0
-                let
-                    start =
-                        prevEndTime
-
-                    end =
-                        targetTime
-                in
-                if Time.thisAfterOrEqualThat now end then
-                    Transitioning 1
-
-                else
-                    Transitioning (Time.progress start end now)
-        }
-        timeline
-
-
-{--}
-{-| The proportion (number between 0 and 1) of progress between the last state and the new one.
-
-Once we arrive at a new state, this value will be 1 until we start another transition.
-
--}
-progress : Timeline state -> Float
-progress timeline =
-    case status timeline of
-        Dwelling _ ->
-            1
-
-        Transitioning t ->
-            t
-
-
-{-| The number of milliseconds that has occurred since we came to rest at the most recent state.
-
-If we're in transition, this is 0.
-
--}
-dwellingTime : Timeline state -> Float
-dwellingTime timeline =
-    case status timeline of
-        Dwelling x ->
-            Duration.inMilliseconds x
-
-        Transitioning _ ->
-            0
+        foldpAll identity
+            (\_ -> False)
+            (\lookup prev target now start end future state ->
+                state
+                    || (matches (getEvent target)
+                            && Time.thisBeforeThat now end
+                       )
+            )
+            tl
 
 
 
@@ -2190,23 +2048,15 @@ sendPing ((Timeline details) as timeline) =
 
 findNextTransitionTime : Timeline event -> Maybe Time.Absolute
 findNextTransitionTime ((Timeline details) as timeline) =
-    foldp
-        identity
-        { start =
-            \_ ->
-                Nothing
-        , visit =
-            \lookup target targetTime maybeLookAhead state ->
-                state
-        , transition =
-            \prevEndTime prev target targetTime now maybeLookAhead state ->
-                case state of
-                    Nothing ->
-                        Just targetTime
+    foldpAll identity
+        (\_ -> Nothing)
+        (\lookup prev target now start end future state ->
+            if Time.thisBeforeThat now end && (startTime target == end) then
+                Just (startTime target)
 
-                    _ ->
-                        state
-        }
+            else
+                state
+        )
         timeline
 
 

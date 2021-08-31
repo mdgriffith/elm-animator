@@ -307,7 +307,7 @@ current =
                 \_ ->
                     Expect.equal
                         (Animator.Timeline.current timelines.double.begin)
-                        Starting
+                        One
             , test "transitioning" <|
                 \_ ->
                     Expect.equal
@@ -326,8 +326,7 @@ current =
             ]
         , describe "queued"
             -- queued
-            [ --only <|
-              test "begin" <|
+            [ test "begin" <|
                 \_ ->
                     Expect.equal
                         (Animator.Timeline.current timelines.queued.begin)
@@ -349,14 +348,15 @@ current =
                         Three
             , test "atOne" <|
                 \_ ->
+                    -- as soon as we arrive at One, we are progressing to Two
                     Expect.equal
                         (Animator.Timeline.current timelines.queued.atOne)
-                        One
+                        Two
             , test "atTwo" <|
                 \_ ->
                     Expect.equal
                         (Animator.Timeline.current timelines.queued.atTwo)
-                        Two
+                        Three
             , test "atThree" <|
                 \_ ->
                     Expect.equal
