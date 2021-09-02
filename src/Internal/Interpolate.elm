@@ -1,7 +1,6 @@
 module Internal.Interpolate exposing
     ( Movement, State, derivativeOfEasing
     , startMoving
-    , coloring, moving
     , Checkpoint, Oscillator(..), Point, Sequence(..), Step(..), Timing(..), color, details, equalState, getPeriodDuration, newVelocityAtTarget, velocityAtTarget, visit
     )
 
@@ -13,7 +12,7 @@ module Internal.Interpolate exposing
 
 @docs startMoving
 
-@docs coloring, moving, mapTransition
+@docs mapTransition
 
 -}
 
@@ -191,14 +190,6 @@ unwrapUnits { position, velocity } =
         case velocity of
             Quantity.Quantity val ->
                 val
-    }
-
-
-moving : Timeline.Interp state Movement State
-moving =
-    { start = startMoving
-    , visit = visit
-    , transition = transition
     }
 
 
@@ -706,27 +697,6 @@ velocityBetween one oneTime two twoTime =
 
     else
         vel
-
-
-coloring : Timeline.Interp event Color.Color Color.Color
-coloring =
-    { start = identity
-    , visit =
-        \lookup target now maybeLookAhead state ->
-            lookup (Timeline.getEvent target)
-    , transition = transitionColor
-    }
-
-
-transitionColor prevEndTime maybePrev target targetTime now maybeLookAhead state =
-    let
-        progress =
-            Time.progress
-                prevEndTime
-                targetTime
-                now
-    in
-    color progress state target
 
 
 color : Float -> Color.Color -> Color.Color -> Color.Color
