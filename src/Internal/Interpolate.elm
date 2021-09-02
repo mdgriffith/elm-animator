@@ -1,5 +1,6 @@
 module Internal.Interpolate exposing
     ( Movement, State, derivativeOfEasing
+    , startMoving
     , coloring, moving
     , Checkpoint, Oscillator(..), Point, Sequence(..), Step(..), Timing(..), color, details, equalState, getPeriodDuration, newVelocityAtTarget, velocityAtTarget, visit
     )
@@ -158,9 +159,25 @@ startMoving movement =
 details : Timeline.Timeline state -> (state -> Movement) -> { position : Float, velocity : Float }
 details timeline lookup =
     unwrapUnits
-        (Timeline.foldp
-            lookup
-            moving
+        (Timeline.foldpAll lookup
+            Move.init
+            (\_ prev target now startTime endTime future state ->
+                let
+                    targetTime =
+                        Timeline.startTime target
+
+                    progress =
+                        Time.progress startTime targetTime now
+
+                    movement =
+                        lookup (Timeline.getEvent target)
+                in
+                Move.transitionTo progress
+                    startTime
+                    targetTime
+                    movement
+                    state
+            )
             timeline
         )
 
@@ -253,10 +270,6 @@ visit lookup ((Timeline.Occurring event start eventEnd) as occurring) now maybeL
                 { position = Pixels.pixels pos
                 , velocity = Pixels.pixelsPerSecond 0
                 }
-
-
-type alias Milliseconds =
-    Float
 
 
 transition : Time.Absolute -> Movement -> Movement -> Time.Absolute -> Time.Absolute -> Maybe (Timeline.LookAhead Movement) -> State -> State

@@ -21,7 +21,9 @@ import Animator.Timeline exposing (Timeline)
 import Color exposing (Color)
 import Internal.Interpolate as Interpolate
 import Internal.Move as Move
+import Internal.Time as Time
 import Internal.Timeline as Timeline
+import Pixels
 import Quantity
 
 
@@ -30,19 +32,70 @@ import Quantity
 
 
 {-| -}
+type alias Movement =
+    Interpolate.Movement
+
+
+{-| -}
 color : Timeline state -> (state -> Color) -> Color
 color timeline lookup =
-    Timeline.foldp
-        lookup
-        Interpolate.coloring
+    Timeline.foldpAll lookup
+        identity
+        (\_ prev target now startTime endTime future state ->
+            let
+                targetTime =
+                    Timeline.startTime target
+
+                progress =
+                    Time.progress startTime targetTime now
+
+                movement =
+                    lookup (Timeline.getEvent target)
+            in
+            Interpolate.color progress
+                (lookup (Timeline.getEvent prev))
+                (lookup (Timeline.getEvent target))
+        )
         timeline
+
+
+{-| -}
+at : Float -> Movement
+at =
+    Move.to
+
+
+float : Timeline state -> (state -> Float) -> Float
+float timeline lookup =
+    move timeline
+        (lookup >> at)
 
 
 {-| -}
 move : Timeline state -> (state -> Movement) -> Float
 move timeline lookup =
-    .position <|
-        Interpolate.details timeline lookup
+    Timeline.foldpAll lookup
+        Move.init
+        (\_ prev target now startTime endTime future state ->
+            let
+                targetTime =
+                    Timeline.startTime target
+
+                progress =
+                    Time.progress startTime targetTime now
+
+                movement =
+                    lookup (Timeline.getEvent target)
+            in
+            Move.transitionTo progress
+                startTime
+                targetTime
+                movement
+                state
+        )
+        timeline
+        |> unwrapUnits
+        |> .position
 
 
 {-| -}
@@ -58,19 +111,9 @@ xy :
     -> { x : Float, y : Float }
 xy timeline lookup =
     { x =
-        Timeline.foldp
-            (lookup >> .x)
-            Interpolate.moving
-            timeline
-            |> unwrapUnits
-            |> .position
+        move timeline (lookup >> .x)
     , y =
-        Timeline.foldp
-            (lookup >> .y)
-            Interpolate.moving
-            timeline
-            |> unwrapUnits
-            |> .position
+        move timeline (lookup >> .y)
     }
 
 
@@ -88,29 +131,15 @@ xyz :
     -> { x : Float, y : Float, z : Float }
 xyz timeline lookup =
     { x =
-        Timeline.foldp
-            (lookup >> .x)
-            Interpolate.moving
-            timeline
-            |> unwrapUnits
-            |> .position
+        move timeline (lookup >> .x)
     , y =
-        Timeline.foldp
-            (lookup >> .y)
-            Interpolate.moving
-            timeline
-            |> unwrapUnits
-            |> .position
+        move timeline (lookup >> .x)
     , z =
-        Timeline.foldp
-            (lookup >> .z)
-            Interpolate.moving
-            timeline
-            |> unwrapUnits
-            |> .position
+        move timeline (lookup >> .z)
     }
 
 
+unwrapUnits : Move.State -> { position : Float, velocity : Float }
 unwrapUnits { position, velocity } =
     { position =
         case position of
@@ -121,17 +150,6 @@ unwrapUnits { position, velocity } =
             Quantity.Quantity val ->
                 val
     }
-
-
-{-| -}
-type alias Movement =
-    Interpolate.Movement
-
-
-{-| -}
-at : Float -> Movement
-at =
-    Move.to
 
 
 

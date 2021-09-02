@@ -4,7 +4,7 @@ module Internal.Move exposing
     , Step, step, stepWith, set
     , sequences
     , css, addSequence
-    , atX, cssForSections, floatToString, initialSequenceVelocity, lastPosOr, normalizeOver, toReal, withBezier, withDelay, withVelocities, withWobble
+    , State, at, atX, cssForSections, denormalize, floatToString, init, initialSequenceVelocity, lastPosOr, normalizeOver, toReal, transitionTo, withBezier, withDelay, withVelocities, withWobble
     )
 
 {-|
@@ -70,6 +70,16 @@ import Quantity
 {-| -}
 type Move value
     = Pos Transition.Transition value (List (Sequence value))
+
+
+init : Move Float -> State
+init movement =
+    { position =
+        case movement of
+            Pos _ x _ ->
+                Pixels.pixels x
+    , velocity = Pixels.pixelsPerSecond 0
+    }
 
 
 withDelay : Duration.Duration -> Move value -> Move value
@@ -223,6 +233,129 @@ atX :
         }
 atX progress (Pos trans value dwell) =
     Transition.atX2 progress trans
+
+
+at :
+    Float
+    -> Time.Absolute
+    -> Time.Absolute
+    -> Move Float
+    -> State
+    -> State
+at progress startTime targetTime (Pos transition targetPosition dwell) startingState =
+    let
+        startPosition =
+            Pixels.inPixels startingState.position
+    in
+    Transition.atX2 progress transition
+        |> denormalize startTime
+            targetTime
+            startPosition
+            targetPosition
+
+
+{-| This is the same as `at`, but with velocity transitions built in.
+-}
+transitionTo :
+    Float
+    -> Time.Absolute
+    -> Time.Absolute
+    -> Move Float
+    -> State
+    -> State
+transitionTo progress startTime targetTime (Pos trans targetPosition dwell) startingState =
+    let
+        startPosition =
+            Pixels.inPixels startingState.position
+
+        introVelocity =
+            normalizeVelocity
+                startTime
+                targetTime
+                startPosition
+                targetPosition
+                startingState.velocity
+
+        -- exitVelocity =
+        -- If we do any transition smoothing
+        -- we'll need to normalize this velocity too
+        --Interpolate.velocityAtTarget lookupState target future
+        transition =
+            if introVelocity == 0 then
+                trans
+
+            else
+                Transition.withVelocities introVelocity 0 trans
+    in
+    Transition.atX2 progress transition
+        |> denormalize startTime
+            targetTime
+            startPosition
+            targetPosition
+
+
+normalizeVelocity :
+    Time.Absolute
+    -> Time.Absolute
+    -> Float
+    -> Float
+    -> Units.PixelsPerSecond
+    -> Float
+normalizeVelocity startTime targetTime startPosition targetPosition velocity =
+    let
+        pixelsPerSecond =
+            Pixels.inPixelsPerSecond velocity
+    in
+    if pixelsPerSecond == 0 then
+        0
+
+    else
+        (pixelsPerSecond * Duration.inSeconds (Time.duration startTime targetTime))
+            / (targetPosition - startPosition)
+
+
+{-|
+
+    Go from 0-1:0-1
+
+    To startPot-endPos,startTime-endTime
+
+-}
+denormalize :
+    Time.Absolute
+    -> Time.Absolute
+    -> Float
+    -> Float
+    ->
+        { position : Bezier.Point
+        , velocity : Bezier.Point
+        }
+    -> State
+denormalize startTime targetTime startPosition targetPosition state =
+    { position =
+        Pixels.pixels
+            (toReal
+                startPosition
+                targetPosition
+                state.position.y
+            )
+    , velocity =
+        let
+            scaled =
+                state.velocity
+                    |> Bezier.scaleXYBy
+                        { x =
+                            Duration.inSeconds
+                                (Time.duration startTime targetTime)
+                        , y = targetPosition - startPosition
+                        }
+        in
+        if scaled.x == 0 then
+            Pixels.pixelsPerSecond 0
+
+        else
+            Pixels.pixelsPerSecond (scaled.y / scaled.x)
+    }
 
 
 {-|

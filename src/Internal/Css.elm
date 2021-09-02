@@ -161,7 +161,7 @@ toInitialProps props (( maybeTransform, rendered ) as untouched) =
         (Prop id name movement format) :: remaining ->
             let
                 state =
-                    Interpolate.moving.start
+                    Move.init
                         (Props.default id)
             in
             toInitialProps remaining
@@ -271,7 +271,7 @@ addInitialProps props (( maybeTransform, rendered ) as untouched) =
                     else
                         let
                             state =
-                                Interpolate.moving.start
+                                Move.init
                                     (Props.default id)
                         in
                         ( maybeTransform
@@ -504,43 +504,6 @@ normalizeVelocity startTime targetTime startPosition targetPosition velocity =
             / (targetPosition - startPosition)
 
 
-denormalize :
-    Time.Absolute
-    -> Time.Absolute
-    -> Float
-    -> Float
-    ->
-        { position : Bezier.Point
-        , velocity : Bezier.Point
-        }
-    -> Interpolate.State
-denormalize startTime targetTime startPosition targetPosition state =
-    { position =
-        Pixels.pixels
-            (Move.toReal
-                startPosition
-                targetPosition
-                state.position.y
-            )
-    , velocity =
-        let
-            scaled =
-                state.velocity
-                    |> Bezier.scaleXYBy
-                        { x =
-                            Duration.inSeconds
-                                (Time.duration startTime targetTime)
-                        , y = targetPosition - startPosition
-                        }
-        in
-        if scaled.x == 0 then
-            Pixels.pixelsPerSecond 0
-
-        else
-            Pixels.pixelsPerSecond (scaled.y / scaled.x)
-    }
-
-
 {-| -}
 toPropCurves2 : Timeline.Transition state (List Prop) (List RenderedProp)
 toPropCurves2 lookup prev target now startTime endTime future cursor =
@@ -658,11 +621,11 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                     finalProp
                                     rendered.sections
                         , state =
-                            Move.atX progress finalProp
-                                |> denormalize startTime
+                            rendered.state
+                                |> Move.transitionTo progress
+                                    startTime
                                     targetTime
-                                    startPosition
-                                    targetPosition
+                                    targetProp
                         }
 
                 TransformProp details ->
@@ -755,37 +718,37 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                     details.sections
                         , state =
                             { x =
-                                Move.toWith commonTransition
-                                    targets.x
-                                    |> Move.atX progress
-                                    |> denormalize startTime
-                                        targetTime
-                                        (Pixels.inPixels details.state.x.position)
+                                Move.at progress
+                                    startTime
+                                    targetTime
+                                    (Move.toWith commonTransition
                                         targets.x
+                                    )
+                                    details.state.x
                             , y =
-                                Move.toWith commonTransition
-                                    targets.y
-                                    |> Move.atX progress
-                                    |> denormalize startTime
-                                        targetTime
-                                        (Pixels.inPixels details.state.y.position)
+                                Move.at progress
+                                    startTime
+                                    targetTime
+                                    (Move.toWith commonTransition
                                         targets.y
+                                    )
+                                    details.state.y
                             , scale =
-                                Move.toWith commonTransition
-                                    targets.scale
-                                    |> Move.atX progress
-                                    |> denormalize startTime
-                                        targetTime
-                                        (Pixels.inPixels details.state.scale.position)
+                                Move.at progress
+                                    startTime
+                                    targetTime
+                                    (Move.toWith commonTransition
                                         targets.scale
+                                    )
+                                    details.state.scale
                             , rotation =
-                                Move.toWith commonTransition
-                                    targets.rotation
-                                    |> Move.atX progress
-                                    |> denormalize startTime
-                                        targetTime
-                                        (Pixels.inPixels details.state.rotation.position)
+                                Move.at progress
+                                    startTime
+                                    targetTime
+                                    (Move.toWith commonTransition
                                         targets.rotation
+                                    )
+                                    details.state.rotation
                             }
                         }
         )
