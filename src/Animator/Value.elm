@@ -1,6 +1,6 @@
 module Animator.Value exposing
     ( color
-    , Movement, at, move, xy, xyz
+    , float, Movement, to, xy, xyz
     , withWobble, withImpulse
     )
 
@@ -8,7 +8,7 @@ module Animator.Value exposing
 
 @docs color
 
-@docs Movement, at, move, xy, xyz
+@docs float, velocity, Movement, to, xy, xyz
 
 
 # Transition personality
@@ -23,7 +23,6 @@ import Internal.Interpolate as Interpolate
 import Internal.Move as Move
 import Internal.Time as Time
 import Internal.Timeline as Timeline
-import Pixels
 import Quantity
 
 
@@ -43,37 +42,79 @@ color timeline lookup =
         identity
         (\_ prev target now startTime endTime future state ->
             let
-                targetTime =
-                    Timeline.startTime target
-
-                progress =
-                    Time.progress startTime targetTime now
-
-                movement =
-                    lookup (Timeline.getEvent target)
+                isHappening =
+                    (Time.thisAfterOrEqualThat now startTime
+                        && Time.thisBeforeOrEqualThat now endTime
+                    )
+                        || List.isEmpty future
+                        && Time.thisAfterThat now endTime
             in
-            Interpolate.color progress
-                (lookup (Timeline.getEvent prev))
-                (lookup (Timeline.getEvent target))
+            if isHappening then
+                let
+                    targetTime =
+                        Timeline.startTime target
+
+                    progress =
+                        Time.progress startTime targetTime now
+                in
+                Interpolate.color progress
+                    (lookup (Timeline.getEvent prev))
+                    (lookup (Timeline.getEvent target))
+
+            else
+                state
         )
         timeline
 
 
 {-| -}
-at : Float -> Movement
-at =
+to : Float -> Movement
+to =
     Move.to
 
 
-float : Timeline state -> (state -> Float) -> Float
+{-| -}
+float : Timeline state -> (state -> Movement) -> Float
 float timeline lookup =
-    move timeline
-        (lookup >> at)
+    Timeline.foldpAll lookup
+        Move.init
+        (\_ prev target now startTime endTime future state ->
+            let
+                isHappening =
+                    (Time.thisAfterOrEqualThat now startTime
+                        && Time.thisBeforeOrEqualThat now endTime
+                    )
+                        || List.isEmpty future
+                        && Time.thisAfterThat now endTime
+            in
+            if isHappening then
+                let
+                    targetTime =
+                        Timeline.startTime target
+
+                    progress =
+                        Time.progress startTime targetTime now
+
+                    movement =
+                        lookup (Timeline.getEvent target)
+                in
+                Move.transitionTo progress
+                    startTime
+                    targetTime
+                    movement
+                    state
+
+            else
+                state
+        )
+        timeline
+        |> unwrapUnits
+        |> .position
 
 
 {-| -}
-move : Timeline state -> (state -> Movement) -> Float
-move timeline lookup =
+velocity : Timeline state -> (state -> Movement) -> Float
+velocity timeline lookup =
     Timeline.foldpAll lookup
         Move.init
         (\_ prev target now startTime endTime future state ->
@@ -95,7 +136,7 @@ move timeline lookup =
         )
         timeline
         |> unwrapUnits
-        |> .position
+        |> .velocity
 
 
 {-| -}
@@ -111,9 +152,9 @@ xy :
     -> { x : Float, y : Float }
 xy timeline lookup =
     { x =
-        move timeline (lookup >> .x)
+        float timeline (lookup >> .x)
     , y =
-        move timeline (lookup >> .y)
+        float timeline (lookup >> .y)
     }
 
 
@@ -131,22 +172,22 @@ xyz :
     -> { x : Float, y : Float, z : Float }
 xyz timeline lookup =
     { x =
-        move timeline (lookup >> .x)
+        float timeline (lookup >> .x)
     , y =
-        move timeline (lookup >> .x)
+        float timeline (lookup >> .x)
     , z =
-        move timeline (lookup >> .z)
+        float timeline (lookup >> .z)
     }
 
 
 unwrapUnits : Move.State -> { position : Float, velocity : Float }
-unwrapUnits { position, velocity } =
+unwrapUnits state =
     { position =
-        case position of
+        case state.position of
             Quantity.Quantity val ->
                 val
     , velocity =
-        case velocity of
+        case state.velocity of
             Quantity.Quantity val ->
                 val
     }
@@ -163,8 +204,8 @@ unwrapUnits { position, velocity } =
 
 -}
 withWobble : Float -> Movement -> Movement
-withWobble w movement =
-    Debug.todo "Move to Transitions"
+withWobble =
+    Move.withWobble
 
 
 {-| Leave a state with some initial velocity.
