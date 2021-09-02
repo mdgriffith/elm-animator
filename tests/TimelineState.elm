@@ -8,16 +8,11 @@ module TimelineState exposing
 
 {-| -}
 
-import Animator
 import Animator.Timeline
 import Duration
 import Expect exposing (Expectation, FloatingPointTolerance(..))
-import Fuzz exposing (Fuzzer, float, int, list, string)
 import Internal.Estimation as Estimate
-import Internal.Interpolate as Interpolate
 import Internal.Timeline as Timeline
-import Pixels
-import Quantity
 import Test exposing (..)
 import Time
 

@@ -1,63 +1,41 @@
 module Internal.Move exposing
     ( Move(..), to, toWith
+    , State, init
+    , color
     , Sequence
     , Step, step, stepWith, set
     , sequences
-    , css, addSequence
-    , State, at, atX, cssForSections, denormalize, floatToString, init, initialSequenceVelocity, lastPosOr, normalizeOver, toReal, transitionTo, withBezier, withDelay, withVelocities, withWobble
+    , css, addSequence, cssForSections
+    , withWobble, withDelay, withVelocities, withBezier
+    , at, atX, transitionTo
+    , denormalize, normalizeOver, toReal
+    , floatToString, initialSequenceVelocity
     )
 
 {-|
 
 @docs Move, to, toWith
 
+@docs State, init
+
+@docs color
+
 @docs Sequence
 @docs Step, step, stepWith, set
 
 @docs sequences, goto
 
-    type alias State =
-        { position : Units.Pixels
-        , velocity : Units.PixelsPerSecond
-        }
+@docs css, addSequence, cssForSections
 
-    Needed:
-        get position at transition
-        get initial position
-        get pos, vel given a dwell time
+@docs withWobble, withDelay, withVelocities, withBezier
 
-        velocity @ transition (i.e. velocity at target)
+@docs at, atX, transitionTo
 
-
-        sequences :
-            -- start
-            Time.Absolute
-            -- target time
-            -> Time.Absolute
-            -- now
-            -> Time.Absolute
-            -> Move Float
-            -> State
-            ->
-                { sequences : List Bezier.Spline
-                , state : State
-                }
-
-
-        state :
-            -- start
-            Time.Absolute
-            -- target time
-            -> Time.Absolute
-            -- now
-            -> Time.Absolute
-            -> Move Float
-                State
-
-@docs css, addSequence
+@docs denormalize, normalizeOver, toReal
 
 -}
 
+import Color
 import Duration
 import Internal.Bezier as Bezier
 import Internal.Time as Time
@@ -84,7 +62,24 @@ init movement =
 
 withDelay : Duration.Duration -> Move value -> Move value
 withDelay dur (Pos trans value sequence) =
-    Pos trans value sequence
+    Debug.todo "What do we do here?"
+
+
+{-|
+
+    Adjust the transition by taking into account intro and exit velocity if necessary
+
+-}
+withVelocities : Float -> Float -> Move x -> Move x
+withVelocities intro exit ((Pos trans val dwell) as untouched) =
+    if intro == 0 && exit == 0 then
+        untouched
+
+    else
+        Pos
+            (Transition.withVelocities intro exit trans)
+            val
+            dwell
 
 
 withWobble : Float -> Move value -> Move value
@@ -207,21 +202,25 @@ addDelayToSequence delay seqs captured =
                 )
 
 
-{-|
+color : Float -> Color.Color -> Color.Color -> Color.Color
+color progress from target =
+    let
+        one =
+            Color.toRgba from
 
-    Adjust the transition by taking into account intro and exit velocity if necessary
+        two =
+            Color.toRgba target
+    in
+    Color.rgba
+        (average one.red two.red progress)
+        (average one.green two.green progress)
+        (average one.blue two.blue progress)
+        (average one.alpha two.alpha progress)
 
--}
-withVelocities : Float -> Float -> Move x -> Move x
-withVelocities intro exit ((Pos trans val dwell) as untouched) =
-    if intro == 0 && exit == 0 then
-        untouched
 
-    else
-        Pos
-            (Transition.withVelocities intro exit trans)
-            val
-            dwell
+average : Float -> Float -> Float -> Float
+average x y progress =
+    sqrt ((x * x) * (1 - progress) + (y * y) * progress)
 
 
 atX :

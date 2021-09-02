@@ -18,10 +18,8 @@ module Internal.Interpolate exposing
 
 import Color
 import Duration
-import Html.Events exposing (preventDefaultOn)
 import Internal.Bezier as Bezier
 import Internal.Move as Move
-import Internal.Spring as Spring
 import Internal.Time as Time
 import Internal.Timeline as Timeline exposing (Period(..))
 import Internal.Transition as Transition

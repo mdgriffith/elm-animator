@@ -559,7 +559,7 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                         endTime
                                         (Move.toWith Transition.linear targetColor)
                         , color =
-                            Interpolate.color progress
+                            Move.color progress
                                 details.color
                                 targetColor
                         }
@@ -890,7 +890,7 @@ type alias RenderedPropDetails =
     , format : Props.Format
     , sections :
         List (Move.Sequence Float)
-    , state : Interpolate.State
+    , state : Move.State
     }
 
 
@@ -910,10 +910,10 @@ type alias TransformPropDetails =
 
 
 type alias TransformState =
-    { x : Interpolate.State
-    , y : Interpolate.State
-    , scale : Interpolate.State
-    , rotation : Interpolate.State
+    { x : Move.State
+    , y : Move.State
+    , scale : Move.State
+    , rotation : Move.State
     }
 
 

@@ -32,7 +32,7 @@ import Quantity
 
 {-| -}
 type alias Movement =
-    Interpolate.Movement
+    Move.Move Float
 
 
 {-| -}
