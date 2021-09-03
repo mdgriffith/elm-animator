@@ -8,7 +8,7 @@ module Internal.Timeline exposing
     , current, arrivedAt, arrived, previous, upcoming
     , Line(..), Timetable(..)
     , foldpAll, captureTimeline
-    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), Transition, atTime, gc, getCurrentTime, hasChanged, justInitialized, linesAreActive, periodDuration
+    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), Transition, atTime, combineRunning, gc, getCurrentTime, hasChanged, justInitialized, linesAreActive, periodDuration
     )
 
 {-|
@@ -716,6 +716,7 @@ interruptLine startInterruption scheduled line future =
 
 {-| This will provide the two events we are currently between.
 -}
+getTransitionAt : Time.Absolute -> Occurring event -> List (Occurring event) -> Maybe (LastTwoEvents event)
 getTransitionAt interruptionTime prev trailing =
     case trailing of
         [] ->
@@ -729,6 +730,7 @@ getTransitionAt interruptionTime prev trailing =
                 getTransitionAt interruptionTime next remain
 
 
+interruptAtExactly : Time.Absolute -> Schedule event -> LastTwoEvents event -> Line event
 interruptAtExactly startInterruption scheduled ((LastTwoEvents penultimateTime penultimate lastEventTime lastEvent) as last) =
     case scheduled of
         Schedule delay_ startingEvent reverseQueued ->
@@ -1482,6 +1484,28 @@ type Animator model
 type alias Running =
     { running : Bool
     , ping : Maybe { delay : Float, target : Time.Posix }
+    }
+
+
+combineRunning : Running -> Running -> Running
+combineRunning one two =
+    { running = one.running || two.running
+    , ping =
+        case two.ping of
+            Nothing ->
+                one.ping
+
+            Just twoPing ->
+                case one.ping of
+                    Nothing ->
+                        Just twoPing
+
+                    Just onePing ->
+                        if onePing.delay < twoPing.delay then
+                            Just onePing
+
+                        else
+                            Just twoPing
     }
 
 

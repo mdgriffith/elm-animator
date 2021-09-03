@@ -11,7 +11,6 @@ module Animator exposing
     , onTimeline, onTimelineWith
     , div, node
     , Css, css
-    , watching
     , xAsSingleProp
     )
 
@@ -57,8 +56,6 @@ Check out how their defined if you want to make your own.
 @docs div, node
 
 @docs Css, css
-
-@docs watching
 
 -}
 
@@ -730,65 +727,3 @@ stylesheet str =
                 []
                 [ Html.text str
                 ]
-
-
-{--}
-{- ANIMATOR -}
-
-
-{-| `Animator.watching` is different from `Watcher.watching` in that it will only ask for one frame when an animation is updated.
-
-In that one frame, we render the **entire CSS animation**, which can run without `Elm` needing to do a full rerender.
-
--}
-watching :
-    (model -> Timeline state)
-    -> (Timeline state -> model -> model)
-    -> Animator model
-    -> Animator model
-watching get setValue (Timeline.Animator isRunning updateModel) =
-    Timeline.Animator
-        (\model ->
-            let
-                prev =
-                    isRunning model
-
-                timeline =
-                    get model
-
-                ping =
-                    case Timeline.sendPing timeline of
-                        Nothing ->
-                            prev.ping
-
-                        Just currentPing ->
-                            case prev.ping of
-                                Nothing ->
-                                    Just currentPing
-
-                                Just prevPing ->
-                                    if prevPing.delay < currentPing.delay then
-                                        Just prevPing
-
-                                    else
-                                        Just currentPing
-
-                running =
-                    if prev.running then
-                        True
-
-                    else
-                        Timeline.hasChanged timeline
-                            || Timeline.justInitialized timeline
-            in
-            { running = running
-            , ping = ping
-            }
-        )
-        (\now model ->
-            let
-                newModel =
-                    updateModel now model
-            in
-            setValue (Timeline.update now (get newModel)) newModel
-        )

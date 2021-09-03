@@ -1,6 +1,6 @@
 module Animator.Watcher exposing
     ( Animator
-    , init, watching, watchingWith, list
+    , init, watching, list
     , update, toSubscription
     )
 
@@ -8,7 +8,7 @@ module Animator.Watcher exposing
 
 @docs Animator
 
-@docs init, watching, watchingWith, list
+@docs init, watching, list
 
 @docs update, toSubscription
 
@@ -25,10 +25,10 @@ import Time
 
 Here's an animator from the [Checkbox.elm example](https://github.com/mdgriffith/elm-animator/blob/master/examples/Checkbox.elm),
 
-    animator : Animator.Animator Model
+    animator : Animator.Watcher.Animator Model
     animator =
-        Animator.init
-            |> Animator.watching
+        Animator.Watcher.init
+            |> Animator.Watcher.watching
                 -- we tell the animator how
                 -- to get the checked timeline using .checked
                 .checked
@@ -42,8 +42,8 @@ Notice you could add any number of timelines to this animator:
 
     animator : Animator.Animator Model
     animator =
-        Animator.init
-            |> Animator.watching
+        Animator.Watcher.init
+            |> Animator.Watcher.watching
                 -- we tell the animator how
                 -- to get the checked timeline using .checked
                 .checked
@@ -52,7 +52,7 @@ Notice you could add any number of timelines to this animator:
                 (\newChecked model ->
                     { model | checked = newChecked }
                 )
-            |> Animator.watching
+            |> Animator.Watcher.watching
                 .anotherChecked
                 (\anotherCheckboxState ->
                     { model | anotherChecked = anotherCheckboxState }
@@ -76,92 +76,13 @@ init =
     Timeline.Animator (\_ -> { running = False, ping = Nothing }) (\now model -> model)
 
 
-{-| `watching` will ensure that [`AnimationFrame`](https://package.elm-lang.org/packages/elm/browser/latest/Browser-Events#onAnimationFrame) is running when the animator is transformed into a [`subscription`](#toSubscription).
-
-**Note** — It will actually make the animation frame subscription run all the time! At some point you'll probably want to optimize when the subscription runs, which means either using [`watchingWith`](#watchingWith) or `Animator.Css.watching`.
-
--}
+{-| -}
 watching :
     (model -> Timeline state)
     -> (Timeline state -> model -> model)
     -> Animator model
     -> Animator model
-watching get set (Timeline.Animator getDetails updateModel) =
-    Timeline.Animator
-        -- always runs
-        (\model ->
-            { running = True
-            , ping = getDetails model |> .ping
-            }
-        )
-        (\now model ->
-            let
-                newModel =
-                    updateModel now model
-            in
-            set (Timeline.update now (get newModel)) newModel
-        )
-
-
-{-| -}
-list :
-    (model -> List (Timeline state))
-    -> (List (Timeline state) -> model -> model)
-    -> Animator model
-    -> Animator model
-list getItemTimelines setItemTimelines (Timeline.Animator getDetails updateModel) =
-    Timeline.Animator
-        -- always runs
-        (\model ->
-            { running = True
-            , ping = getDetails model |> .ping
-            }
-        )
-        (\now model ->
-            let
-                newModel =
-                    updateModel now model
-
-                timelines =
-                    getItemTimelines newModel
-            in
-            setItemTimelines
-                (List.map (Timeline.update now)
-                    timelines
-                )
-                newModel
-        )
-
-
-{-| `watchingWith` will allow you to have more control over when `AnimationFrame` runs.
-
-The main thing you need to do here is capture which states are animated when they're **resting**.
-
-Let's say we have a checkbox that, for whatever reason, we want to say is spinning forever when the value is `False`.
-
-    animator : Animator.Animator Model
-    animator =
-        Animator.animator
-            |> Animator.watchingWith .checked
-                (\newChecked model ->
-                    { model | checked = newChecked }
-                )
-                -- here is where we tell the animator that we still need
-                -- AnimationFrame when the timeline has a current value of `False`
-                (\checked ->
-                    checked == False
-                )
-
-**Note** — if you're using `Animator.Css` to generate keyframes along with `Animator.Css.watching`, you don't need to worry about this.
-
--}
-watchingWith :
-    (model -> Timeline state)
-    -> (Timeline state -> model -> model)
-    -> (state -> Bool)
-    -> Animator model
-    -> Animator model
-watchingWith get set eventIsRestable (Timeline.Animator isRunning updateModel) =
+watching get setValue (Timeline.Animator isRunning updateModel) =
     Timeline.Animator
         (\model ->
             let
@@ -187,19 +108,17 @@ watchingWith get set eventIsRestable (Timeline.Animator isRunning updateModel) =
 
                                     else
                                         Just currentPing
+
+                running =
+                    if prev.running then
+                        True
+
+                    else
+                        Timeline.hasChanged timeline
+                            || Timeline.justInitialized timeline
             in
-            { running =
-                -- if we're already running, skip
-                if prev.running then
-                    prev.running
-
-                else if Timeline.needsUpdate timeline then
-                    True
-
-                else
-                    eventIsRestable (Timeline.current timeline)
-            , ping =
-                ping
+            { running = running
+            , ping = ping
             }
         )
         (\now model ->
@@ -207,7 +126,43 @@ watchingWith get set eventIsRestable (Timeline.Animator isRunning updateModel) =
                 newModel =
                     updateModel now model
             in
-            set (Timeline.update now (get newModel)) newModel
+            setValue (Timeline.update now (get newModel)) newModel
+        )
+
+
+list :
+    (model -> List item)
+    -> (List item -> model -> model)
+    -> Animator item
+    -> Animator model
+    -> Animator model
+list getItems setItems (Timeline.Animator getItemRunning updateItem) (Timeline.Animator getModelRunning updateModel) =
+    Timeline.Animator
+        (\model ->
+            let
+                modelRunning =
+                    getModelRunning model
+            in
+            List.foldl
+                (\item running ->
+                    Timeline.combineRunning
+                        (getItemRunning item)
+                        running
+                )
+                modelRunning
+                (getItems model)
+        )
+        (\now model ->
+            let
+                newModel =
+                    updateModel now model
+            in
+            setItems
+                (List.map
+                    (updateItem now)
+                    (getItems newModel)
+                )
+                newModel
         )
 
 
