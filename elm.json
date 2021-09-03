@@ -6,8 +6,8 @@
     "version": "1.1.1",
     "exposed-modules": [
         "Animator",
-        "Animator.Inline",
-        "Animator.Css"
+        "Animator.Timeline",
+        "Animator.Value"
     ],
     "elm-version": "0.19.0 <= v < 0.20.0",
     "dependencies": {
