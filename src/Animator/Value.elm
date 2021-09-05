@@ -1,7 +1,7 @@
 module Animator.Value exposing
     ( color
     , float, Movement, to, xy, xyz
-    , withWobble, withImpulse
+    , withWobble
     )
 
 {-|
@@ -13,7 +13,7 @@ module Animator.Value exposing
 
 # Transition personality
 
-@docs withWobble, withImpulse
+@docs withWobble
 
 -}
 
@@ -78,29 +78,30 @@ float : Timeline state -> (state -> Movement) -> Float
 float timeline lookup =
     Timeline.foldpAll lookup
         Move.init
-        (\_ prev target now startTime endTime future state ->
+        (\_ prev target now startTransition interruptedOrEnd future state ->
             let
+                arrived =
+                    Timeline.startTime target
+
                 isHappening =
-                    (Time.thisAfterOrEqualThat now startTime
-                        && Time.thisBeforeOrEqualThat now endTime
+                    (Time.thisAfterOrEqualThat now startTransition
+                        && Time.thisBeforeOrEqualThat now arrived
                     )
-                        || List.isEmpty future
-                        && Time.thisAfterThat now endTime
+                        || (List.isEmpty future
+                                && Time.thisAfterThat now interruptedOrEnd
+                           )
             in
             if isHappening then
                 let
-                    targetTime =
-                        Timeline.startTime target
-
                     progress =
-                        Time.progress startTime targetTime now
+                        Time.progress startTransition arrived now
 
                     movement =
                         lookup (Timeline.getEvent target)
                 in
                 Move.transitionTo progress
-                    startTime
-                    targetTime
+                    startTransition
+                    arrived
                     movement
                     state
 
@@ -208,15 +209,13 @@ withWobble =
     Move.withWobble
 
 
-{-| Leave a state with some initial velocity.
 
-This is given as a velocity (as value/second). Usually this is pixels per second, but depends what you're animating.
-
-  - `withImpulse 0` - No initial velocity (the default)
-  - `withImpulse 200` - 200 units per second towards
-  - `withImpulse -200` - Negative values work too!
-
--}
-withImpulse : Float -> Movement -> Movement
-withImpulse p movement =
-    Debug.todo "Move to Transitions"
+-- {-| Leave a state with some initial velocity.
+-- This is given as a velocity (as value/second). Usually this is pixels per second, but depends what you're animating.
+--   - `withImpulse 0` - No initial velocity (the default)
+--   - `withImpulse 200` - 200 units per second towards
+--   - `withImpulse -200` - Negative values work too!
+-- -}
+-- withImpulse : Float -> Movement -> Movement
+-- withImpulse p movement =
+--     Debug.todo "Move to Transitions"

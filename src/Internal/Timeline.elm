@@ -8,7 +8,7 @@ module Internal.Timeline exposing
     , current, arrivedAt, arrived, previous, upcoming
     , Line(..), Timetable(..)
     , foldpAll, captureTimeline
-    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), Transition, atTime, combineRunning, gc, getCurrentTime, hasChanged, justInitialized, linesAreActive, periodDuration
+    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), Transition, atTime, combineRunning, dwellingTime, gc, getCurrentTime, hasChanged, justInitialized, linesAreActive, periodDuration, progress
     )
 
 {-|
@@ -360,14 +360,11 @@ clean runGC details =
         running =
             case details.events of
                 Timetable lines ->
-                    --linesAreActive details.now lines
-                    False
+                    linesAreActive details.now lines
     in
     { details
         | running =
-            --running
-            -- only apples to async
-            False
+            running
         , events =
             if runGC then
                 Timetable (garbageCollectOldEvents details.now [] events)
@@ -999,7 +996,6 @@ visitAll2 :
     -> motion
 visitAll2 toAnchor transitionTo details prev queue future state =
     -- queue: the upcoming events on this Line
-    --
     case queue of
         [] ->
             case future of
@@ -1042,7 +1038,7 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                                         futureEvent
                                         details.now
                                         --v transition start time
-                                        (endTime prev)
+                                        futureStart
                                         --v transition end time
                                         nextStart
                                         futureRemain
@@ -1095,7 +1091,7 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                                 top
                                 details.now
                                 (endTime prev)
-                                (endTime top)
+                                (startTime top)
                                 remain
                                 state
                     in
@@ -1136,7 +1132,7 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                             toAnchor
                             transitionTo
                             details
-                            prev
+                            futureEvent
                             futureRemain
                             restOfFuture
                             new
@@ -1335,6 +1331,56 @@ captureTimelineHelper lookup events futureLines summary =
 
 
 {- BOOKKEEPING -}
+
+
+type Status
+    = Dwelling Time.Duration
+    | Transitioning Float
+
+
+status : Timeline event -> Status
+status ((Timeline details) as timeline) =
+    foldpAll identity
+        (\_ -> Dwelling Time.zeroDuration)
+        (\lookup prev target now start end future state ->
+            if Time.thisAfterThat now end then
+                Dwelling (Time.duration now end)
+
+            else
+                Transitioning (Time.progress start end now)
+        )
+        timeline
+
+
+{--}
+{-| The proportion (number between 0 and 1) of progress between the last state and the new one.
+
+Once we arrive at a new state, this value will be 1 until we start another transition.
+
+-}
+progress : Timeline state -> Float
+progress timeline =
+    case status timeline of
+        Dwelling _ ->
+            1
+
+        Transitioning t ->
+            t
+
+
+{-| The number of milliseconds that has occurred since we came to rest at the most recent state.
+
+If we're in transition, this is 0.
+
+-}
+dwellingTime : Timeline state -> Float
+dwellingTime timeline =
+    case status timeline of
+        Dwelling x ->
+            Duration.inMilliseconds x
+
+        Transitioning _ ->
+            0
 
 
 arrived : Timeline event -> event
