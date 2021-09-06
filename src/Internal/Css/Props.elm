@@ -20,7 +20,6 @@ module Internal.Css.Props exposing
 
 import Bitwise
 import Color
-import Internal.Interpolate as Interpolate
 import Internal.Move as Move
 
 
@@ -236,7 +235,7 @@ defaultPosition id =
             0
 
 
-default : Id -> Interpolate.Movement
+default : Id -> Move.Move Float
 default id =
     case id of
         13 ->
@@ -246,7 +245,7 @@ default id =
             zero
 
 
-zero : Interpolate.Movement
+zero : Move.Move Float
 zero =
     Move.to 0
 

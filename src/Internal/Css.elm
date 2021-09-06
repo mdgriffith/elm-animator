@@ -15,7 +15,6 @@ import Html.Attributes exposing (id)
 import Internal.Bezier as Bezier
 import Internal.Bits as Bits
 import Internal.Css.Props as Props
-import Internal.Interpolate as Interpolate
 import Internal.Move as Move
 import Internal.Time as Time
 import Internal.Timeline as Timeline
@@ -590,7 +589,7 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                         )
                                         -- If we do any transition smoothing
                                         -- we'll need to normalize this velocity too
-                                        --Interpolate.velocityAtTarget lookupState target future
+                                        --Estimation.velocityAtTarget lookupState target future
                                         0
 
                             else
@@ -697,7 +696,7 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                     |> Move.withVelocities fastestVelocity
                                         -- If we do any transition smoothing
                                         -- we'll need to normalize this velocity too
-                                        --Interpolate.velocityAtTarget lookupState target future
+                                        --Estimation.velocityAtTarget lookupState target future
                                         0
 
                             else

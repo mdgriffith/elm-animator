@@ -278,7 +278,7 @@ transitionTo progress startTime targetTime (Pos trans targetPosition dwell) star
         -- exitVelocity =
         -- If we do any transition smoothing
         -- we'll need to normalize this velocity too
-        --Interpolate.velocityAtTarget lookupState target future
+        --Estimation.velocityAtTarget lookupState target future
         transition =
             if introVelocity == 0 then
                 trans

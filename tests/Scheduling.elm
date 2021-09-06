@@ -7,7 +7,6 @@ import Duration
 import Expect exposing (Expectation, FloatingPointTolerance(..))
 import Fuzz exposing (Fuzzer, float, int, list, string)
 import Fuzz.Timeline
-import Internal.Interpolate as Interpolate
 import Internal.Time as Time
 import Internal.Timeline as Timeline
 import Pixels
@@ -844,7 +843,7 @@ tailRecursion =
                             |> Timeline.update (Time.millisToPosix 5000)
 
                     now =
-                        Interpolate.details
+                        Value.movement
                             (Timeline.atTime
                                 (Time.millisToPosix 1000000)
                                 newTimeline
@@ -1032,13 +1031,13 @@ ordering =
                     [ \tl ->
                         Expect.within
                             (Absolute 0.001)
-                            (.position (Interpolate.details tl toPosition))
-                            (.position (Interpolate.details (Timeline.gc tl) toPosition))
+                            (.position (Value.movement tl toPosition))
+                            (.position (Value.movement (Timeline.gc tl) toPosition))
                     , \tl ->
                         Expect.within
                             (Absolute 0.001)
-                            (.velocity (Interpolate.details tl toPosition))
-                            (.velocity (Interpolate.details (Timeline.gc tl) toPosition))
+                            (.velocity (Value.movement tl toPosition))
+                            (.velocity (Value.movement (Timeline.gc tl) toPosition))
                     ]
                     timelineAt
         , test "Harmless GC, test case 1" <|
@@ -1073,13 +1072,13 @@ ordering =
                     [ \tl ->
                         Expect.within
                             (Absolute 0.001)
-                            (.position (Interpolate.details tl toPosition))
-                            (.position (Interpolate.details (Timeline.gc tl) toPosition))
+                            (.position (Value.movement tl toPosition))
+                            (.position (Value.movement (Timeline.gc tl) toPosition))
                     , \tl ->
                         Expect.within
                             (Absolute 0.001)
-                            (.velocity (Interpolate.details tl toPosition))
-                            (.velocity (Interpolate.details (Timeline.gc tl) toPosition))
+                            (.velocity (Value.movement tl toPosition))
+                            (.velocity (Value.movement (Timeline.gc tl) toPosition))
                     ]
                     timelineAt
         , fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
@@ -1097,7 +1096,7 @@ ordering =
                         Timeline.atTime time actualTimeline
 
                     movement =
-                        Interpolate.details timelineAt toPosition
+                        Value.movement timelineAt toPosition
                 in
                 Expect.true "Is NaN"
                     (not (isNaN movement.position))
