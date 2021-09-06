@@ -578,6 +578,97 @@ applyQueued timeline =
             }
 
 
+{-|
+
+    *NOTE* - this only looks at the most immediately upcoming event and does an equality check.
+    There may be other cases we want to cover here, though this is the most common one by far.
+    However, others could be captured by manually checking if events are `Timeline.upcoming`
+
+-}
+scheduleMatchesExisting : Schedule event -> Line event -> Bool
+scheduleMatchesExisting (Schedule scheduleDelay event schedulUpcoming) (Line lineStart lineStartEvent lineUpcoming) =
+    let
+        equalStartEvent =
+            scheduledEventEqual event lineStartEvent
+
+        equalUpcoming =
+            case schedulUpcoming of
+                [] ->
+                    case lineUpcoming of
+                        [] ->
+                            True
+
+                        _ ->
+                            False
+
+                _ ->
+                    False
+    in
+    equalStartEvent && equalUpcoming
+
+
+scheduledEventEqual : Event event -> Occurring event -> Bool
+scheduledEventEqual (Event dur schedEvent maybeDwell) (Occurring occurEvent occurStart occurEnd) =
+    schedEvent == occurEvent
+
+
+interruptionHappensLaterDebug : Time.Absolute -> List (Line event) -> Bool
+interruptionHappensLaterDebug startInterruption remaining =
+    case remaining of
+        [] ->
+            False
+
+        top :: _ ->
+            Time.thisAfterOrEqualThat startInterruption (lineStartTime top)
+
+
+interruptLineDebug : Time.Absolute -> Schedule event -> Line event -> List (Line event) -> Maybe (List (Line event))
+interruptLineDebug startInterruption scheduled line future =
+    case line of
+        Line start startEvent trailing ->
+            if Time.thisAfterOrEqualThat startInterruption start then
+                -- this line starts before the interruption
+                case future of
+                    [] ->
+                        case getTransitionAt startInterruption startEvent trailing of
+                            Nothing ->
+                                if beforeLineEnd startInterruption line then
+                                    Just
+                                        [ createLine startInterruption scheduled
+                                        ]
+
+                                else
+                                    -- we'll just queue up this new line instead
+                                    Nothing
+
+                            Just last2Events ->
+                                Just
+                                    [ interruptAtExactly startInterruption scheduled last2Events ]
+
+                    (Line nextStart next nextEvents) :: futureRemaining ->
+                        -- we need to find the target event we're currently enroute to.
+                        -- if the next line has already started, but the event hasnt happened yet
+                        -- then we know `next` is the target
+                        if Time.thisAfterOrEqualThat startInterruption nextStart && Time.thisBeforeOrEqualThat startInterruption (startTime next) then
+                            Just
+                                (Line nextStart next nextEvents
+                                    :: interruptAtExactly startInterruption
+                                        scheduled
+                                        (LastTwoEvents (endTime startEvent) (getEvent startEvent) (startTime next) (getEvent next))
+                                    :: futureRemaining
+                                )
+
+                        else
+                            Nothing
+
+            else
+                Nothing
+
+
+
+{- INTERRUPTION DEBUG2 -}
+
+
 applyInterruptions : TimelineDetails event -> TimelineDetails event
 applyInterruptions timeline =
     case timeline.interruption of
@@ -648,9 +739,13 @@ interruptLines now startInterruption scheduled pastLines lines =
                         interruptLines now startInterruption scheduled (startLine :: pastLines) remaining
 
                     Just interruption ->
-                        -- if the starting times are the same
-                        -- then this new line replaces the current one.
-                        if startInterruption == lineStartTime startLine && Time.thisAfterThat startInterruption now then
+                        if scheduleMatchesExisting scheduled startLine then
+                            -- we're already enroute to this series of events, don't start it over.
+                            Just (List.reverse pastLines ++ lines)
+
+                        else if startInterruption == lineStartTime startLine && Time.thisAfterThat startInterruption now then
+                            -- if the starting times are the same
+                            -- then this new line replaces the current one.
                             Just (List.reverse pastLines ++ interruption)
 
                         else
