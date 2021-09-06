@@ -36,24 +36,24 @@ timelines =
         { begin =
             Animator.Timeline.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                 |> Timeline.update (Time.millisToPosix 0)
         , transitioning =
             Animator.Timeline.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Timeline.update (Time.millisToPosix 500)
         , arrived =
             Animator.Timeline.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Timeline.update (Time.millisToPosix 1000)
         , after =
             Animator.Timeline.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                 |> Timeline.update (Time.millisToPosix 0)
                 |> Timeline.update (Time.millisToPosix 1001)
         }
@@ -143,94 +143,94 @@ timelines =
           oneStart =
             Animator.Timeline.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
         , oneDuring =
             Animator.Timeline.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
                 |> Timeline.update (Time.millisToPosix 1000)
         , oneFinished =
             Animator.Timeline.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
                 |> Timeline.update (Time.millisToPosix 1500)
         , oneAfter =
             Animator.Timeline.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
                 |> Timeline.update (Time.millisToPosix 1501)
         , twoStart =
             Animator.Timeline.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) Two
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) Two
                 |> Timeline.update (Time.millisToPosix 1000)
         , twoDuring =
             Animator.Timeline.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) Two
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) Two
                 |> Timeline.update (Time.millisToPosix 1000)
                 |> Timeline.update (Time.millisToPosix 1500)
         , twoFinished =
             Animator.Timeline.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) Two
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) Two
                 |> Timeline.update (Time.millisToPosix 1000)
                 |> Timeline.update (Time.millisToPosix 2000)
         , twoAfter =
             Animator.Timeline.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) Two
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) Two
                 |> Timeline.update (Time.millisToPosix 1000)
                 |> Timeline.update (Time.millisToPosix 2001)
         , threeStart =
             Animator.Timeline.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) Two
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) Two
                 |> Timeline.update (Time.millisToPosix 1000)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) Three
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) Three
                 |> Timeline.update (Time.millisToPosix 1500)
         , threeDuring =
             Animator.Timeline.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) Two
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) Two
                 |> Timeline.update (Time.millisToPosix 1000)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) Three
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) Three
                 |> Timeline.update (Time.millisToPosix 1500)
                 |> Timeline.update (Time.millisToPosix 2000)
         , threeFinished =
             Animator.Timeline.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) Two
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) Two
                 |> Timeline.update (Time.millisToPosix 1000)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) Three
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) Three
                 |> Timeline.update (Time.millisToPosix 1500)
                 |> Timeline.update (Time.millisToPosix 2500)
         , threeAfter =
             Animator.Timeline.init Starting
                 |> Timeline.update (Time.millisToPosix 0)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                 |> Timeline.update (Time.millisToPosix 500)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) Two
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) Two
                 |> Timeline.update (Time.millisToPosix 1000)
-                |> Animator.Timeline.go (Animator.Timeline.ms 1000) Three
+                |> Animator.Timeline.to (Animator.Timeline.ms 1000) Three
                 |> Timeline.update (Time.millisToPosix 1500)
                 |> Timeline.update (Time.millisToPosix 2501)
         }
@@ -254,7 +254,7 @@ current =
                     timeline =
                         Animator.Timeline.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
-                            |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                            |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Timeline.update (Time.millisToPosix 1000)
                 in
@@ -465,7 +465,7 @@ arrived =
                     timeline =
                         Animator.Timeline.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
-                            |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                            |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Timeline.update (Time.millisToPosix 1000)
                 in
@@ -477,12 +477,12 @@ arrived =
                     timeline =
                         Animator.Timeline.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
-                            |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                            |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Timeline.update (Time.millisToPosix 1500)
-                            |> Animator.Timeline.go (Animator.Timeline.ms 1000) Two
+                            |> Animator.Timeline.to (Animator.Timeline.ms 1000) Two
                             |> Timeline.update (Time.millisToPosix 2000)
-                            |> Animator.Timeline.go (Animator.Timeline.ms 1000) Three
+                            |> Animator.Timeline.to (Animator.Timeline.ms 1000) Three
                             |> Timeline.update (Time.millisToPosix 2100)
                             |> Timeline.update (Time.millisToPosix 3100)
                 in
@@ -645,7 +645,7 @@ previous =
                     timeline =
                         Animator.Timeline.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
-                            |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                            |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Timeline.update (Time.millisToPosix 500)
                 in
@@ -657,7 +657,7 @@ previous =
                     timeline =
                         Animator.Timeline.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
-                            |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                            |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Timeline.update (Time.millisToPosix 1000)
                 in
@@ -669,7 +669,7 @@ previous =
                     timeline =
                         Animator.Timeline.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
-                            |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                            |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Timeline.update (Time.millisToPosix 1500)
                 in
@@ -832,7 +832,7 @@ upcoming =
                     timeline =
                         Animator.Timeline.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
-                            |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                            |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Timeline.update (Time.millisToPosix 500)
                 in
@@ -844,7 +844,7 @@ upcoming =
                     timeline =
                         Animator.Timeline.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
-                            |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                            |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Timeline.update (Time.millisToPosix 1000)
                 in
@@ -856,7 +856,7 @@ upcoming =
                     timeline =
                         Animator.Timeline.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
-                            |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                            |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Timeline.update (Time.millisToPosix 1500)
                 in
@@ -907,7 +907,7 @@ arrivedAt =
                     timeline =
                         Animator.Timeline.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
-                            |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                            |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Timeline.update (Time.millisToPosix 500)
                 in
@@ -919,7 +919,7 @@ arrivedAt =
                     timeline =
                         Animator.Timeline.init Starting
                             |> Timeline.update (Time.millisToPosix 0)
-                            |> Animator.Timeline.go (Animator.Timeline.ms 1000) One
+                            |> Animator.Timeline.to (Animator.Timeline.ms 1000) One
                             |> Timeline.update (Time.millisToPosix 0)
                             |> Timeline.update (Time.millisToPosix 500)
                 in

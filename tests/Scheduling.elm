@@ -214,7 +214,7 @@ queueing =
                     let
                         queuedTimeline =
                             Animator.Timeline.init Starting
-                                |> Animator.Timeline.go (seconds 2) One
+                                |> Animator.Timeline.to (seconds 2) One
                                 |> Timeline.updateWith False (Time.millisToPosix 0)
                                 |> Timeline.updateWith False (Time.millisToPosix 100)
                                 |> Timeline.updateWith False (Time.millisToPosix 200)
@@ -245,7 +245,7 @@ queueing =
                     let
                         currentTimeline =
                             Animator.Timeline.init Starting
-                                |> Animator.Timeline.go (seconds 2) One
+                                |> Animator.Timeline.to (seconds 2) One
                                 |> Timeline.updateWith False (Time.millisToPosix 0)
                                 |> Timeline.updateWith False (Time.millisToPosix 100)
                                 |> Timeline.updateWith False (Time.millisToPosix 200)
@@ -676,6 +676,33 @@ interruptions =
                     (Absolute 0.001)
                     foundDwellTime
                     0
+        , test "Interrupting with the same event that is already scheduled will skip it." <|
+            \_ ->
+                let
+                    firstTimeline =
+                        Animator.Timeline.init Starting
+                            |> Timeline.update (Time.millisToPosix 0)
+                            |> Animator.Timeline.queue
+                                [ Animator.Timeline.transitionTo (seconds 1) One
+                                ]
+                            |> Timeline.update (Time.millisToPosix 1)
+                            |> Timeline.update (Time.millisToPosix 500)
+                            |> Animator.Timeline.interrupt
+                                [ Animator.Timeline.transitionTo (seconds 1) One
+                                ]
+                            |> Timeline.update (Time.millisToPosix 501)
+                in
+                Expect.equal
+                    firstTimeline
+                    (timelines.events 501
+                        [ Timeline.Line (qty 0)
+                            (occur Starting (qty 0) (qty 1))
+                            []
+                        , Timeline.Line (qty 1)
+                            (occur One (qty 1001) (qty 1001))
+                            []
+                        ]
+                    )
         ]
 
 

@@ -1,10 +1,11 @@
 module Animator.Timeline exposing
     ( Timeline, init
-    , go
+    , to
     , Duration, ms
-    , update
+    , update, isRunning
     , interrupt, queue
     , Step, wait, transitionTo
+    , scale, delay
     , current, previous, upcoming, upcomingWith, arrived, arrivedAt, arrivedAtWith
     )
 
@@ -27,11 +28,11 @@ In order to do that we need to specify both —
   - the new state we want to be in
   - a `Duration` for how long this transition should take.
 
-@docs go
+@docs to
 
 @docs Duration, ms
 
-@docs update
+@docs update, isRunning
 
 
 # Interruptions and Queueing
@@ -55,6 +56,8 @@ In some more **advanced** cases you might want to define a _series_ of states to
 @docs interrupt, queue
 
 @docs Step, wait, transitionTo
+
+@docs scale, delay
 
 
 # Reading the timeline
@@ -320,8 +323,8 @@ queue steps (Timeline.Timeline tl) =
 You'll need to specify a `Duration` as well. Try starting with `Animator.quickly` and adjust up or down as necessary.
 
 -}
-go : Duration -> state -> Timeline state -> Timeline state
-go duration ev timeline =
+to : Duration -> state -> Timeline state -> Timeline state
+to duration ev timeline =
     interrupt [ transitionTo duration ev ] timeline
 
 
@@ -421,3 +424,13 @@ This will allow you to do whatever calculations you need while updating each `Ti
 update : Time.Posix -> Timeline state -> Timeline state
 update =
     Timeline.update
+
+
+{-| Does this timeline have upcoming events?
+
+**Note** this is only useful if you're not using a `Animator.Watcher`
+
+-}
+isRunning : Timeline state -> Bool
+isRunning (Timeline.Timeline tl) =
+    tl.running
