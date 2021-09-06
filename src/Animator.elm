@@ -1,9 +1,9 @@
 module Animator exposing
-    ( transition
-    , opacity
+    ( Animation, delay, transition
+    , Attribute, opacity
     , rotation, x, y, scale, scaleX, scaleY
     , color, px, int, float
-    , withWobble, withBezier
+    , withWobble, withBezier, withImpulse
     , Duration, ms
     , spinning, pulsing, bouncing, pinging
     , keyframes, loop, loopFor
@@ -16,17 +16,15 @@ module Animator exposing
 
 {-|
 
-@docs Property
+@docs Animation, delay, transition
 
-@docs transition
-
-@docs opacity
+@docs Attribute, opacity
 
 @docs rotation, x, y, scale, scaleX, scaleY
 
 @docs color, px, int, float
 
-@docs withWobble, withBezier
+@docs withWobble, withBezier, withImpulse
 
 @docs Duration, ms
 
@@ -37,7 +35,7 @@ Here are some premade animations.
 
 There's nothing special about them, they're just convenient!
 
-Check out how their defined if you want to make your own.
+Check out how they're defined if you want to make your own.
 
 @docs spinning, pulsing, bouncing, pinging
 
@@ -50,6 +48,8 @@ Check out how their defined if you want to make your own.
 
 @docs onTimeline, onTimelineWith
 
+@docs delay
+
 
 # Rendering
 
@@ -60,7 +60,6 @@ Check out how their defined if you want to make your own.
 -}
 
 import Animator.Timeline exposing (Timeline)
-import Animator.Watcher as Watcher exposing (Animator)
 import Color
 import Duration
 import Html exposing (Html)
@@ -75,12 +74,12 @@ import Time
 
 
 {-| -}
-type alias Property =
+type alias Attribute =
     Css.Prop
 
 
 {-| -}
-opacity : Float -> Property
+opacity : Float -> Attribute
 opacity o =
     Css.Prop
         Internal.Css.Props.ids.opacity
@@ -90,7 +89,7 @@ opacity o =
 
 
 {-| -}
-xAsSingleProp : Float -> Property
+xAsSingleProp : Float -> Attribute
 xAsSingleProp o =
     Css.Prop
         Internal.Css.Props.ids.opacity
@@ -100,7 +99,7 @@ xAsSingleProp o =
 
 
 {-| -}
-scale : Float -> Property
+scale : Float -> Attribute
 scale s =
     Css.Prop
         Internal.Css.Props.ids.scale
@@ -110,7 +109,7 @@ scale s =
 
 
 {-| -}
-scaleX : Float -> Property
+scaleX : Float -> Attribute
 scaleX s =
     Css.Prop
         Internal.Css.Props.ids.scaleX
@@ -120,7 +119,7 @@ scaleX s =
 
 
 {-| -}
-scaleY : Float -> Property
+scaleY : Float -> Attribute
 scaleY s =
     Css.Prop
         Internal.Css.Props.ids.scaleY
@@ -130,7 +129,7 @@ scaleY s =
 
 
 {-| -}
-rotation : Float -> Property
+rotation : Float -> Attribute
 rotation n =
     Css.Prop
         Internal.Css.Props.ids.rotation
@@ -140,7 +139,7 @@ rotation n =
 
 
 {-| -}
-x : Float -> Property
+x : Float -> Attribute
 x n =
     Css.Prop
         Internal.Css.Props.ids.x
@@ -150,7 +149,7 @@ x n =
 
 
 {-| -}
-y : Float -> Property
+y : Float -> Attribute
 y n =
     Css.Prop
         Internal.Css.Props.ids.y
@@ -160,7 +159,7 @@ y n =
 
 
 {-| -}
-withBezier : Float -> Float -> Float -> Float -> Property -> Property
+withBezier : Float -> Float -> Float -> Float -> Attribute -> Attribute
 withBezier one two three four prop =
     case prop of
         Css.Prop id name move format ->
@@ -171,7 +170,7 @@ withBezier one two three four prop =
 
 
 {-| -}
-withWobble : Float -> Property -> Property
+withWobble : Float -> Attribute -> Attribute
 withWobble wob prop =
     case prop of
         Css.Prop id name move format ->
@@ -191,50 +190,38 @@ ms =
     Duration.milliseconds
 
 
+{-| When transitioning to this state, start with a little extra velocity!
 
--- {-|
--- Transition to this state
--- -}
--- withImpulse : Float -> Property -> Property
--- withImpulse impulse prop =
---     case prop of
---         Css.Prop id name move format ->
---             Css.Prop id name (Move.withImpulse impulse move) format
---         Css.ColorProp name move ->
---             Css.ColorProp name (Move.withImpulse impulse move)
+**Values**
+0 -> No different from before
+1 ->
+
+-}
+withImpulse : Float -> Attribute -> Attribute
+withImpulse impulse prop =
+    case prop of
+        Css.Prop id name move format ->
+            Css.Prop id name (Move.withVelocities impulse 0 move) format
+
+        Css.ColorProp name move ->
+            Css.ColorProp name (Move.withVelocities impulse 0 move)
 
 
 {-| -}
-withDelay : Duration -> Property -> Property
-withDelay dur p =
-    case p of
-        Css.Prop id name move format ->
-            Css.Prop id name (Move.withDelay dur move) format
-
-        Css.ColorProp name move ->
-            Css.ColorProp name (Move.withDelay dur move)
-
-
-
--- {-| -}
--- withCurve : Bezier.Spline -> Property -> Property
--- withCurve spline p =
---     p
+delay : Duration -> Animation -> Animation
+delay dur (Animation now attrs) =
+    Animation (Time.rollbackBy dur now) attrs
 
 
 type Animation
     = Animation Time.Absolute (List Css.RenderedProp)
 
 
-type alias Attribute =
-    List Property
-
-
 type Step
-    = Step Duration (List Property)
+    = Step Duration (List Attribute)
 
 
-set : List Property -> Step
+set : List Attribute -> Step
 set attrs =
     step Time.zeroDuration attrs
 
@@ -244,7 +231,7 @@ wait dur =
     step dur []
 
 
-step : Duration -> List Property -> Step
+step : Duration -> List Attribute -> Step
 step =
     Step
 
@@ -298,7 +285,7 @@ keyframes steps =
         (Css.propsToRenderedProps timeline identity)
 
 
-toOccurring : Time.Absolute -> Step -> ( Time.Absolute, Timeline.Occurring (List Property) )
+toOccurring : Time.Absolute -> Step -> ( Time.Absolute, Timeline.Occurring (List Attribute) )
 toOccurring currentTime (Step dur props) =
     let
         time =
@@ -326,7 +313,7 @@ loopFor n steps =
         initialProps
 
 
-getInitialProps : Time.Duration -> List Step -> List Property -> List Property
+getInitialProps : Time.Duration -> List Step -> List Attribute -> List Attribute
 getInitialProps durationTillThisStep steps props =
     case steps of
         [] ->
@@ -344,9 +331,9 @@ getInitialProps durationTillThisStep steps props =
 
 addIfNew :
     Time.Duration
-    -> List Property
-    -> List Property
-    -> List Property
+    -> List Attribute
+    -> List Attribute
+    -> List Attribute
 addIfNew durationTillThisStep stepProps props =
     case props of
         [] ->
@@ -369,7 +356,7 @@ addIfNew durationTillThisStep stepProps props =
                             (topStep :: props)
 
 
-addSequence : Int -> List Step -> List Property -> Step
+addSequence : Int -> List Step -> List Attribute -> Step
 addSequence n steps prop =
     let
         fullDuration =
@@ -390,7 +377,7 @@ sumStepDuration dur steps =
             sumStepDuration (Time.expand stepDur dur) remain
 
 
-addSequenceSteps : Int -> Time.Duration -> List Step -> Property -> Property
+addSequenceSteps : Int -> Time.Duration -> List Step -> Attribute -> Attribute
 addSequenceSteps n fullDuration steps prop =
     case prop of
         Css.Prop id name movement format ->
@@ -414,7 +401,7 @@ addSequenceSteps n fullDuration steps prop =
 
 formatColorSteps :
     List Step
-    -> Property
+    -> Attribute
     -> List (Move.Step Color.Color)
     -> List (Move.Step Color.Color)
 formatColorSteps steps prop pastSteps =
@@ -440,7 +427,7 @@ formatColorSteps steps prop pastSteps =
 
 formatSteps :
     List Step
-    -> Property
+    -> Attribute
     -> List (Move.Step Float)
     -> List (Move.Step Float)
 formatSteps steps prop pastSteps =
@@ -464,7 +451,7 @@ formatSteps steps prop pastSteps =
                         pastSteps
 
 
-firstMatch : Property -> List Property -> Maybe Property
+firstMatch : Attribute -> List Attribute -> Maybe Attribute
 firstMatch prop props =
     case props of
         [] ->
@@ -479,7 +466,7 @@ firstMatch prop props =
 
 
 {-| -}
-px : String -> Float -> Property
+px : String -> Float -> Attribute
 px name n =
     Css.Prop
         Internal.Css.Props.noId
@@ -489,7 +476,7 @@ px name n =
 
 
 {-| -}
-int : String -> Float -> Property
+int : String -> Float -> Attribute
 int name n =
     Css.Prop
         Internal.Css.Props.noId
@@ -499,7 +486,7 @@ int name n =
 
 
 {-| -}
-float : String -> Float -> Property
+float : String -> Float -> Attribute
 float name n =
     Css.Prop
         Internal.Css.Props.noId
@@ -509,7 +496,7 @@ float name n =
 
 
 {-| -}
-color : String -> Color.Color -> Property
+color : String -> Color.Color -> Attribute
 color name colorValue =
     Css.ColorProp name
         (Move.to colorValue)
@@ -588,7 +575,7 @@ pinging dur =
         ]
 
 
-onTimeline : Timeline state -> (state -> List Property) -> Animation
+onTimeline : Timeline state -> (state -> List Attribute) -> Animation
 onTimeline timeline toProps =
     Animation
         (Timeline.getCurrentTime timeline)
@@ -599,7 +586,7 @@ onTimelineWith :
     Timeline state
     ->
         (state
-         -> ( List Property, List Step )
+         -> ( List Attribute, List Step )
         )
     -> Animation
 onTimelineWith timeline toPropsAndSteps =
@@ -621,7 +608,7 @@ onTimelineWith timeline toPropsAndSteps =
 
 
 {-| -}
-transition : Animator.Timeline.Duration -> List Property -> Animation
+transition : Animator.Timeline.Duration -> List Attribute -> Animation
 transition transitionDuration props =
     let
         imminent =
@@ -661,7 +648,7 @@ div :
 div (Animation now renderedProps) attrs children =
     let
         rendered =
-            Debug.log "STYLE" (Css.toCss now renderedProps)
+            Css.toCss now renderedProps
 
         styles =
             List.map (\( propName, val ) -> Attr.style propName val)
@@ -684,7 +671,7 @@ node :
 node name (Animation now renderedProps) attrs children =
     let
         rendered =
-            Debug.log "STYLE" (Css.toCss now renderedProps)
+            Css.toCss now renderedProps
 
         styles =
             List.map (\( propName, val ) -> Attr.style propName val)
@@ -710,7 +697,7 @@ type alias Css =
 
 
 {-| -}
-css : Timeline state -> (state -> List Property) -> Css
+css : Timeline state -> (state -> List Attribute) -> Css
 css =
     Css.cssFromProps
 
