@@ -1,12 +1,12 @@
 module Animator.Watcher exposing
-    ( Animator
+    ( Watching
     , init, watching, list
     , update, toSubscription
     )
 
 {-|
 
-@docs Animator
+@docs Watching
 
 @docs init, watching, list
 
@@ -25,10 +25,12 @@ import Time
 
 Here's an animator from the [Checkbox.elm example](https://github.com/mdgriffith/elm-animator/blob/master/examples/Checkbox.elm),
 
-    animator : Animator.Watcher.Animator Model
+    import Animator.Watcher as Watcher
+
+    animator : Watcher.Watching Model
     animator =
-        Animator.Watcher.init
-            |> Animator.Watcher.watching
+        Watcher.init
+            |> Watcher.watching
                 -- we tell the animator how
                 -- to get the checked timeline using .checked
                 .checked
@@ -40,19 +42,15 @@ Here's an animator from the [Checkbox.elm example](https://github.com/mdgriffith
 
 Notice you could add any number of timelines to this animator:
 
-    animator : Animator.Animator Model
+    animator : Watcher.Watching Model
     animator =
-        Animator.Watcher.init
-            |> Animator.Watcher.watching
-                -- we tell the animator how
-                -- to get the checked timeline using .checked
+        Watcher.init
+            |> Watcher.watching
                 .checked
-                -- and we tell the animator how
-                -- to update that timeline as well
                 (\newChecked model ->
                     { model | checked = newChecked }
                 )
-            |> Animator.Watcher.watching
+            |> Watcher.watching
                 .anotherChecked
                 (\anotherCheckboxState ->
                     { model | anotherChecked = anotherCheckboxState }
@@ -66,12 +64,12 @@ Notice you could add any number of timelines to this animator:
   - [_update_ our model](#update)
 
 -}
-type alias Animator model =
+type alias Watching model =
     Timeline.Animator model
 
 
 {-| -}
-init : Animator model
+init : Watching model
 init =
     Timeline.Animator (\_ -> { running = False, ping = Nothing }) (\now model -> model)
 
@@ -80,8 +78,8 @@ init =
 watching :
     (model -> Timeline state)
     -> (Timeline state -> model -> model)
-    -> Animator model
-    -> Animator model
+    -> Watching model
+    -> Watching model
 watching get setValue (Timeline.Animator isRunning updateModel) =
     Timeline.Animator
         (\model ->
@@ -133,9 +131,9 @@ watching get setValue (Timeline.Animator isRunning updateModel) =
 list :
     (model -> List item)
     -> (List item -> model -> model)
-    -> Animator item
-    -> Animator model
-    -> Animator model
+    -> Watching item
+    -> Watching model
+    -> Watching model
 list getItems setItems (Timeline.Animator getItemRunning updateItem) (Timeline.Animator getModelRunning updateModel) =
     Timeline.Animator
         (\model ->
@@ -174,7 +172,7 @@ This is where the animator will decide if a running animation needs another fram
         Animator.toSubscription Tick model animator
 
 -}
-toSubscription : (Time.Posix -> msg) -> model -> Animator model -> Sub msg
+toSubscription : (Time.Posix -> msg) -> model -> Watching model -> Sub msg
 toSubscription toMsg model (Timeline.Animator getContext _) =
     let
         context =
@@ -220,6 +218,6 @@ And voilà, we can begin animating!
 **Note** — To animate more things, all you need to do is add a new `with` to your `Animator`.
 
 -}
-update : Time.Posix -> Animator model -> model -> model
+update : Time.Posix -> Watching model -> model -> model
 update newTime (Timeline.Animator _ updateModel) model =
     updateModel newTime model
