@@ -7,10 +7,8 @@ import Expect exposing (Expectation, FloatingPointTolerance(..))
 import Fuzz exposing (Fuzzer, float, int, list, string)
 import Internal.Bezier as Bezier
 import Internal.Move as Move
-import Internal.Random
 import Internal.Time as Time
 import Internal.Transition as Transition
-import Internal.Units as Units
 import Pixels
 import Quantity
 import Test exposing (..)
@@ -121,7 +119,7 @@ suite =
                     , \state ->
                         Expect.within
                             (Absolute 1)
-                            (Debug.log "VELOCITY" (Pixels.inPixelsPerSecond state.move.velocity))
+                            (Pixels.inPixelsPerSecond state.move.velocity)
                             (Pixels.inPixelsPerSecond state.transitionX.velocity)
                     ]
                     { move = moveXNewState
@@ -276,7 +274,7 @@ usingTransitionX args =
             Pixels.pixelsPerSecond 0
 
         targetVelocity =
-            --Interpolate.velocityAtTarget lookupState target future
+            --Estimation.velocityAtTarget lookupState target future
             Pixels.pixelsPerSecond 0
 
         targetTransition =
