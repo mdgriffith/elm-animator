@@ -1,22 +1,23 @@
 module Animator exposing
-    ( Animation, delay, transition
+    ( Animation, transition
     , Attribute, opacity
     , rotation, x, y, scale, scaleX, scaleY
     , color, px, int, float
-    , withWobble, withBezier, withImpulse
+    , withBezier, withImpulse
     , Duration, ms
     , spinning, pulsing, bouncing, pinging
     , keyframes, loop, loopFor
     , set, wait, step
     , onTimeline, onTimelineWith
+    , delay
     , div, node
     , Css, css
-    , xAsSingleProp
+    -- , xAsSingleProp
     )
 
 {-|
 
-@docs Animation, delay, transition
+@docs Animation, transition
 
 @docs Attribute, opacity
 
@@ -24,7 +25,7 @@ module Animator exposing
 
 @docs color, px, int, float
 
-@docs withWobble, withBezier, withImpulse
+@docs withBezier, withImpulse
 
 @docs Duration, ms
 
@@ -180,6 +181,7 @@ withWobble wob prop =
             Css.ColorProp name (Move.withWobble wob move)
 
 
+{-| -}
 type alias Duration =
     Time.Duration
 
@@ -213,24 +215,29 @@ delay dur (Animation now attrs) =
     Animation (Time.rollbackBy dur now) attrs
 
 
+{-| -}
 type Animation
     = Animation Time.Absolute (List Css.RenderedProp)
 
 
+{-| -}
 type Step
     = Step Duration (List Attribute)
 
 
+{-| -}
 set : List Attribute -> Step
 set attrs =
     step Time.zeroDuration attrs
 
 
+{-| -}
 wait : Duration -> Step
 wait dur =
     step dur []
 
 
+{-| -}
 step : Duration -> List Attribute -> Step
 step =
     Step
@@ -502,6 +509,7 @@ color name colorValue =
         (Move.to colorValue)
 
 
+{-| -}
 spinning : Duration -> Animation
 spinning dur =
     keyframes
@@ -516,6 +524,7 @@ spinning dur =
         ]
 
 
+{-| -}
 pulsing : Duration -> Animation
 pulsing dur =
     keyframes
@@ -530,6 +539,7 @@ pulsing dur =
         ]
 
 
+{-| -}
 bouncing : Duration -> Float -> Animation
 bouncing dur distance =
     if Time.isZeroDuration dur then
@@ -559,6 +569,7 @@ bouncing dur distance =
             ]
 
 
+{-| -}
 pinging : Duration -> Animation
 pinging dur =
     keyframes
@@ -575,6 +586,37 @@ pinging dur =
         ]
 
 
+{-| Animate an element on a specific timeline. Check out [`Animator.Timeline`](#Animator/Timeline) for more details.
+
+This will
+
+1.  Give you smooth transitions when an animation is interrupted.
+2.  Allow you to syncronize multiple elements.
+
+```
+import Animator as Anim
+import Html
+import Html.Attributes
+
+
+Anim.div
+    (Anim.onTimeline model.timeline
+        (\state ->
+            if state.open
+                [ Anim.opacity 1
+                ]
+
+            else
+                [ Anim.opacity 0
+                , Anim.x -200
+                ]
+        )
+    )
+    [ Html.Attributes.id "my-element" ]
+    [ Html.text "Hello!" ]
+```
+
+-}
 onTimeline : Timeline state -> (state -> List Attribute) -> Animation
 onTimeline timeline toProps =
     Animation
@@ -582,6 +624,7 @@ onTimeline timeline toProps =
         (Css.propsToRenderedProps timeline toProps)
 
 
+{-| -}
 onTimelineWith :
     Timeline state
     ->
@@ -607,7 +650,26 @@ onTimelineWith timeline toPropsAndSteps =
         (Css.propsToRenderedProps timeline toProps)
 
 
-{-| -}
+{-|
+
+    import Animator as Anim
+    import Html
+    import Html.Attributes
+
+
+    Anim.div
+        (Anim.transition (Anim.ms 200)
+            [ Anim.opacity <|
+                if model.visible then
+                    1
+                else
+                    0
+            ]
+        )
+        [ Html.Attributes.id "my-element" ]
+        [ Html.text "Hello!" ]
+
+-}
 transition : Animator.Timeline.Duration -> List Attribute -> Animation
 transition transitionDuration props =
     let
@@ -639,7 +701,7 @@ transition transitionDuration props =
         (Css.propsToRenderedProps timeline identity)
 
 
-{--}
+{-| -}
 div :
     Animation
     -> List (Html.Attribute msg)
@@ -656,7 +718,7 @@ div (Animation now renderedProps) attrs children =
     in
     Html.div
         (styles ++ attrs)
-        (stylesheet rendered.keyframes
+        (stylesheet (Debug.log "KEYFRAMES" rendered.keyframes)
             :: children
         )
 
