@@ -4,7 +4,7 @@ module Animator.Watcher exposing
     , update, toSubscription
     )
 
-{-|
+{-| If you're tracking a number of timelines in your model, you may decide to use a `Watching` to simplify adding new timelines.
 
 @docs Watching
 
