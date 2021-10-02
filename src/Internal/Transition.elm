@@ -63,7 +63,6 @@ Goals:
 -}
 
 import Internal.Bezier as Bezier
-import Internal.Bits as Bits
 import Internal.Spring as Spring
 import Internal.Time as Time
 import Internal.Units as Units
@@ -275,21 +274,36 @@ atX2 progress transition =
             }
 
         Wobble wob ->
-            -- let
-            --     totalX =
-            --         1
-            --     params =
-            --         Spring.select wob.wobble
-            --             (Quantity.Quantity totalX)
-            -- in
-            -- Spring.analytical params
-            --     (Quantity.Quantity (totalX * progress))
-            --     1
-            --     { position = 0
-            --     , velocity = wob.introVelocity
-            --     }
-            --     |> wrapUnits
-            Debug.todo "atX2 - Wobble"
+            -- IS THIS RIGHT?
+            let
+                totalX =
+                    1
+
+                params =
+                    Spring.select wob.wobble
+                        (Quantity.Quantity totalX)
+
+                sprung =
+                    Spring.analytical params
+                        (Quantity.Quantity (totalX * progress))
+                        1
+                        { position = 0
+                        , velocity = wob.introVelocity
+                        }
+            in
+            { position =
+                { x = progress
+                , y = sprung.position
+                }
+            , velocity =
+                { x = progress
+                , y = sprung.velocity
+                }
+            }
+
+
+
+-- Debug.todo "atX2 - Wobble"
 
 
 withVelocities : Float -> Float -> Transition -> Transition
@@ -581,36 +595,118 @@ hash transition =
 
 
 {-| -}
-keyframes : { start : value, end : value } -> Float -> Float -> (value -> String) -> Transition -> String
-keyframes domain startPercent endPercent toString transition =
+keyframes :
+    (Float -> String)
+    -> Float
+    -> Float
+    -> Transition
+    -> String
+keyframes interpolate startPercent endPercent transition =
     case transition of
         Transition spline ->
-            splineKeyframes
+            kf
                 startPercent
-                domain.start
-                toString
+                (interpolate 0)
                 spline
 
-        -- ++ finalFrame toString normalized
         Wobble wob ->
-            -- let
-            --     params =
-            --         Spring.select wob.wobble
-            --             (Quantity.Quantity (domain.end.x - domain.start.x))
-            --     trail =
-            --         Spring.segments params
-            --             { position = domain.start.y
-            --             -- intro velocity
-            --             , velocity = wob.introVelocity
-            --             }
-            --             domain.end.y
-            -- in
-            -- renderKeyframeList startPercent endPercent toString trail ""
-            ""
+            let
+                params =
+                    Spring.select wob.wobble
+                        -- (Quantity.Quantity (domain.end.x - domain.start.x))
+                        (Quantity.Quantity 1000)
+
+                splines =
+                    Spring.segments params
+                        { position = 0
+
+                        -- intro velocity
+                        , velocity =
+                            -- wob.introVelocity
+                            0
+
+                        -- NOTE: need to normalize introVelocity to the 0-1 domain
+                        }
+                        1
+            in
+            keyframeListFromNonNormalizedBezier splines
+                interpolate
+                ""
 
 
-splineKeyframes : Float -> value -> (value -> String) -> Bezier.Spline -> String
-splineKeyframes percent start toString spline =
+kf : Float -> String -> Bezier.Spline -> String
+kf percent prop spline =
+    String.fromInt (floor percent)
+        ++ "% {"
+        ++ prop
+        ++ ";animation-timing-function:"
+        ++ Bezier.cssTimingString spline
+        ++ ";}"
+
+
+{-| The beziers are mapped
+
+    |      y: 0-1000  |
+    |      x: 0-1     |
+    v                 v
+    |--------|--------|
+
+We pass in a function that maps x -> "translateX(250px)"
+
+-}
+keyframeListFromNonNormalizedBezier :
+    List Bezier.Spline
+    -> (Float -> String)
+    -> String
+    -> String
+keyframeListFromNonNormalizedBezier steps toString str =
+    case steps of
+        [] ->
+            str
+
+        top :: remain ->
+            let
+                percent =
+                    Bezier.firstX top
+
+                value =
+                    Bezier.firstY top
+                        |> toString
+
+                normalizedSpline =
+                    Bezier.normalize top
+            in
+            keyframeListFromNonNormalizedBezier
+                remain
+                toString
+                (str
+                    ++ keyframeFromSpline percent value identity normalizedSpline
+                )
+
+
+keyframeList :
+    List
+        { normalizedSpline : Bezier.Spline
+        , value : String
+        , percent : Float
+        }
+    -> String
+    -> String
+keyframeList steps str =
+    case steps of
+        [] ->
+            str
+
+        top :: remain ->
+            keyframeList
+                remain
+                (str
+                    ++ keyframeFromSpline top.percent top.value identity top.normalizedSpline
+                )
+
+
+keyframeFromSpline : Float -> value -> (value -> String) -> Bezier.Spline -> String
+keyframeFromSpline percent start toString spline =
     String.fromInt (floor percent)
         ++ "% {"
         ++ toString start

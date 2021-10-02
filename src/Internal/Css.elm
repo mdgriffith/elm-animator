@@ -335,6 +335,10 @@ props2Css now renderedProps anim =
                         Move.cssForSections now
                             (Pixels.inPixels details.state.position)
                             details.name
+                            (\t one two ->
+                                Props.format details.format
+                                    (Move.lerpFloat t one two)
+                            )
                             (Props.format details.format)
                             Move.floatToString
                             (List.reverse details.sections)
@@ -359,6 +363,10 @@ props2Css now renderedProps anim =
                         Move.cssForSections now
                             details.color
                             details.name
+                            (\t one two ->
+                                Color.toCssString
+                                    (Move.lerpColor t one two)
+                            )
                             Color.toCssString
                             Props.colorHash
                             (List.reverse details.sections)
@@ -383,6 +391,10 @@ props2Css now renderedProps anim =
                         Move.cssForSections now
                             (stateToTransform details.state)
                             "transform"
+                            (\t one two ->
+                                transformToString
+                                    (Move.lerpTransform t one two)
+                            )
                             transformToString
                             transformToHash
                             (List.reverse details.sections)
@@ -403,6 +415,7 @@ transformToHash trans =
         ++ String.fromInt (round (trans.scale * 100))
 
 
+stateToTransform : TransformState -> Transform
 stateToTransform state =
     { x =
         Pixels.inPixels state.x.position
@@ -558,7 +571,7 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                         endTime
                                         (Move.toWith Transition.linear targetColor)
                         , color =
-                            Move.color progress
+                            Move.lerpColor progress
                                 details.color
                                 targetColor
                         }

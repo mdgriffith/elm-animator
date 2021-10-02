@@ -1,12 +1,12 @@
 module Internal.Move exposing
     ( Move(..), to, toWith
     , State, init
-    , color
-    , Sequence
-    , Step, step, stepWith, set
+    , lerpColor, lerpFloat, lerpTransform
+    , Sequence(..)
+    , Step(..), step, stepWith, set
     , sequences
     , css, addSequence, cssForSections
-    , withWobble, withDelay, withVelocities, withBezier
+    , withWobble, withVelocities, withBezier
     , at, atX, transitionTo
     , denormalize, normalizeOver, toReal
     , floatToString, initialSequenceVelocity
@@ -18,7 +18,7 @@ module Internal.Move exposing
 
 @docs State, init
 
-@docs color
+@docs lerpColor, lerpFloat, lerpTransform
 
 @docs Sequence
 @docs Step, step, stepWith, set
@@ -27,7 +27,7 @@ module Internal.Move exposing
 
 @docs css, addSequence, cssForSections
 
-@docs withWobble, withDelay, withVelocities, withBezier
+@docs withWobble, withVelocities, withBezier
 
 @docs at, atX, transitionTo
 
@@ -58,11 +58,6 @@ init movement =
                 Pixels.pixels x
     , velocity = Pixels.pixelsPerSecond 0
     }
-
-
-withDelay : Duration.Duration -> Move value -> Move value
-withDelay dur (Pos trans value sequence) =
-    Debug.todo "What do we do here?"
 
 
 {-|
@@ -202,8 +197,21 @@ addDelayToSequence delay seqs captured =
                 )
 
 
-color : Float -> Color.Color -> Color.Color -> Color.Color
-color progress from target =
+type alias Transform =
+    { x : Float
+    , y : Float
+    , scale : Float
+    , rotation : Float
+    }
+
+
+lerpFloat : Float -> Float -> Float -> Float
+lerpFloat t one two =
+    one + ((two - one) * t)
+
+
+lerpColor : Float -> Color.Color -> Color.Color -> Color.Color
+lerpColor progress from target =
     let
         one =
             Color.toRgba from
@@ -221,6 +229,19 @@ color progress from target =
 average : Float -> Float -> Float -> Float
 average x y progress =
     sqrt ((x * x) * (1 - progress) + (y * y) * progress)
+
+
+lerpTransform : Float -> Transform -> Transform -> Transform
+lerpTransform t one two =
+    { x =
+        lerpFloat t one.x two.x
+    , y =
+        lerpFloat t one.y two.y
+    , scale =
+        lerpFloat t one.scale two.scale
+    , rotation =
+        lerpFloat t one.rotation two.rotation
+    }
 
 
 atX :
@@ -817,22 +838,6 @@ afterSequence durationTillNow (Sequence n delay duration steps) =
         durationTillNow |> Quantity.greaterThanOrEqualTo fullDuration
 
 
-
--- initialVelocity : Move value -> Pixels.PixelsPerSecond
--- initialVelocity m =
---     case m of
---         Wait _ ->
---             zeroVelocity
---         To dur trans value ->
---             zeroVelocity
---         -- duration is gathered from the timeline
---         -- otherwise it's 0
---         Transition trans value ->
---             zeroVelocity
---         Repeat n steps ->
---             zeroVelocity
-
-
 zeroDuration : Duration.Duration
 zeroDuration =
     Duration.milliseconds 0
@@ -952,58 +957,38 @@ cssForSections :
     Time.Absolute
     -> value
     -> String
+    -> (Float -> value -> value -> String)
     -> (value -> String)
     -> (value -> String)
     -> List (Sequence value)
     -> CssAnim
     -> CssAnim
-cssForSections now startPos name toString toHashString sections anim =
+cssForSections now startPos name lerp toString toHashString sections anim =
     case sections of
         [] ->
             anim
 
-        (Sequence 1 delay dur [ Step stepDur (Transition.Transition spline) v ]) :: rest ->
-            -- most common situation
+        [ Sequence 1 delay dur [ Step stepDur (Transition.Transition spline) v ] ] ->
+            { anim
+                | props =
+                    renderTransition name delay stepDur spline
+                        :: ( name, toString v )
+                        :: anim.props
+            }
+
+        _ ->
+            -- -- most common situation
+            -- -- Renders the first step as a transition
+            -- -- and all subsequent steps as css keyframes
             toCssKeyframes
                 now
                 startPos
                 name
+                lerp
                 toString
                 toHashString
-                rest
-                { anim
-                    | props =
-                        renderTransition name delay stepDur spline
-                            :: ( name, toString v )
-                            :: anim.props
-                }
-
-        (Sequence 1 delay dur [ Step stepDur (Transition.Wobble wob) v ]) :: rest ->
-            Debug.todo "figure out where to split the wob into a trail"
-
-        (Sequence i delay dur (((Step stepDur trans v) :: remainingSteps) as allSteps)) :: rest ->
-            let
-                subsequentDuration =
-                    dur |> Time.reduceDurationBy stepDur
-            in
-            cssForSections now
-                startPos
-                name
-                toString
-                toHashString
-                (Sequence 1 delay stepDur [ Step stepDur trans v ]
-                    :: Sequence 1 (Time.expand delay stepDur) subsequentDuration remainingSteps
-                    :: Sequence (i - 1)
-                        (Time.expand delay dur)
-                        dur
-                        allSteps
-                    :: rest
-                )
+                sections
                 anim
-
-        (Sequence i delay dur steps) :: rest ->
-            -- there are no steps in this sequence
-            anim
 
 
 renderTransition : String -> Duration.Duration -> Duration.Duration -> Bezier.Spline -> ( String, String )
@@ -1028,12 +1013,13 @@ toCssKeyframes :
     Time.Absolute
     -> value
     -> String
+    -> (Float -> value -> value -> String)
     -> (value -> String)
     -> (value -> String)
     -> List (Sequence value)
     -> CssAnim
     -> CssAnim
-toCssKeyframes now startPos name toString toHashString sections anim =
+toCssKeyframes now startPos name lerp toString toHashString sections anim =
     case sections of
         [] ->
             anim
@@ -1043,11 +1029,12 @@ toCssKeyframes now startPos name toString toHashString sections anim =
                 now
                 startPos
                 name
+                lerp
                 toString
                 toHashString
                 remain
                 (combine
-                    (css now startPos name toString toHashString seq)
+                    (css now startPos name lerp toString toHashString seq)
                     anim
                 )
 
@@ -1056,6 +1043,7 @@ css :
     Time.Absolute
     -> value
     -> String
+    -> (Float -> value -> value -> String)
     -> (value -> String)
     -> (value -> String)
     -> Sequence value
@@ -1065,7 +1053,7 @@ css :
         , keyframes : String
         , props : List a
         }
-css now startPos name toString toHashString seq =
+css now startPos name lerp toString toHashString seq =
     let
         animationName =
             -- we need to encode the current time in the animations name so the browser doesn't cache anything
@@ -1109,15 +1097,16 @@ css now startPos name toString toHashString seq =
             ++ animationName
     , keyframes =
         ("@keyframes " ++ animationName ++ " {\n")
-            ++ keyframes name startPos toString seq ""
+            ++ keyframes name lerp startPos toString seq ""
             ++ "\n}"
     , props = []
     }
 
 
-keyframes : String -> value -> (value -> String) -> Sequence value -> String -> String
-keyframes name startPos toString (Sequence _ _ dur steps) rendered =
+keyframes : String -> (Float -> value -> value -> String) -> value -> (value -> String) -> Sequence value -> String -> String
+keyframes name lerp startPos toString (Sequence _ _ dur steps) rendered =
     keyframeHelper name
+        lerp
         startPos
         (\v -> name ++ ":" ++ toString v)
         dur
@@ -1128,6 +1117,7 @@ keyframes name startPos toString (Sequence _ _ dur steps) rendered =
 
 keyframeHelper :
     String
+    -> (Float -> value -> value -> String)
     -> value
     -> (value -> String)
     -> Time.Duration
@@ -1135,7 +1125,7 @@ keyframeHelper :
     -> List (Step value)
     -> String
     -> String
-keyframeHelper name startPos toString sequenceDuration currentDur steps rendered =
+keyframeHelper name lerp startPos toString sequenceDuration currentDur steps rendered =
     case steps of
         [] ->
             rendered
@@ -1145,13 +1135,6 @@ keyframeHelper name startPos toString sequenceDuration currentDur steps rendered
                 last =
                     "100% { " ++ (toString val ++ ";}")
 
-                domain =
-                    { start =
-                        startPos
-                    , end =
-                        val
-                    }
-
                 startPercent =
                     Time.progressWithin currentDur sequenceDuration * 100
 
@@ -1160,21 +1143,17 @@ keyframeHelper name startPos toString sequenceDuration currentDur steps rendered
 
                 frames =
                     Transition.keyframes
-                        domain
+                        (\t ->
+                            lerp t startPos val
+                        )
                         startPercent
                         endPercent
-                        toString
                         transition
             in
             rendered ++ frames ++ last
 
         (Step dur transition val) :: remaining ->
             let
-                domain =
-                    { start = startPos
-                    , end = val
-                    }
-
                 nextCurrent =
                     Time.expand currentDur dur
 
@@ -1186,14 +1165,16 @@ keyframeHelper name startPos toString sequenceDuration currentDur steps rendered
 
                 frames =
                     Transition.keyframes
-                        domain
+                        (\t ->
+                            lerp t startPos val
+                        )
                         startPercent
                         endPercent
-                        toString
                         transition
             in
             keyframeHelper
                 name
+                lerp
                 val
                 toString
                 sequenceDuration

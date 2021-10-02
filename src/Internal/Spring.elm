@@ -1,7 +1,9 @@
 module Internal.Spring exposing
     ( SpringParams
     , analytical
-    , criticalDamping
+    ,  criticalDamping
+       -- , keyframeSegments
+
     , peaks
     , segments
     , select

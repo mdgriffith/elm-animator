@@ -6,8 +6,8 @@ module Animator exposing
     , withBezier, withImpulse
     , Duration, ms
     , spinning, pulsing, bouncing, pinging
-    , keyframes, loop, loopFor
     , set, wait, step
+    , keyframes, loop, loopFor
     , onTimeline, onTimelineWith
     , delay
     , div, node
@@ -43,9 +43,32 @@ Check out how they're defined if you want to make your own.
 
 # Sequences
 
-@docs keyframes, loop, loopFor
+You may want something more involved than a single step transition.
+
+Here's an element that's blinking.
+
+    import Animator as Anim
+    import Html
+    import Html.Attributes
+
+
+    Anim.div
+        (Anim.loop
+            [ Anim.step (Anim.ms 200)
+                [ Anim.opacity 1
+                ]
+            , Anim.wait (Anim.ms 200)
+            , Anim.step (Anim.ms 200)
+                [ Anim.opacity 0
+                ]
+            ]
+        )
+        [ Html.Attributes.id "my-element" ]
+        [ Html.text "Hello!" ]
 
 @docs set, wait, step
+
+@docs keyframes, loop, loopFor
 
 @docs onTimeline, onTimelineWith
 
@@ -194,9 +217,7 @@ ms =
 
 {-| When transitioning to this state, start with a little extra velocity!
 
-**Values**
-0 -> No different from before
-1 ->
+This takes a number from 0-1.
 
 -}
 withImpulse : Float -> Attribute -> Attribute

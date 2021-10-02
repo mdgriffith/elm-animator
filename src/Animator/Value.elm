@@ -4,7 +4,11 @@ module Animator.Value exposing
     , withWobble
     )
 
-{-|
+{-| You may want to animate a value manually, without generating any CSS.
+
+This module is for you!
+
+You'll need to track a `Timeline` in your model and update it using `AnimationFrame`.
 
 @docs color
 
@@ -56,7 +60,7 @@ color timeline lookup =
                     progress =
                         Time.progress startTime targetTime now
                 in
-                Move.color progress
+                Move.lerpColor progress
                     (lookup (Timeline.getEvent prev))
                     (lookup (Timeline.getEvent target))
 
@@ -86,6 +90,7 @@ velocity timeline lookup =
         |> .velocity
 
 
+{-| -}
 movement : Timeline state -> (state -> Movement) -> { position : Float, velocity : Float }
 movement timeline lookup =
     Timeline.foldpAll lookup
