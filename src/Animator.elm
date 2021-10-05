@@ -12,7 +12,6 @@ module Animator exposing
     , delay
     , div, node
     , Css, css
-    -- , xAsSingleProp
     )
 
 {-|
@@ -246,6 +245,10 @@ type Step
     = Step Duration (List Attribute)
 
 
+
+-- | LoopFor Int (List Step)
+
+
 {-| -}
 set : List Attribute -> Step
 set attrs =
@@ -271,17 +274,31 @@ keyframes steps =
         imminent =
             Time.absolute (Time.millisToPosix 1)
 
-        ( ( afterFirst, firstOccurring ), remaining ) =
+        firstEventTime =
+            -- Time.absolute (Time.millisToPosix 2)
+            imminent
+
+        ( firstOccurring, remaining ) =
             case steps of
                 [] ->
-                    ( ( imminent, Timeline.Occurring [] imminent imminent ), [] )
+                    ( Timeline.Occurring [] imminent imminent, [] )
 
-                first :: r ->
-                    ( toOccurring imminent first, r )
+                (Step dur props) :: r ->
+                    let
+                        eventEnd =
+                            Time.advanceBy dur firstEventTime
+                    in
+                    ( Timeline.Occurring props firstEventTime eventEnd, r )
 
         timeline =
             Timeline.Timeline
-                { initial = []
+                { initial =
+                    case steps of
+                        [] ->
+                            []
+
+                        (Step dur props) :: _ ->
+                            props
                 , now = imminent
                 , delay = Time.zeroDuration
                 , scale = 1
@@ -298,7 +315,7 @@ keyframes steps =
                                     in
                                     ( newTime, occur :: occurs )
                                 )
-                                ( afterFirst, [] )
+                                ( firstEventTime, [] )
                                 remaining
                                 |> Tuple.second
                             )
@@ -325,8 +342,8 @@ toOccurring currentTime (Step dur props) =
 {-| -}
 loop : List Step -> Step
 loop steps =
-    -- abusing infinite here :/ don't look at me!
-    loopFor (1 // 0) steps
+    -- negative one means infinite.  I know, I know
+    loopFor -1 steps
 
 
 {-| -}
@@ -739,7 +756,7 @@ div (Animation now renderedProps) attrs children =
     in
     Html.div
         (styles ++ attrs)
-        (stylesheet (Debug.log "KEYFRAMES" rendered.keyframes)
+        (stylesheet rendered.keyframes
             :: children
         )
 

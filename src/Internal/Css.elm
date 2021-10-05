@@ -67,6 +67,15 @@ type Prop
     | ColorProp String (Move.Move Color.Color)
 
 
+isTransformProp prop =
+    case prop of
+        Prop id name _ _ ->
+            Props.isTransformId id
+
+        ColorProp _ _ ->
+            False
+
+
 match : Prop -> Prop -> Bool
 match one two =
     case one of
@@ -336,8 +345,10 @@ props2Css now renderedProps anim =
                             (Pixels.inPixels details.state.position)
                             details.name
                             (\t one two ->
-                                Props.format details.format
-                                    (Move.lerpFloat t one two)
+                                details.name
+                                    ++ ": "
+                                    ++ Props.format details.format
+                                        (Move.lerpFloat t one two)
                             )
                             (Props.format details.format)
                             Move.floatToString
@@ -364,8 +375,10 @@ props2Css now renderedProps anim =
                             details.color
                             details.name
                             (\t one two ->
-                                Color.toCssString
-                                    (Move.lerpColor t one two)
+                                details.name
+                                    ++ ": "
+                                    ++ Color.toCssString
+                                        (Move.lerpColor t one two)
                             )
                             Color.toCssString
                             Props.colorHash
@@ -392,8 +405,9 @@ props2Css now renderedProps anim =
                             (stateToTransform details.state)
                             "transform"
                             (\t one two ->
-                                transformToString
-                                    (Move.lerpTransform t one two)
+                                "transform: "
+                                    ++ transformToString
+                                        (Move.lerpTransform t one two)
                             )
                             transformToString
                             transformToHash
@@ -532,8 +546,6 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
         progress =
             Time.progress startTime targetTime now
 
-        --startTime =
-        --    Timeline.endTime prev
         finished =
             -- we only want to ignore this event if it's both finished
             -- and not immediately preceding an event that is still upcoming
@@ -542,9 +554,13 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
             --        False
             --
             --    next :: _ ->
-            Time.thisAfterOrEqualThat now (Timeline.endTime target)
+            -- Time.thisAfterOrEqualThat now (Timeline.endTime target)
+            --&& not (Time.thisBeforeThat now (Timeline.startTime next))
+            ---------
+            --  Time.thisAfterOrEqualThat now (Timeline.endTime target)
+            Time.thisAfterThat now (Timeline.endTime target)
 
-        --&& not (Time.thisBeforeThat now (Timeline.startTime next))
+        -- || Time.equal now ()
     in
     List.map
         (\prop ->
@@ -652,30 +668,10 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                         targetProps =
                             Timeline.getEvent target
                                 |> lookup
+                                |> List.filter isTransformProp
 
                         commonTransition =
-                            getCommonTransformTransition
-                                targetProps
-                                Transition.standard
-
-                        targets =
-                            { x =
-                                transformOrDefault Props.ids.x
-                                    targetProps
-                            , y =
-                                transformOrDefault Props.ids.y
-                                    targetProps
-                            , scale =
-                                transformOrDefault Props.ids.scale
-                                    targetProps
-                            , rotation =
-                                transformOrDefault Props.ids.rotation
-                                    targetProps
-                            }
-
-                        commonMovement =
                             if not (Time.equal (Timeline.endTime prev) startTime) then
-                                -- this is a transition, we want to adjust the curve so it matches the transition
                                 let
                                     fastestVelocity =
                                         firstNonZero
@@ -705,15 +701,44 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                                 details.state.scale.velocity
                                             ]
                                 in
-                                Move.toWith commonTransition targets
-                                    |> Move.withVelocities fastestVelocity
+                                getCommonTransformTransition
+                                    targetProps
+                                    Transition.standard
+                                    |> Transition.withVelocities fastestVelocity
                                         -- If we do any transition smoothing
                                         -- we'll need to normalize this velocity too
                                         --Estimation.velocityAtTarget lookupState target future
                                         0
 
                             else
-                                Move.toWith commonTransition targets
+                                getCommonTransformTransition
+                                    targetProps
+                                    Transition.standard
+
+                        commonSequence =
+                            getCommonTransformSequence
+                                targetProps
+                                []
+
+                        targets =
+                            { x =
+                                transformOrDefault Props.ids.x
+                                    targetProps
+                            , y =
+                                transformOrDefault Props.ids.y
+                                    targetProps
+                            , scale =
+                                transformOrDefault Props.ids.scale
+                                    targetProps
+                            , rotation =
+                                transformOrDefault Props.ids.rotation
+                                    targetProps
+                            }
+
+                        commonMovement =
+                            Move.move commonTransition
+                                targets
+                                commonSequence
                     in
                     TransformProp
                         { sections =
@@ -779,6 +804,136 @@ firstNonZero list =
 
             else
                 firstNonZero remain
+
+
+{-|
+
+    *warning! this need to be called with pre-filtered props that are only transform props!
+
+-}
+getCommonTransformSequence : List Prop -> List (Move.Sequence Transform) -> List (Move.Sequence Transform)
+getCommonTransformSequence props sequences =
+    case props of
+        (Prop id name (Move.Pos trans v propSeq) format) :: _ ->
+            -- sequences
+            transformSeq props propSeq 0 []
+
+        _ ->
+            sequences
+
+
+transformSeq : List Prop -> List (Move.Sequence Float) -> Int -> List (Move.Sequence Transform) -> List (Move.Sequence Transform)
+transformSeq props pilotSequence seqLevel renderedTransforms =
+    case pilotSequence of
+        [] ->
+            renderedTransforms
+
+        (Move.Sequence n delay dur steps) :: remain ->
+            transformSeq props
+                remain
+                (seqLevel + 1)
+                (Move.Sequence n
+                    delay
+                    dur
+                    (gatherSequenceSteps seqLevel
+                        0
+                        steps
+                        props
+                        []
+                    )
+                    :: renderedTransforms
+                )
+
+
+gatherSequenceSteps :
+    Int
+    -> Int
+    -> List (Move.Step Float)
+    -> List Prop
+    -> List (Move.Step Transform)
+    -> List (Move.Step Transform)
+gatherSequenceSteps seqLevel stepLevel steps props transforms =
+    case steps of
+        [] ->
+            transforms
+
+        (Move.Step dur trans target) :: remainingSteps ->
+            gatherSequenceSteps seqLevel
+                (stepLevel + 1)
+                remainingSteps
+                props
+                (getTransformStepAt dur trans seqLevel stepLevel props
+                    :: transforms
+                )
+
+
+getTransformStepAt dur trans seqLevel stepLevel props =
+    Move.Step dur
+        trans
+        { x =
+            getTransformSequenceValueAt seqLevel
+                stepLevel
+                Props.ids.x
+                props
+        , y =
+            getTransformSequenceValueAt seqLevel
+                stepLevel
+                Props.ids.y
+                props
+        , scale =
+            getTransformSequenceValueAt seqLevel
+                stepLevel
+                Props.ids.scale
+                props
+        , rotation =
+            getTransformSequenceValueAt seqLevel
+                stepLevel
+                Props.ids.rotation
+                props
+        }
+
+
+getTransformSequenceValueAt : Int -> Int -> Props.Id -> List Prop -> Float
+getTransformSequenceValueAt seqLevel stepLevel targetId props =
+    case props of
+        [] ->
+            Props.defaultPosition targetId
+
+        (Prop id name move _) :: remain ->
+            if id - targetId == 0 then
+                case move of
+                    Move.Pos _ v seq ->
+                        case getAt seqLevel seq of
+                            Nothing ->
+                                v
+
+                            Just (Move.Sequence _ _ _ seqSteps) ->
+                                case getAt stepLevel seqSteps of
+                                    Nothing ->
+                                        v
+
+                                    Just (Move.Step _ _ stepValue) ->
+                                        stepValue
+
+            else
+                getTransformSequenceValueAt seqLevel stepLevel targetId remain
+
+        (ColorProp name movement) :: remain ->
+            getTransformSequenceValueAt seqLevel stepLevel targetId remain
+
+
+getAt : Int -> List a -> Maybe a
+getAt i list =
+    case list of
+        [] ->
+            Nothing
+
+        top :: remain ->
+            if i == 0 then
+                Just top
+
+            else
+                getAt (i - 1) remain
 
 
 getCommonTransformTransition : List Prop -> Transition.Transition -> Transition.Transition

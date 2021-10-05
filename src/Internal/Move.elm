@@ -9,7 +9,7 @@ module Internal.Move exposing
     , withWobble, withVelocities, withBezier
     , at, atX, transitionTo
     , denormalize, normalizeOver, toReal
-    , floatToString, initialSequenceVelocity
+    , floatToString, initialSequenceVelocity, move
     )
 
 {-|
@@ -127,6 +127,10 @@ to v =
 toWith : Transition.Transition -> value -> Move value
 toWith t v =
     Pos t v []
+
+
+move =
+    Pos
 
 
 addSequence : Int -> Duration.Duration -> List (Step value) -> Move value -> Move value
@@ -474,7 +478,7 @@ sequences startTime targetTime now stopTime movement existingSequence =
         durationToNow =
             Time.duration startTime now
     in
-    if Time.equal now stopTime then
+    if Time.equal now stopTime && not (Time.equal targetTime stopTime) then
         -- We've probably been interrupted
         []
 
@@ -528,9 +532,14 @@ sequences startTime targetTime now stopTime movement existingSequence =
                             [ Step transitionDuration trans value
                             ]
                 in
-                existingSequence
-                    |> push transitionSequence
-                    |> append (addDelayToSequence (Time.expand durationToNow transitionDuration) dwell [])
+                if Time.isZeroDuration transitionDuration && not (List.isEmpty dwell) then
+                    existingSequence
+                        |> append (addDelayToSequence durationToNow dwell [])
+
+                else
+                    existingSequence
+                        |> push transitionSequence
+                        |> append (addDelayToSequence (Time.expand durationToNow transitionDuration) dwell [])
 
     else if after startTime stopTime now movement then
         -- we've completely passed this state, no splines are returned
@@ -1065,11 +1074,11 @@ css now startPos name lerp toString toHashString seq =
         n =
             case seq of
                 Sequence i _ _ _ ->
-                    if i <= 0 then
-                        "1"
-
-                    else if isInfinite (toFloat i) then
+                    if i == -1 then
                         "infinite"
+
+                    else if i <= 0 then
+                        "1"
 
                     else
                         String.fromInt i
@@ -1150,8 +1159,9 @@ keyframeHelper name lerp startPos toString sequenceDuration currentDur steps ren
                         endPercent
                         transition
             in
-            rendered ++ frames ++ last
+            rendered ++ frames
 
+        --++ last
         (Step dur transition val) :: remaining ->
             let
                 nextCurrent =
