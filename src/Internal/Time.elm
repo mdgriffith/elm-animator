@@ -3,7 +3,7 @@ module Internal.Time exposing
     , Absolute, AbsoluteTime(..), Duration, absolute, duration, progress
     , inMilliseconds
     , latest, earliest, toPosix, durationToString, reduceDurationBy
-    , advanceBy, equalDuration, expand, isZeroDuration, maxDuration, millis, numberOfFrames, positiveDuration, progressWithin, rollbackBy, thisAfterThat, thisBeforeThat, zeroDuration
+    , advanceBy, equalDuration, expand, isZeroDuration, maxDuration, millis, numberOfFrames, positiveDuration, progressWithin, rollbackBy, scaleDuration, thisAfterThat, thisBeforeThat, zeroDuration
     )
 
 {-|
@@ -92,6 +92,15 @@ rollbackBy dur time =
 inMilliseconds : Absolute -> Float
 inMilliseconds (Quantity.Quantity ms) =
     ms
+
+
+scaleDuration : Float -> Duration -> Duration
+scaleDuration x ((Quantity.Quantity d) as untouched) =
+    if x == 1 then
+        untouched
+
+    else
+        Quantity.Quantity (x * d)
 
 
 duration : Absolute -> Absolute -> Duration

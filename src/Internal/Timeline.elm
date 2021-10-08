@@ -573,9 +573,38 @@ applyQueued timeline =
         Just queued ->
             { timeline
                 | events =
-                    enqueue timeline timeline.now queued
+                    if timeline.scale == 1 then
+                        enqueue timeline timeline.now queued
+
+                    else
+                        queued
+                            |> scaleSchedule timeline.scale
+                            |> enqueue timeline timeline.now
                 , queued = Nothing
             }
+
+
+{-|
+
+    {-| A list of events that haven't been added to the schedule yet.
+
+-}
+type Schedule event
+= Schedule Time.Duration (Event event) (List (Event event))
+
+-}
+scaleSchedule : Float -> Schedule event -> Schedule event
+scaleSchedule scale (Schedule dur event events) =
+    Schedule (Time.scaleDuration scale dur)
+        (scaleEvent scale event)
+        (List.map (scaleEvent scale) events)
+
+
+scaleEvent : Float -> Event event -> Event event
+scaleEvent scale (Event dur event maybeDur) =
+    Event (Time.scaleDuration scale dur)
+        event
+        (Maybe.map (Time.scaleDuration scale) maybeDur)
 
 
 {-|
@@ -682,7 +711,8 @@ applyInterruptions timeline =
             -- It means `timeline.interruptions` would be the following
             -- [End, Move, Move, Move]
             -- We have to reverse the list so they're processed as [Move, Move, Move, End]
-            applyInterruptionHelper (List.reverse timeline.interruption) { timeline | interruption = [] }
+            applyInterruptionHelper (List.reverse timeline.interruption)
+                { timeline | interruption = [] }
 
 
 applyInterruptionHelper : List (Schedule event) -> TimelineDetails event -> TimelineDetails event
@@ -699,7 +729,15 @@ applyInterruptionHelper interrupts timeline =
                             d
 
                 newEvents =
-                    interrupt timeline (Time.advanceBy delay timeline.now) inter
+                    if timeline.scale == 1 then
+                        interrupt timeline
+                            (Time.advanceBy delay timeline.now)
+                            inter
+
+                    else
+                        interrupt timeline
+                            (Time.advanceBy delay timeline.now)
+                            (scaleSchedule timeline.scale inter)
             in
             applyInterruptionHelper remaining { timeline | events = newEvents }
 

@@ -141,11 +141,11 @@ delay dur (Timeline.Timeline details) =
         { details | delay = Time.maxDuration (Duration.milliseconds 5000) (Time.expand details.delay (Time.positiveDuration dur)) }
 
 
-{-| Speedup or slowdown a timeline.
+{-| Scale timeline durations.
 
-    0.5 -> half speed
+    0.5 -> Animations take half as much time
     1.0 -> normal
-    2.0 -> twice as fast
+    2.0 -> Animations take twice as long
 
 **Note** - 0.1 is the lowest number allowed, and 5 is the highest.
 
