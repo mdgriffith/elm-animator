@@ -1,27 +1,21 @@
 {
-    "type": "package",
-    "name": "mdgriffith/elm-animator",
-    "summary": "A timeline-based animation engine",
-    "license": "BSD-3-Clause",
-    "version": "1.1.1",
-    "exposed-modules": [
-        "Animator",
-        "Animator.Timeline",
-        "Animator.Value"
-    ],
-    "elm-version": "0.19.0 <= v < 0.20.0",
-    "dependencies": {
-        "avh4/elm-color": "1.0.0 <= v < 2.0.0",
-        "elm/browser": "1.0.0 <= v < 2.0.0",
-        "elm/core": "1.0.0 <= v < 2.0.0",
-        "elm/html": "1.0.0 <= v < 2.0.0",
-        "elm/json": "1.0.0 <= v < 2.0.0",
-        "elm/time": "1.0.0 <= v < 2.0.0",
-        "elm/virtual-dom": "1.0.0 <= v < 2.0.0",
-        "ianmackenzie/elm-units": "2.2.0 <= v < 3.0.0"
-    },
-    "test-dependencies": {
-        "elm/random": "1.0.0 <= v < 2.0.0",
-        "elm-explorations/test": "1.2.2 <= v < 2.0.0"
-    }
+  "type": "package",
+  "name": "mdgriffith/elm-animator",
+  "summary": "A timeline-based animation engine",
+  "license": "BSD-3-Clause",
+  "version": "1.1.1",
+  "exposed-modules": ["Animator", "Animator.Timeline", "Animator.Value"],
+  "elm-version": "0.19.0 <= v < 0.20.0",
+  "dependencies": {
+    "avh4/elm-color": "1.0.0 <= v < 2.0.0",
+    "elm/browser": "1.0.0 <= v < 2.0.0",
+    "elm/core": "1.0.0 <= v < 2.0.0",
+    "elm/html": "1.0.0 <= v < 2.0.0",
+    "elm/time": "1.0.0 <= v < 2.0.0",
+    "ianmackenzie/elm-units": "2.2.0 <= v < 3.0.0"
+  },
+  "test-dependencies": {
+    "elm/random": "1.0.0 <= v < 2.0.0",
+    "elm-explorations/test": "1.2.2 <= v < 2.0.0"
+  }
 }
