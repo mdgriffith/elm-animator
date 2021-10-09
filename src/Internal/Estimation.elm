@@ -6,10 +6,10 @@ import Animator
 import Animator.Timeline
 import Animator.Value
 import Internal.Move as Move
+import Internal.Quantity as Quantity
 import Internal.Time as Time
 import Internal.Timeline as Timeline
 import Pixels
-import Quantity
 import Time
 
 
@@ -51,11 +51,11 @@ velocity resolution time timeline toPosition =
 
 
 type alias PixelsPerSecond =
-    Quantity.Quantity Float Pixels.PixelsPerSecond
+    Quantity.Quantity Float Units.PixelsPerSecond
 
 
 type alias Pixels =
-    Quantity.Quantity Float Pixels.Pixels
+    Quantity.Quantity Float Units.Pixels
 
 
 {-| -}
@@ -83,7 +83,7 @@ velocityAtTarget lookup target future =
                 targetPosition =
                     case movement of
                         Move.Pos _ x _ ->
-                            Pixels.pixels x
+                            Units.pixels x
             in
             case lookup (Timeline.getEvent next) of
                 Move.Pos _ aheadPosition [] ->
@@ -91,7 +91,7 @@ velocityAtTarget lookup target future =
                     velocityBetween
                         targetPosition
                         (Timeline.endTime target)
-                        (Pixels.pixels aheadPosition)
+                        (Units.pixels aheadPosition)
                         (Timeline.startTime next)
 
                 Move.Pos _ aheadPosition (seq :: _) ->
@@ -102,7 +102,7 @@ velocityAtTarget lookup target future =
                         velocityBetween
                             targetPosition
                             (Timeline.endTime target)
-                            (Pixels.pixels aheadPosition)
+                            (Units.pixels aheadPosition)
                             (Timeline.startTime next)
 
 
@@ -128,4 +128,4 @@ velocityBetween one oneTime two twoTime =
 
 zeroVelocity : PixelsPerSecond
 zeroVelocity =
-    Pixels.pixelsPerSecond 0
+    Units.pixelsPerSecond 0

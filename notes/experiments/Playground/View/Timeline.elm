@@ -121,7 +121,7 @@ capture style start finish toMotion interp timeline rendered =
             timeline
             (dot style
                 { x = toFloat start
-                , y = Pixels.inPixels at.position
+                , y = Units.inPixels at.position
                 }
                 :: rendered
             )
@@ -207,7 +207,7 @@ captureNew style start finish toMotion interp timeline rendered =
             timeline
             (dot style
                 { x = toFloat start
-                , y = Pixels.inPixels at.position
+                , y = Units.inPixels at.position
                 }
                 :: rendered
             )

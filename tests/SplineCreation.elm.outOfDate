@@ -1,14 +1,14 @@
 module SplineCreation.outOfDate exposing (suite)
 
 import Animator
-import Duration
+import Internal.Duration as Duration
 import Expect exposing (Expectation, FloatingPointTolerance(..))
 import Fuzz exposing (Fuzzer, float, int, list, string)
 import Internal.Estimation as Estimate
 import Internal.Interpolate as Interpolate
 import Internal.Timeline as Timeline
 import Pixels
-import Quantity
+import Internal.Quantity as Quantity
 import Test exposing (..)
 import Time
 import Internal.Bezier as Bezier

@@ -24,9 +24,9 @@ You'll need to track a `Timeline` in your model and update it using `AnimationFr
 import Animator.Timeline exposing (Timeline)
 import Color exposing (Color)
 import Internal.Move as Move
+import Internal.Quantity as Quantity
 import Internal.Time as Time
 import Internal.Timeline as Timeline
-import Quantity
 
 
 

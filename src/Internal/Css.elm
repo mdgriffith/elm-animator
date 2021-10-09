@@ -10,18 +10,17 @@ module Internal.Css exposing
 {-| -}
 
 import Color
-import Duration
 import Html.Attributes exposing (id)
 import Internal.Bezier as Bezier
 import Internal.Bits as Bits
 import Internal.Css.Props as Props
+import Internal.Duration as Duration
 import Internal.Move as Move
+import Internal.Quantity as Quantity
 import Internal.Time as Time
 import Internal.Timeline as Timeline
 import Internal.Transition as Transition
 import Internal.Units as Units
-import Pixels
-import Quantity
 import Set exposing (Set)
 
 
@@ -155,8 +154,8 @@ getInitial timeline lookup =
 
 initState x =
     { position =
-        Pixels.pixels x
-    , velocity = Pixels.pixelsPerSecond 0
+        Units.pixels x
+    , velocity = Units.pixelsPerSecond 0
     }
 
 
@@ -329,7 +328,7 @@ props2Css now renderedProps anim =
                     [] ->
                         let
                             value =
-                                Pixels.inPixels details.state.position
+                                Units.inPixels details.state.position
                                     |> Props.format details.format
                         in
                         { anim
@@ -342,7 +341,7 @@ props2Css now renderedProps anim =
 
                     _ ->
                         Move.cssForSections now
-                            (Pixels.inPixels details.state.position)
+                            (Units.inPixels details.state.position)
                             details.name
                             (\t one two ->
                                 details.name
@@ -432,34 +431,34 @@ transformToHash trans =
 stateToTransform : TransformState -> Transform
 stateToTransform state =
     { x =
-        Pixels.inPixels state.x.position
+        Units.inPixels state.x.position
     , y =
-        Pixels.inPixels state.y.position
+        Units.inPixels state.y.position
     , scale =
-        Pixels.inPixels state.scale.position
+        Units.inPixels state.scale.position
     , rotation =
-        Pixels.inPixels state.rotation.position
+        Units.inPixels state.rotation.position
     }
 
 
 renderTransformState :
     { a
-        | x : { b | position : Quantity.Quantity Float Pixels.Pixels }
-        , y : { c | position : Quantity.Quantity Float Pixels.Pixels }
-        , rotation : { d | position : Quantity.Quantity Float Pixels.Pixels }
-        , scale : { e | position : Quantity.Quantity Float Pixels.Pixels }
+        | x : { b | position : Units.Pixels }
+        , y : { c | position : Units.Pixels }
+        , rotation : { d | position : Units.Pixels }
+        , scale : { e | position : Units.Pixels }
     }
     -> String
 renderTransformState state =
     "translate("
-        ++ String.fromFloat (Pixels.inPixels state.x.position)
+        ++ String.fromFloat (Units.inPixels state.x.position)
         ++ "px, "
-        ++ String.fromFloat (Pixels.inPixels state.y.position)
+        ++ String.fromFloat (Units.inPixels state.y.position)
         ++ "px) rotate("
-        ++ String.fromFloat (Pixels.inPixels state.rotation.position)
+        ++ String.fromFloat (Units.inPixels state.rotation.position)
         ++ "turn)"
         ++ " scale("
-        ++ String.fromFloat (Pixels.inPixels state.scale.position)
+        ++ String.fromFloat (Units.inPixels state.scale.position)
         ++ ")"
 
 
@@ -520,7 +519,7 @@ normalizeVelocity :
 normalizeVelocity startTime targetTime startPosition targetPosition velocity =
     let
         pixelsPerSecond =
-            Pixels.inPixelsPerSecond velocity
+            Units.inPixelsPerSecond velocity
     in
     if pixelsPerSecond == 0 then
         0
@@ -625,7 +624,7 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                 targetProp
 
                         startPosition =
-                            Pixels.inPixels rendered.state.position
+                            Units.inPixels rendered.state.position
 
                         targetPosition =
                             case targetProp of
@@ -678,25 +677,25 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                             [ normalizeVelocity
                                                 startTime
                                                 targetTime
-                                                (Pixels.inPixels details.state.x.position)
+                                                (Units.inPixels details.state.x.position)
                                                 targets.x
                                                 details.state.x.velocity
                                             , normalizeVelocity
                                                 startTime
                                                 targetTime
-                                                (Pixels.inPixels details.state.y.position)
+                                                (Units.inPixels details.state.y.position)
                                                 targets.y
                                                 details.state.y.velocity
                                             , normalizeVelocity
                                                 startTime
                                                 targetTime
-                                                (Pixels.inPixels details.state.rotation.position)
+                                                (Units.inPixels details.state.rotation.position)
                                                 targets.rotation
                                                 details.state.rotation.velocity
                                             , normalizeVelocity
                                                 startTime
                                                 targetTime
-                                                (Pixels.inPixels details.state.scale.position)
+                                                (Units.inPixels details.state.scale.position)
                                                 targets.scale
                                                 details.state.scale.velocity
                                             ]

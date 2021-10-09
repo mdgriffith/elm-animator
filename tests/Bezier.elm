@@ -2,15 +2,15 @@ module Bezier exposing (..)
 
 {-| -}
 
-import Duration
 import Expect exposing (Expectation, FloatingPointTolerance(..))
 import Fuzz exposing (Fuzzer, float, int, list, string)
 import Internal.Bezier as Bezier
+import Internal.Duration as Duration
 import Internal.Move as Move
+import Internal.Quantity as Quantity
 import Internal.Time as Time
 import Internal.Transition as Transition
 import Pixels
-import Quantity
 import Test exposing (..)
 
 
@@ -114,13 +114,13 @@ suite =
                     [ \state ->
                         Expect.within
                             (Absolute 1)
-                            (Pixels.inPixels state.move.position)
-                            (Pixels.inPixels state.transitionX.position)
+                            (Units.inPixels state.move.position)
+                            (Units.inPixels state.transitionX.position)
                     , \state ->
                         Expect.within
                             (Absolute 1)
-                            (Pixels.inPixelsPerSecond state.move.velocity)
-                            (Pixels.inPixelsPerSecond state.transitionX.velocity)
+                            (Units.inPixelsPerSecond state.move.velocity)
+                            (Units.inPixelsPerSecond state.transitionX.velocity)
                     ]
                     { move = moveXNewState
                     , transitionX = transitionNewState
@@ -151,13 +151,13 @@ suite =
                     [ \state ->
                         Expect.within
                             (Absolute 1)
-                            (Pixels.inPixels state.move.position)
-                            (Pixels.inPixels state.transitionX.position)
+                            (Units.inPixels state.move.position)
+                            (Units.inPixels state.transitionX.position)
                     , \state ->
                         Expect.within
                             (Absolute 1)
-                            (Pixels.inPixelsPerSecond state.move.velocity)
-                            (Pixels.inPixelsPerSecond state.transitionX.velocity)
+                            (Units.inPixelsPerSecond state.move.velocity)
+                            (Units.inPixelsPerSecond state.transitionX.velocity)
                     ]
                     { move = moveXNewState
                     , transitionX = transitionNewState
@@ -207,7 +207,7 @@ suite =
                     [ \state ->
                         Expect.within
                             (Absolute 1)
-                            (Pixels.inPixelsPerSecond state.move.velocity)
+                            (Units.inPixelsPerSecond state.move.velocity)
                             introVelocity
                     ]
                     { move = moveXNewState
@@ -224,8 +224,8 @@ usingMoveX :
     , targetTime : Time.Absolute
     }
     ->
-        { position : Quantity.Quantity Float Pixels.Pixels
-        , velocity : Quantity.Quantity Float Pixels.PixelsPerSecond
+        { position : Quantity.Quantity Float Units.Pixels
+        , velocity : Quantity.Quantity Float Units.PixelsPerSecond
         }
 usingMoveX args =
     let
@@ -235,7 +235,7 @@ usingMoveX args =
                 args.target
     in
     { position =
-        Pixels.pixels
+        Units.pixels
             (Move.toReal
                 args.startPosition
                 args.targetPosition
@@ -252,7 +252,7 @@ usingMoveX args =
                         , y = args.targetPosition - args.startPosition
                         }
         in
-        Pixels.pixelsPerSecond (scaled.y / scaled.x)
+        Units.pixelsPerSecond (scaled.y / scaled.x)
     }
 
 
@@ -265,17 +265,17 @@ usingTransitionX :
     , targetTime : Time.Absolute
     }
     ->
-        { position : Quantity.Quantity Float Pixels.Pixels
-        , velocity : Quantity.Quantity Float Pixels.PixelsPerSecond
+        { position : Quantity.Quantity Float Units.Pixels
+        , velocity : Quantity.Quantity Float Units.PixelsPerSecond
         }
 usingTransitionX args =
     let
         startingVelocity =
-            Pixels.pixelsPerSecond 0
+            Units.pixelsPerSecond 0
 
         targetVelocity =
             --Estimation.velocityAtTarget lookupState target future
-            Pixels.pixelsPerSecond 0
+            Units.pixelsPerSecond 0
 
         targetTransition =
             case args.target of
@@ -285,11 +285,11 @@ usingTransitionX args =
         domain =
             { start =
                 { x = args.startTime
-                , y = Pixels.pixels args.startPosition
+                , y = Units.pixels args.startPosition
                 }
             , end =
                 { x = args.targetTime
-                , y = Pixels.pixels args.targetPosition
+                , y = Units.pixels args.targetPosition
                 }
             }
     in

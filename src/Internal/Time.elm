@@ -18,8 +18,8 @@ module Internal.Time exposing
 
 -}
 
-import Duration
-import Quantity
+import Internal.Duration as Duration
+import Internal.Quantity as Quantity
 import Time
 
 

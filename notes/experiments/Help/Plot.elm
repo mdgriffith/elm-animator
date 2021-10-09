@@ -16,7 +16,7 @@ module Help.Plot exposing
 import Animator
 import Browser
 import Color
-import Duration
+import Internal.Duration as Duration
 import Html exposing (Html, div, h1, node, p, text)
 import Html.Attributes exposing (class)
 import Internal.Estimation as Estimate

@@ -33,9 +33,9 @@ module Internal.Timeline exposing
 
 -}
 
-import Duration
+import Internal.Duration as Duration
+import Internal.Quantity as Quantity
 import Internal.Time as Time
-import Quantity
 import Time
 
 

@@ -7,7 +7,7 @@ import Html.Events exposing (onClick)
 import Svg
 import Svg.Attributes as SvgA
 import Internal.Spring as Spring
-import Duration
+import Internal.Duration as Duration
 import Internal.Interpolate as Interpolate
 import Internal.Bezier as Bezier
 import Internal.Css as Css

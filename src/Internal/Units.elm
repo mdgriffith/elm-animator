@@ -3,13 +3,23 @@ module Internal.Units exposing
     , PixelsPerSecond
     , inPixels
     , inPixelsPerMs
+    , inPixelsPerSecond
+    , pixels
+    , pixelsPerSecond
     , zero
     )
 
 {-| -}
 
-import Pixels
-import Quantity
+import Internal.Quantity as Quantity
+
+
+type PixelsPerSecondUnit
+    = PixelsPerSecondUnit
+
+
+type InPixels
+    = InPixels
 
 
 zero =
@@ -37,23 +47,33 @@ type Vel
 
 
 type alias Pixels =
-    Quantity.Quantity Float Pixels.Pixels
+    Quantity.Quantity Float InPixels
 
 
 type alias PixelsPerSecond =
-    Quantity.Quantity Float Pixels.PixelsPerSecond
+    Quantity.Quantity Float PixelsPerSecondUnit
 
 
 inPixelsPerSecond : PixelsPerSecond -> Float
-inPixelsPerSecond pps =
-    Pixels.inPixelsPerSecond pps
+inPixelsPerSecond (Quantity.Quantity pps) =
+    pps
 
 
 inPixelsPerMs : PixelsPerSecond -> Float
-inPixelsPerMs pps =
-    1000 * Pixels.inPixelsPerSecond pps
+inPixelsPerMs (Quantity.Quantity pps) =
+    1000 * pps
 
 
 inPixels : Pixels -> Float
-inPixels =
-    Pixels.inPixels
+inPixels (Quantity.Quantity pixs) =
+    pixs
+
+
+pixels : Float -> Pixels
+pixels ps =
+    Quantity.Quantity ps
+
+
+pixelsPerSecond : Float -> PixelsPerSecond
+pixelsPerSecond ps =
+    Quantity.Quantity ps

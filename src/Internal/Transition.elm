@@ -63,11 +63,10 @@ Goals:
 -}
 
 import Internal.Bezier as Bezier
+import Internal.Quantity as Quantity
 import Internal.Spring as Spring
 import Internal.Time as Time
 import Internal.Units as Units
-import Pixels
-import Quantity
 
 
 {-| A transition are all the bezier curves between A and B that we want to transition through.
@@ -336,9 +335,9 @@ toTimeProgress domain factor =
 
 wrapUnits state =
     { position =
-        Pixels.pixels state.position
+        Units.pixels state.position
     , velocity =
-        Pixels.pixelsPerSecond (state.velocity * 1000)
+        Units.pixelsPerSecond (state.velocity * 1000)
     }
 
 
@@ -346,8 +345,8 @@ posVel :
     Float
     -> Bezier.Spline
     ->
-        { position : Quantity.Quantity Float Pixels.Pixels
-        , velocity : Quantity.Quantity Float Pixels.PixelsPerSecond
+        { position : Units.Pixels
+        , velocity : Units.PixelsPerSecond
         }
 posVel progress spline =
     let
@@ -358,9 +357,9 @@ posVel progress spline =
             Bezier.firstDerivative spline current.t
     in
     { position =
-        Pixels.pixels current.point.y
+        Units.pixels current.point.y
     , velocity =
-        Pixels.pixelsPerSecond ((firstDeriv.y / firstDeriv.x) * 1000)
+        Units.pixelsPerSecond ((firstDeriv.y / firstDeriv.x) * 1000)
     }
 
 

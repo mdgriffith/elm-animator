@@ -13,8 +13,8 @@ module Internal.Spring exposing
     , wobble2Damping
     )
 
-import Duration
 import Internal.Bezier as Bezier
+import Internal.Duration as Duration
 import Internal.Time as Time
 
 

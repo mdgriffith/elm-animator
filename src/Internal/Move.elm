@@ -36,13 +36,12 @@ module Internal.Move exposing
 -}
 
 import Color
-import Duration
 import Internal.Bezier as Bezier
+import Internal.Duration as Duration
+import Internal.Quantity as Quantity
 import Internal.Time as Time
 import Internal.Transition as Transition
 import Internal.Units as Units
-import Pixels
-import Quantity
 
 
 {-| -}
@@ -55,8 +54,8 @@ init movement =
     { position =
         case movement of
             Pos _ x _ ->
-                Pixels.pixels x
-    , velocity = Pixels.pixelsPerSecond 0
+                Units.pixels x
+    , velocity = Units.pixelsPerSecond 0
     }
 
 
@@ -148,14 +147,6 @@ withSequenceDelay delay (Sequence i _ dur steps) =
     Sequence i delay dur steps
 
 
-type alias Pixels =
-    Quantity.Quantity Float Pixels.Pixels
-
-
-type alias PixelsPerSecond =
-    Quantity.Quantity Float Pixels.PixelsPerSecond
-
-
 set : value -> Step value
 set =
     Step zeroDuration Transition.standard
@@ -172,9 +163,9 @@ stepWith =
 
 
 {--}
-zeroVelocity : PixelsPerSecond
+zeroVelocity : Units.PixelsPerSecond
 zeroVelocity =
-    Pixels.pixelsPerSecond 0
+    Units.pixelsPerSecond 0
 
 
 type alias State =
@@ -269,7 +260,7 @@ at :
 at progress startTime targetTime (Pos transition targetPosition dwell) startingState =
     let
         startPosition =
-            Pixels.inPixels startingState.position
+            Units.inPixels startingState.position
     in
     Transition.atX2 progress transition
         |> denormalize startTime
@@ -290,7 +281,7 @@ transitionTo :
 transitionTo progress startTime targetTime (Pos trans targetPosition dwell) startingState =
     let
         startPosition =
-            Pixels.inPixels startingState.position
+            Units.inPixels startingState.position
 
         introVelocity =
             normalizeVelocity
@@ -328,7 +319,7 @@ normalizeVelocity :
 normalizeVelocity startTime targetTime startPosition targetPosition velocity =
     let
         pixelsPerSecond =
-            Pixels.inPixelsPerSecond velocity
+            Units.inPixelsPerSecond velocity
     in
     if pixelsPerSecond == 0 then
         0
@@ -357,7 +348,7 @@ denormalize :
     -> State
 denormalize startTime targetTime startPosition targetPosition state =
     { position =
-        Pixels.pixels
+        Units.pixels
             (toReal
                 startPosition
                 targetPosition
@@ -375,10 +366,10 @@ denormalize startTime targetTime startPosition targetPosition state =
                         }
         in
         if scaled.x == 0 then
-            Pixels.pixelsPerSecond 0
+            Units.pixelsPerSecond 0
 
         else
-            Pixels.pixelsPerSecond (scaled.y / scaled.x)
+            Units.pixelsPerSecond (scaled.y / scaled.x)
     }
 
 
@@ -807,7 +798,7 @@ after startTime stopTime now movement =
 
 
 afterSequenceList :
-    Quantity.Quantity Float Duration.Seconds
+    Duration.Duration
     -> Sequence value
     -> List (Sequence value)
     -> Bool
@@ -856,7 +847,7 @@ zeroDuration =
 {- CSS KEYFRAMES -}
 
 
-initialSequenceVelocity : Sequence value -> PixelsPerSecond
+initialSequenceVelocity : Sequence value -> Units.PixelsPerSecond
 initialSequenceVelocity seq =
     case seq of
         Sequence 0 _ _ _ ->
@@ -868,7 +859,7 @@ initialSequenceVelocity seq =
         Sequence n _ _ ((Step dur trans _) :: _) ->
             Transition.initialVelocity trans
                 |> (*) 1000
-                |> Pixels.pixelsPerSecond
+                |> Units.pixelsPerSecond
 
 
 hash : String -> Sequence value -> (value -> String) -> String

@@ -31,7 +31,7 @@ module Playground.Timeline exposing (main)
 import Animator
 import Animator.Css2
 import Browser
-import Duration
+import Internal.Duration as Duration
 import Html exposing (Html, button, div, h1, text)
 import Html.Attributes as Attr
 import Html.Events exposing (onClick)

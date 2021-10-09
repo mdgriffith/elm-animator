@@ -3,7 +3,7 @@ module Simple exposing (main)
 import Animator
 import Browser
 import Color
-import Duration
+import Internal.Duration as Duration
 import Ease
 import Help.Plot
 import Html

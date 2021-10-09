@@ -96,8 +96,8 @@ suite =
 --                     (Timeline.Occurring (Interpolate.Pos Interpolate.standardDefault 20) (Time.millis 100) (Time.millis 900))
 --                     (Time.millis 500)
 --                     Nothing
---                     { position = Pixels.pixels 0
---                     , velocity = Pixels.pixelsPerSecond 0
+--                     { position = Units.pixels 0
+--                     , velocity = Units.pixelsPerSecond 0
 --                     }
 --         ]
 -- springs : Benchmark

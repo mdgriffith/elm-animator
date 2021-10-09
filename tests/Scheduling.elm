@@ -3,14 +3,14 @@ module Scheduling exposing (cleaning, interruptions, ordering, queueing, tailRec
 import Animator
 import Animator.Timeline
 import Animator.Value as Value
-import Duration
 import Expect exposing (Expectation, FloatingPointTolerance(..))
 import Fuzz exposing (Fuzzer, float, int, list, string)
 import Fuzz.Timeline
+import Internal.Duration as Duration
+import Internal.Quantity as Quantity
 import Internal.Time as Time
 import Internal.Timeline as Timeline
 import Pixels
-import Quantity
 import Random
 import Result
 import Test exposing (..)

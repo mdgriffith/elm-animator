@@ -1,14 +1,14 @@
 module Interpolation.outOfDate exposing (easingDerivatives, timeline)
 
 import Animator
-import Duration
+import Internal.Duration as Duration
 import Expect exposing (Expectation, FloatingPointTolerance(..))
 import Fuzz exposing (Fuzzer, float, int, list, string)
 import Internal.Estimation as Estimate
 import Internal.Interpolate as Interpolate
 import Internal.Timeline as Timeline
 import Pixels
-import Quantity
+import Internal.Quantity as Quantity
 import Test exposing (..)
 import Time
 
@@ -37,7 +37,7 @@ easingDerivatives =
                 let
                     dx =
                         Interpolate.derivativeOfEasing identity oneSecond 0.5
-                            |> Pixels.inPixelsPerSecond
+                            |> Units.inPixelsPerSecond
                 in
                 Expect.within (Absolute 0.01) dx 1
 
@@ -57,7 +57,7 @@ easingDerivatives =
                 let
                     dx =
                         Interpolate.derivativeOfEasing sinInterpolation oneSecond 0
-                            |> Pixels.inPixelsPerSecond
+                            |> Units.inPixelsPerSecond
                 in
                 Expect.within
                     (Absolute 0.1)
@@ -68,7 +68,7 @@ easingDerivatives =
                 let
                     dx =
                         Interpolate.derivativeOfEasing sinInterpolation oneSecond 1
-                            |> Pixels.inPixelsPerSecond
+                            |> Units.inPixelsPerSecond
                 in
                 Expect.within
                     (Absolute 0.1)
@@ -79,7 +79,7 @@ easingDerivatives =
                 let
                     dx =
                         Interpolate.derivativeOfEasing sinInterpolation oneSecond x
-                            |> Pixels.inPixelsPerSecond
+                            |> Units.inPixelsPerSecond
                 in
                 Expect.within
                     (Absolute 0.01)
