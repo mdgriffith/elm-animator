@@ -797,9 +797,23 @@ type alias Css =
 
 
 {-| -}
-css : Timeline state -> (state -> List Attribute) -> Css
-css =
-    Css.cssFromProps
+css : Timeline state -> (state -> ( List Attribute, List Step )) -> Css
+css timeline toPropsAndSteps =
+    let
+        toProps event =
+            let
+                ( props, steps ) =
+                    toPropsAndSteps event
+
+                fullDuration =
+                    sumStepDuration Time.zeroDuration steps
+            in
+            getInitialProps Time.zeroDuration steps props
+                |> List.map (addSequenceSteps 1 fullDuration steps)
+    in
+    Css.toCss
+        (Timeline.getCurrentTime timeline)
+        (Css.propsToRenderedProps timeline toProps)
 
 
 {-| -}
