@@ -1181,6 +1181,17 @@ combine one two =
 
                         _ ->
                             two.transition ++ ", " ++ one.transition
-        , keyframes = one.keyframes ++ "\n" ++ two.keyframes
+        , keyframes =
+            case one.keyframes of
+                "" ->
+                    two.keyframes
+
+                _ ->
+                    case two.keyframes of
+                        "" ->
+                            two.keyframes
+
+                        _ ->
+                            two.keyframes ++ "\n" ++ one.keyframes
         , props = one.props ++ two.props
         }
