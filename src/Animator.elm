@@ -749,13 +749,9 @@ div (Animation now renderedProps) attrs children =
     let
         rendered =
             Css.toCss now renderedProps
-
-        styles =
-            List.map (\( propName, val ) -> Attr.style propName val)
-                (( "animation", rendered.animation ) :: rendered.props)
     in
     Html.div
-        (styles ++ attrs)
+        (rendered.props ++ attrs)
         (stylesheet rendered.keyframes
             :: children
         )
@@ -772,32 +768,24 @@ node name (Animation now renderedProps) attrs children =
     let
         rendered =
             Css.toCss now renderedProps
-
-        styles =
-            List.map (\( propName, val ) -> Attr.style propName val)
-                (( "animation", rendered.animation ) :: rendered.props)
     in
     Html.node name
-        (styles ++ attrs)
+        (rendered.props ++ attrs)
         (stylesheet rendered.keyframes
             :: children
         )
 
 
 {-| -}
-type alias Css =
+type alias Css msg =
     { hash : String
-
-    -- use single prop encoding:
-    -- https://developer.mozilla.org/en-US/docs/Web/CSS/animation
-    , animation : String
     , keyframes : String
-    , props : List ( String, String )
+    , props : List (Html.Attribute msg)
     }
 
 
 {-| -}
-css : Timeline state -> (state -> ( List Attribute, List Step )) -> Css
+css : Timeline state -> (state -> ( List Attribute, List Step )) -> Css msg
 css timeline toPropsAndSteps =
     let
         toProps event =

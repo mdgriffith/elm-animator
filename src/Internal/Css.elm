@@ -10,7 +10,8 @@ module Internal.Css exposing
 {-| -}
 
 import Color
-import Html.Attributes exposing (id)
+import Html
+import Html.Attributes as Attr exposing (id)
 import Internal.Bezier as Bezier
 import Internal.Bits as Bits
 import Internal.Css.Props as Props
@@ -111,9 +112,44 @@ propsToRenderedProps timeline lookup =
         timeline
 
 
-toCss : Time.Absolute -> List RenderedProp -> CssAnim
+{-| -}
+type alias Css msg =
+    { hash : String
+    , keyframes : String
+    , props : List (Html.Attribute msg)
+    }
+
+
+toCss : Time.Absolute -> List RenderedProp -> Css msg
 toCss now renderedProps =
-    props2Css now renderedProps emptyAnim
+    let
+        cssDetails =
+            props2Css now renderedProps emptyAnim
+    in
+    { hash = cssDetails.hash
+    , keyframes = cssDetails.keyframes
+    , props =
+        case cssDetails.animation of
+            "" ->
+                case cssDetails.transition of
+                    "" ->
+                        cssDetails.props
+                            |> List.map (\( propName, val ) -> Attr.style propName val)
+
+                    trans ->
+                        (( "transition", trans ) :: cssDetails.props)
+                            |> List.map (\( propName, val ) -> Attr.style propName val)
+
+            anim ->
+                case cssDetails.transition of
+                    "" ->
+                        (( "animation", anim ) :: cssDetails.props)
+                            |> List.map (\( propName, val ) -> Attr.style propName val)
+
+                    trans ->
+                        (( "animation", anim ) :: ( "transition", trans ) :: cssDetails.props)
+                            |> List.map (\( propName, val ) -> Attr.style propName val)
+    }
 
 
 cssFromProps : Timeline.Timeline state -> (state -> List Prop) -> CssAnim
@@ -504,6 +540,7 @@ emptyAnim : CssAnim
 emptyAnim =
     { hash = ""
     , animation = ""
+    , transition = ""
     , keyframes = ""
     , props = []
     }
@@ -533,12 +570,6 @@ normalizeVelocity startTime targetTime startPosition targetPosition velocity =
 toPropCurves2 : Timeline.Transition state (List Prop) (List RenderedProp)
 toPropCurves2 lookup prev target now startTime endTime future cursor =
     let
-        -- _ =
-        --     Debug.log "   TO PROPS"
-        --         { prev = prev
-        --         , now = now
-        --         , target = target
-        --         }
         targetTime =
             Timeline.startTime target
 
@@ -1104,6 +1135,9 @@ type alias CssAnim =
     -- use single prop encoding:
     -- https://developer.mozilla.org/en-US/docs/Web/CSS/animation
     , animation : String
+
+    -- same, this is all the transitions needed to render this anim
+    , transition : String
     , keyframes : String
 
     -- These are generally used as backups
@@ -1123,7 +1157,30 @@ combine one two =
 
     else
         { hash = one.hash ++ two.hash
-        , animation = two.animation ++ ", " ++ one.animation
+        , animation =
+            case one.animation of
+                "" ->
+                    two.animation
+
+                _ ->
+                    case two.animation of
+                        "" ->
+                            two.animation
+
+                        _ ->
+                            two.animation ++ ", " ++ one.animation
+        , transition =
+            case one.transition of
+                "" ->
+                    two.transition
+
+                _ ->
+                    case two.transition of
+                        "" ->
+                            two.transition
+
+                        _ ->
+                            two.transition ++ ", " ++ one.transition
         , keyframes = one.keyframes ++ "\n" ++ two.keyframes
         , props = one.props ++ two.props
         }
