@@ -751,7 +751,7 @@ div (Animation now renderedProps) attrs children =
             Css.toCss now renderedProps
     in
     Html.div
-        (rendered.props ++ attrs)
+        (List.map (\( key, val ) -> Attr.style key val) rendered.props ++ attrs)
         (stylesheet rendered.keyframes
             :: children
         )
@@ -770,22 +770,22 @@ node name (Animation now renderedProps) attrs children =
             Css.toCss now renderedProps
     in
     Html.node name
-        (rendered.props ++ attrs)
+        (List.map (\( key, val ) -> Attr.style key val) rendered.props ++ attrs)
         (stylesheet rendered.keyframes
             :: children
         )
 
 
 {-| -}
-type alias Css msg =
+type alias Css =
     { hash : String
     , keyframes : String
-    , props : List (Html.Attribute msg)
+    , props : List ( String, String )
     }
 
 
 {-| -}
-css : Timeline state -> (state -> ( List Attribute, List Step )) -> Css msg
+css : Timeline state -> (state -> ( List Attribute, List Step )) -> Css
 css timeline toPropsAndSteps =
     let
         toProps event =

@@ -113,14 +113,14 @@ propsToRenderedProps timeline lookup =
 
 
 {-| -}
-type alias Css msg =
+type alias Css =
     { hash : String
     , keyframes : String
-    , props : List (Html.Attribute msg)
+    , props : List ( String, String )
     }
 
 
-toCss : Time.Absolute -> List RenderedProp -> Css msg
+toCss : Time.Absolute -> List RenderedProp -> Css
 toCss now renderedProps =
     let
         cssDetails =
@@ -134,21 +134,17 @@ toCss now renderedProps =
                 case cssDetails.transition of
                     "" ->
                         cssDetails.props
-                            |> List.map (\( propName, val ) -> Attr.style propName val)
 
                     trans ->
-                        (( "transition", trans ) :: cssDetails.props)
-                            |> List.map (\( propName, val ) -> Attr.style propName val)
+                        ( "transition", trans ) :: cssDetails.props
 
             anim ->
                 case cssDetails.transition of
                     "" ->
-                        (( "animation", anim ) :: cssDetails.props)
-                            |> List.map (\( propName, val ) -> Attr.style propName val)
+                        ( "animation", anim ) :: cssDetails.props
 
                     trans ->
-                        (( "animation", anim ) :: ( "transition", trans ) :: cssDetails.props)
-                            |> List.map (\( propName, val ) -> Attr.style propName val)
+                        ( "animation", anim ) :: ( "transition", trans ) :: cssDetails.props
     }
 
 
