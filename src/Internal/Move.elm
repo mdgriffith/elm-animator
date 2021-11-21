@@ -5,7 +5,7 @@ module Internal.Move exposing
     , Sequence(..)
     , Step(..), step, stepWith, set
     , sequences
-    , css, addSequence, cssForSections
+    , addSequence, cssForSections
     , withWobble, withVelocities, withBezier
     , at, atX, transitionTo
     , denormalize, normalizeOver, toReal
@@ -25,7 +25,7 @@ module Internal.Move exposing
 
 @docs sequences, goto
 
-@docs css, addSequence, cssForSections
+@docs addSequence, cssForSections
 
 @docs withWobble, withVelocities, withBezier
 
@@ -939,6 +939,7 @@ type alias CssAnim =
     { hash : String
     , animation : String
     , keyframes : String
+    , transition : String
     , props : List ( String, String )
     }
 
@@ -970,9 +971,16 @@ cssForSections now startPos name lerp toString toHashString sections anim =
 
         [ Sequence 1 delay dur [ Step stepDur (Transition.Transition spline) v ] ] ->
             { anim
-                | props =
-                    renderTransition name delay stepDur spline
-                        :: ( name, toString v )
+                | transition =
+                    Debug.log "transition" <|
+                        case anim.transition of
+                            "" ->
+                                renderTransition name delay stepDur spline
+
+                            _ ->
+                                renderTransition name delay stepDur spline ++ ", " ++ anim.transition
+                , props =
+                    ( name, toString v )
                         :: anim.props
             }
 
@@ -991,17 +999,15 @@ cssForSections now startPos name lerp toString toHashString sections anim =
                 anim
 
 
-renderTransition : String -> Duration.Duration -> Duration.Duration -> Bezier.Spline -> ( String, String )
+renderTransition : String -> Duration.Duration -> Duration.Duration -> Bezier.Spline -> String
 renderTransition prop delay duration spline =
-    ( "transition"
-    , prop
+    prop
         ++ " "
         ++ Time.durationToString duration
         ++ " "
         ++ Bezier.cssTimingString spline
         ++ " "
         ++ Time.durationToString delay
-    )
 
 
 {-|
@@ -1051,6 +1057,7 @@ css :
         { hash : String
         , animation : String
         , keyframes : String
+        , transition : String
         , props : List a
         }
 css now startPos name lerp toString toHashString seq =
@@ -1085,6 +1092,7 @@ css now startPos name lerp toString toHashString seq =
                     Time.durationToString delay
     in
     { hash = animationName
+    , transition = ""
     , animation =
         (durationStr ++ " ")
             -- we specify an easing function here because it we have to
@@ -1188,6 +1196,7 @@ emptyAnim : CssAnim
 emptyAnim =
     { hash = ""
     , animation = ""
+    , transition = ""
     , keyframes = ""
     , props = []
     }
@@ -1203,7 +1212,30 @@ combine one two =
 
     else
         { hash = one.hash ++ two.hash
-        , animation = two.animation ++ ", " ++ one.animation
+        , animation =
+            case one.animation of
+                "" ->
+                    two.animation
+
+                _ ->
+                    case two.animation of
+                        "" ->
+                            two.animation
+
+                        _ ->
+                            two.animation ++ ", " ++ one.animation
+        , transition =
+            case one.transition of
+                "" ->
+                    two.transition
+
+                _ ->
+                    case two.transition of
+                        "" ->
+                            two.transition
+
+                        _ ->
+                            two.transition ++ ", " ++ one.transition
         , keyframes = one.keyframes ++ "\n" ++ two.keyframes
         , props = one.props ++ two.props
         }
