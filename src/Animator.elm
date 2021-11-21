@@ -6,7 +6,7 @@ module Animator exposing
     , withBezier, withImpulse
     , Duration, ms
     , spinning, pulsing, bouncing, pinging
-    , set, wait, step
+    , Step, set, wait, step
     , keyframes, loop, loopFor
     , onTimeline, onTimelineWith
     , delay
@@ -65,7 +65,7 @@ Here's an element that's blinking.
         [ Html.Attributes.id "my-element" ]
         [ Html.text "Hello!" ]
 
-@docs set, wait, step
+@docs Step, set, wait, step
 
 @docs keyframes, loop, loopFor
 
