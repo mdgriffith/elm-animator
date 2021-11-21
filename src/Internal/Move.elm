@@ -862,9 +862,11 @@ initialSequenceVelocity seq =
                 |> Units.pixelsPerSecond
 
 
-hash : String -> Sequence value -> (value -> String) -> String
-hash name (Sequence n delay dur steps) toString =
-    name ++ String.fromInt n ++ stepHash steps toString ""
+hash : Time.Absolute -> String -> Sequence value -> (value -> String) -> String
+hash now name (Sequence n delay dur steps) toString =
+    -- we need to encode the current time in the animations name so the browser doesn't cache anything
+    -- IM LOOKIN AT YOU, CHROME
+    name ++ String.fromInt (round <| Time.inMilliseconds now) ++ String.fromInt n ++ stepHash steps toString ""
 
 
 stepHash : List (Step value) -> (value -> String) -> String -> String
@@ -969,16 +971,24 @@ cssForSections now startPos name lerp toString toHashString sections anim =
         [] ->
             anim
 
-        [ Sequence 1 delay dur [ Step stepDur (Transition.Transition spline) v ] ] ->
+        [ (Sequence 1 delay dur [ Step stepDur (Transition.Transition spline) v ]) as seq ] ->
+            -- NOTE, we're not using the above `dur` because it's the total duration of the sequence
+            -- and therefore equal to stepDur in this case
             { anim
-                | transition =
-                    Debug.log "transition" <|
-                        case anim.transition of
-                            "" ->
-                                renderTransition name delay stepDur spline
+                | hash =
+                    case anim.hash of
+                        "" ->
+                            hash now name seq toHashString
 
-                            _ ->
-                                renderTransition name delay stepDur spline ++ ", " ++ anim.transition
+                        _ ->
+                            anim.hash ++ hash now name seq toHashString
+                , transition =
+                    case anim.transition of
+                        "" ->
+                            renderTransition name delay stepDur spline
+
+                        _ ->
+                            renderTransition name delay stepDur spline ++ ", " ++ anim.transition
                 , props =
                     ( name, toString v )
                         :: anim.props
@@ -1063,9 +1073,8 @@ css :
 css now startPos name lerp toString toHashString seq =
     let
         animationName =
-            -- we need to encode the current time in the animations name so the browser doesn't cache anything
-            -- IM LOOKIN AT YOU, CHROME
-            hash (name ++ String.fromInt (round <| Time.inMilliseconds now))
+            hash now
+                name
                 seq
                 toHashString
 
@@ -1236,6 +1245,17 @@ combine one two =
 
                         _ ->
                             two.transition ++ ", " ++ one.transition
-        , keyframes = one.keyframes ++ "\n" ++ two.keyframes
+        , keyframes =
+            case one.keyframes of
+                "" ->
+                    two.keyframes
+
+                _ ->
+                    case two.keyframes of
+                        "" ->
+                            two.keyframes
+
+                        _ ->
+                            two.keyframes ++ "\n" ++ one.keyframes
         , props = one.props ++ two.props
         }
