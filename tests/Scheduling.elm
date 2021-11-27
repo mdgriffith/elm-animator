@@ -10,7 +10,6 @@ import Internal.Duration as Duration
 import Internal.Quantity as Quantity
 import Internal.Time as Time
 import Internal.Timeline as Timeline
-import Pixels
 import Random
 import Result
 import Test exposing (..)

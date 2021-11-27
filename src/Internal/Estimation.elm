@@ -5,11 +5,12 @@ module Internal.Estimation exposing (velocity, velocityAtTarget)
 import Animator
 import Animator.Timeline
 import Animator.Value
+import Internal.Duration as Duration
 import Internal.Move as Move
 import Internal.Quantity as Quantity
 import Internal.Time as Time
 import Internal.Timeline as Timeline
-import Pixels
+import Internal.Units as Units exposing (Pixels, PixelsPerSecond)
 import Time
 
 
@@ -48,14 +49,6 @@ velocity resolution time timeline toPosition =
             1000 * (two.position - zero.position) / (2 * toFloat resolution)
     in
     expected
-
-
-type alias PixelsPerSecond =
-    Quantity.Quantity Float Units.PixelsPerSecond
-
-
-type alias Pixels =
-    Quantity.Quantity Float Units.Pixels
 
 
 {-| -}
@@ -106,7 +99,12 @@ velocityAtTarget lookup target future =
                             (Timeline.startTime next)
 
 
-velocityBetween : Pixels -> Time.Absolute -> Pixels -> Time.Absolute -> PixelsPerSecond
+velocityBetween :
+    Pixels
+    -> Time.Absolute
+    -> Pixels
+    -> Time.Absolute
+    -> PixelsPerSecond
 velocityBetween one oneTime two twoTime =
     let
         distance =
@@ -117,13 +115,14 @@ velocityBetween one oneTime two twoTime =
             Time.duration oneTime twoTime
 
         vel =
-            distance |> Quantity.per duration
+            Units.inPixels distance
+                / Duration.inSeconds duration
     in
-    if Quantity.isNaN vel || Quantity.isInfinite vel then
+    if isNaN vel || isInfinite vel then
         Quantity.zero
 
     else
-        vel
+        Units.pixelsPerSecond vel
 
 
 zeroVelocity : PixelsPerSecond

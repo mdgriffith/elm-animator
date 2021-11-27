@@ -10,7 +10,7 @@ import Internal.Move as Move
 import Internal.Quantity as Quantity
 import Internal.Time as Time
 import Internal.Transition as Transition
-import Pixels
+import Internal.Units as Units
 import Test exposing (..)
 
 
@@ -223,10 +223,7 @@ usingMoveX :
     , startTime : Time.Absolute
     , targetTime : Time.Absolute
     }
-    ->
-        { position : Quantity.Quantity Float Units.Pixels
-        , velocity : Quantity.Quantity Float Units.PixelsPerSecond
-        }
+    -> Move.State
 usingMoveX args =
     let
         newNormalizedState =
@@ -264,10 +261,7 @@ usingTransitionX :
     , startTime : Time.Absolute
     , targetTime : Time.Absolute
     }
-    ->
-        { position : Quantity.Quantity Float Units.Pixels
-        , velocity : Quantity.Quantity Float Units.PixelsPerSecond
-        }
+    -> Move.State
 usingTransitionX args =
     let
         startingVelocity =
