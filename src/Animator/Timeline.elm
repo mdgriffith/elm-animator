@@ -306,6 +306,8 @@ queue steps (Timeline.Timeline tl) =
             , queued =
                 case tl.queued of
                     Nothing ->
+                        -- This consumes the first `wait` and adds it to the schedule as the initial delay
+                        -- It also consumes the first real event
                         case initializeSchedule (ms 0) steps of
                             Nothing ->
                                 tl.queued
@@ -388,25 +390,28 @@ stepsToEvents currentStep (Timeline.Schedule delayTime startEvent events) =
                     Timeline.Schedule
                         delayTime
                         startEvent
-                        (Timeline.Event durationTo recentEvent (Timeline.addToDwell dur maybeDwell) :: remaining)
+                        (Timeline.Event durationTo
+                            recentEvent
+                            (Timeline.addToDwell dur maybeDwell)
+                            :: remaining
+                        )
 
                 TransitionTo dur checkpoint ->
                     if checkpoint == recentEvent then
                         Timeline.Schedule
                             delayTime
                             startEvent
-                            (Timeline.Event durationTo recentEvent (Timeline.addToDwell dur maybeDwell) :: remaining)
+                            (Timeline.Event durationTo
+                                recentEvent
+                                (Timeline.addToDwell dur maybeDwell)
+                                :: remaining
+                            )
 
                     else
                         Timeline.Schedule
                             delayTime
                             startEvent
                             (Timeline.Event dur checkpoint Nothing :: events)
-
-
-{-| -}
-type alias Event state =
-    Timeline.Event state
 
 
 {-| -}

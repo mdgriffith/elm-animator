@@ -2,7 +2,7 @@ module Internal.Css.Props exposing
     ( Id, ids, hash, default, defaultPosition
     , isTransformId
     , Format, format, float, int, px
-    , roundFloat, floatToString
+    , roundFloat, floatToString, hashFloat
     , colorHash, name, noId, toStr, translateX, transparent, zero
     )
 
@@ -14,7 +14,7 @@ module Internal.Css.Props exposing
 
 @docs Format, format, float, int, px
 
-@docs roundFloat, floatToString
+@docs roundFloat, floatToString, hashFloat
 
 -}
 
@@ -36,6 +36,34 @@ floatToString f =
 transparent : Color.Color
 transparent =
     Color.rgba 0 0 0 0
+
+
+hashFloat : Float -> String
+hashFloat f =
+    let
+        base =
+            floor f
+
+        decimal =
+            floor (100 * (f - toFloat base))
+    in
+    String.fromInt base ++ "_" ++ String.fromInt decimal
+
+
+hashFormat : Format -> Float -> String
+hashFormat form num =
+    case form of
+        AsFloat ->
+            hashFloat num
+
+        AsInt ->
+            String.fromInt (round num)
+
+        Px ->
+            String.fromInt (round num) ++ "px"
+
+        TranslateX ->
+            "translateX(" ++ String.fromInt (round num) ++ "px)"
 
 
 format : Format -> Float -> String
@@ -119,8 +147,58 @@ isTransformId id =
     id < 12
 
 
-hash : Id -> String
-hash id =
+hash :
+    { props
+        | id : Id
+        , name : String
+        , format : Format
+    }
+    -> Float
+    -> String
+hash p val =
+    if known p.id then
+        hashId p.id ++ hashFormat p.format val
+
+    else
+        p.name ++ hashFormat p.format val
+
+
+known : Id -> Bool
+known id =
+    case id of
+        0 ->
+            True
+
+        1 ->
+            True
+
+        2 ->
+            True
+
+        3 ->
+            True
+
+        4 ->
+            True
+
+        5 ->
+            True
+
+        6 ->
+            True
+
+        13 ->
+            True
+
+        14 ->
+            True
+
+        _ ->
+            False
+
+
+hashId : Id -> String
+hashId id =
     case id of
         0 ->
             "x-"
@@ -239,7 +317,16 @@ default : Id -> Move.Move Float
 default id =
     case id of
         13 ->
-            zero
+            Move.to 1
+
+        4 ->
+            Move.to 1
+
+        5 ->
+            Move.to 1
+
+        6 ->
+            Move.to 1
 
         _ ->
             zero

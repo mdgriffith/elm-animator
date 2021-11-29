@@ -866,7 +866,16 @@ hash : Time.Absolute -> String -> Sequence value -> (value -> String) -> String
 hash now name (Sequence n delay dur steps) toString =
     -- we need to encode the current time in the animations name so the browser doesn't cache anything
     -- IM LOOKIN AT YOU, CHROME
-    name ++ String.fromInt (round <| Time.inMilliseconds now) ++ String.fromInt n ++ stepHash steps toString ""
+    name
+        ++ String.fromInt (round <| Time.inMilliseconds now)
+        ++ "-"
+        ++ String.fromInt n
+        ++ "-"
+        ++ hashDuration delay
+        ++ "-"
+        ++ hashDuration dur
+        ++ "-"
+        ++ stepHash steps toString ""
 
 
 stepHash : List (Step value) -> (value -> String) -> String -> String
@@ -1167,9 +1176,8 @@ keyframeHelper name lerp startPos toString sequenceDuration currentDur steps ren
                         endPercent
                         transition
             in
-            rendered ++ frames
+            rendered ++ frames ++ last
 
-        --++ last
         (Step dur transition val) :: remaining ->
             let
                 nextCurrent =

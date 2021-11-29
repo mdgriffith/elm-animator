@@ -121,10 +121,7 @@ queueing =
                     Expect.equal
                         newTimeline
                         (timelines.events 0
-                            [ Timeline.Line (qty 0)
-                                (occur Starting (qty 0) (qty 1000))
-                                []
-                            , Timeline.Line (qty 1000)
+                            [ Timeline.Line (qty 1000)
                                 (occur One (qty 2000) (qty 3000))
                                 [ occur Two (qty 4000) (qty 5000)
                                 , occur Three (qty 6000) (qty 7000)
@@ -154,12 +151,21 @@ queueing =
                                     , Animator.Timeline.wait (seconds 1.0)
                                     , Animator.Timeline.transitionTo (seconds 1) Two
                                     , Animator.Timeline.wait (seconds 1.0)
+
+                                    -- Transition to Three
+                                    --     starts at 5 seconds
+                                    --    and arrives at 6 seconds
                                     , Animator.Timeline.transitionTo (seconds 1) Three
+
+                                    -- The wait here means the end time is now (1 second)
+                                    -- , which is 7 seconds on the wall clock
                                     , Animator.Timeline.wait (seconds 1.0)
                                     ]
                                 |> Timeline.updateWith False (Time.millisToPosix 0)
                                 |> Timeline.updateWith False (Time.millisToPosix 3000)
                                 |> Animator.Timeline.queue
+                                    -- wait an additional second.  so `Three` now ends at 8 seconds
+                                    -- (This line starts at 8 seconds)
                                     [ Animator.Timeline.wait (seconds 1.0)
                                     , Animator.Timeline.transitionTo (seconds 1) One
                                     , Animator.Timeline.wait (seconds 1.0)
@@ -168,15 +174,13 @@ queueing =
                                     , Animator.Timeline.transitionTo (seconds 1) Three
                                     , Animator.Timeline.wait (seconds 1.0)
                                     ]
+                                -- The update here happens before the first queued timeline is finished
                                 |> Timeline.updateWith False (Time.millisToPosix 4000)
                     in
                     Expect.equal
                         queuedTimeline
                         (timelines.events 4000
-                            [ Timeline.Line (qty 0)
-                                (occur Starting (qty 0) (qty 1000))
-                                []
-                            , Timeline.Line (qty 1000)
+                            [ Timeline.Line (qty 1000)
                                 (occur One (qty 2000) (qty 3000))
                                 [ occur Two (qty 4000) (qty 5000)
                                 , occur Three (qty 6000) (qty 8000)
@@ -186,25 +190,6 @@ queueing =
                                 [ occur Two (qty 11000) (qty 12000)
                                 , occur Three (qty 13000) (qty 14000)
                                 ]
-
-                            -- , Timeline.Line (qty 0)
-                            --     (occur Starting (qty 0) (qty 1000))
-                            --     [ occur One (qty 2000) (qty 3000)
-                            --     , occur Two (qty 4000) (qty 5000)
-                            --     , occur Three (qty 6000) (qty 8000)
-                            --     , occur One (qty 9000) (qty 10000)
-                            --     , occur Two (qty 11000) (qty 12000)
-                            --     , occur Three (qty 13000) (qty 14000)
-                            --     ]
-                            -- , Timeline.Line (qty 0)
-                            --     (occur Starting (qty 0) (qty 1000))
-                            --     [ occur One (qty 2000) (qty 3000)
-                            --     , occur Two (qty 4000) (qty 5000)
-                            --     , occur Three (qty 6000) (qty 8000)
-                            --     , occur One (qty 9000) (qty 10000)
-                            --     , occur Two (qty 11000) (qty 12000)
-                            --     , occur Three (qty 13000) (qty 14000)
-                            --     ]
                             ]
                         )
             , test "one event queued" <|
@@ -227,9 +212,6 @@ queueing =
                         queuedTimeline
                         (timelines.events 300
                             [ Timeline.Line (qty 0)
-                                (occur Starting (qty 0) (qty 0))
-                                []
-                            , Timeline.Line (qty 0)
                                 (occur One (qty 2000) (qty 2000))
                                 []
                             , Timeline.Line (qty 2000)
@@ -287,10 +269,7 @@ queueing =
                 Expect.equal
                     queued
                     (timelines.events 4000
-                        [ Timeline.Line (qty 0)
-                            (occur Starting (qty 0) (qty 4000))
-                            []
-                        , Timeline.Line (qty 4000)
+                        [ Timeline.Line (qty 4000)
                             (occur One (qty 5000) (qty 5000))
                             []
                         ]
@@ -314,10 +293,7 @@ queueing =
                 Expect.equal
                     queued
                     (timelines.events 7000
-                        [ Timeline.Line (qty 0)
-                            (occur Starting (qty 0) (qty 4000))
-                            []
-                        , Timeline.Line (qty 4000)
+                        [ Timeline.Line (qty 4000)
                             (occur One (qty 5000) (qty 7000))
                             []
                         , Timeline.Line (qty 7000)
@@ -342,6 +318,7 @@ queueing =
                             [ Animator.Timeline.transitionTo (seconds 1) One
                             ]
                         |> Timeline.update (Time.millisToPosix 2000)
+                        |> Debug.log "QUEUED LATER"
                     )
         ]
 
@@ -374,10 +351,7 @@ interruptions =
                 Expect.equal
                     newTimeline
                     (timelines.events 3000
-                        [ Timeline.Line (qty 0)
-                            (occur Starting (qty 0) (qty 1000))
-                            []
-                        , Timeline.Line (qty 1000)
+                        [ Timeline.Line (qty 1000)
                             (occur One (qty 2000) (qty 3000))
                             [ occur Two (qty 4000) (qty 5000)
                             , occur Unreachable (qty 6000) (qty 7000)
@@ -443,10 +417,7 @@ interruptions =
                 Expect.equal
                     fourWithPause
                     (timelines.events 3000
-                        [ Timeline.Line (qty 0)
-                            (occur Starting (qty 0) (qty 1000))
-                            []
-                        , Timeline.Line (qty 1000)
+                        [ Timeline.Line (qty 1000)
                             (occur One (qty 2000) (qty 3000))
                             [ occur Two (qty 4000) (qty 5000)
                             , occur Three (qty 6000) (qty 7000)
@@ -497,10 +468,7 @@ interruptions =
                 Expect.equal
                     doubleInterrupted
                     (timelines.events 4500
-                        [ Timeline.Line (qty 0)
-                            (occur Starting (qty 0) (qty 1000))
-                            []
-                        , Timeline.Line (qty 1000)
+                        [ Timeline.Line (qty 1000)
                             (occur One (qty 2000) (qty 3000))
                             [ occur Two (qty 4000) (qty 5000)
                             , occur Unreachable (qty 6000) (qty 7000)
@@ -549,10 +517,7 @@ interruptions =
                 Expect.equal
                     interruptedAfterFinish
                     (timelines.events 6000
-                        [ Timeline.Line (qty 0)
-                            (occur Starting (qty 0) (qty 1000))
-                            []
-                        , Timeline.Line (qty 1000)
+                        [ Timeline.Line (qty 1000)
                             (occur One (qty 2000) (qty 3000))
                             [ occur Two (qty 4000) (qty 5000)
                             , occur Three (qty 6000) (qty 6000)
@@ -693,10 +658,7 @@ interruptions =
                 Expect.equal
                     firstTimeline
                     (timelines.events 501
-                        [ Timeline.Line (qty 0)
-                            (occur Starting (qty 0) (qty 1))
-                            []
-                        , Timeline.Line (qty 1)
+                        [ Timeline.Line (qty 1)
                             (occur One (qty 1001) (qty 1001))
                             []
                         ]

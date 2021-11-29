@@ -359,12 +359,16 @@ props2Css now renderedProps anim =
                 (case details.sections of
                     [] ->
                         let
-                            value =
+                            val =
                                 Units.inPixels details.state.position
+
+                            value =
+                                val
                                     |> Props.format details.format
                         in
                         { anim
-                            | props =
+                            | hash = Props.hash details val ++ anim.hash
+                            , props =
                                 ( details.name
                                 , value
                                 )
@@ -382,7 +386,7 @@ props2Css now renderedProps anim =
                                         (Move.lerpFloat t one two)
                             )
                             (Props.format details.format)
-                            Move.floatToString
+                            (Props.hash details)
                             (List.reverse details.sections)
                             emptyAnim
                             |> combine anim
@@ -394,7 +398,8 @@ props2Css now renderedProps anim =
                 (case details.sections of
                     [] ->
                         { anim
-                            | props =
+                            | hash = details.name ++ "-" ++ Props.colorHash details.color ++ anim.hash
+                            , props =
                                 ( details.name
                                 , Color.toCssString details.color
                                 )
@@ -424,7 +429,8 @@ props2Css now renderedProps anim =
                 (case details.sections of
                     [] ->
                         { anim
-                            | props =
+                            | hash = transformToHash (stateToTransform details.state) ++ anim.hash
+                            , props =
                                 ( "transform"
                                 , renderTransformState details.state
                                 )

@@ -322,29 +322,11 @@ updateWith withGC possiblyNow (Timeline timeline) =
             Quantity.max (Time.absolute possiblyNow) timeline.now
                 |> Quantity.minus cutoff
     in
-    if timeline.events == Timetable [] then
-        { timeline
-            | now = now
-            , events =
-                let
-                    firstOccurring =
-                        Occurring timeline.initial now now
-                in
-                Timetable
-                    [ Line now firstOccurring []
-                    ]
-        }
-            |> applyQueued
-            |> applyInterruptions
-            |> clean withGC
-            |> Timeline
-
-    else
-        { timeline | now = now }
-            |> applyQueued
-            |> applyInterruptions
-            |> clean withGC
-            |> Timeline
+    { timeline | now = now }
+        |> applyQueued
+        |> applyInterruptions
+        |> clean withGC
+        |> Timeline
 
 
 {-| Garbage collect and update `isRunning`
@@ -641,61 +623,8 @@ scheduledEventEqual (Event dur schedEvent maybeDwell) (Occurring occurEvent occu
     schedEvent == occurEvent
 
 
-interruptionHappensLaterDebug : Time.Absolute -> List (Line event) -> Bool
-interruptionHappensLaterDebug startInterruption remaining =
-    case remaining of
-        [] ->
-            False
 
-        top :: _ ->
-            Time.thisAfterOrEqualThat startInterruption (lineStartTime top)
-
-
-interruptLineDebug : Time.Absolute -> Schedule event -> Line event -> List (Line event) -> Maybe (List (Line event))
-interruptLineDebug startInterruption scheduled line future =
-    case line of
-        Line start startEvent trailing ->
-            if Time.thisAfterOrEqualThat startInterruption start then
-                -- this line starts before the interruption
-                case future of
-                    [] ->
-                        case getTransitionAt startInterruption startEvent trailing of
-                            Nothing ->
-                                if beforeLineEnd startInterruption line then
-                                    Just
-                                        [ createLine startInterruption scheduled
-                                        ]
-
-                                else
-                                    -- we'll just queue up this new line instead
-                                    Nothing
-
-                            Just last2Events ->
-                                Just
-                                    [ interruptAtExactly startInterruption scheduled last2Events ]
-
-                    (Line nextStart next nextEvents) :: futureRemaining ->
-                        -- we need to find the target event we're currently enroute to.
-                        -- if the next line has already started, but the event hasnt happened yet
-                        -- then we know `next` is the target
-                        if Time.thisAfterOrEqualThat startInterruption nextStart && Time.thisBeforeOrEqualThat startInterruption (startTime next) then
-                            Just
-                                (Line nextStart next nextEvents
-                                    :: interruptAtExactly startInterruption
-                                        scheduled
-                                        (LastTwoEvents (endTime startEvent) (getEvent startEvent) (startTime next) (getEvent next))
-                                    :: futureRemaining
-                                )
-
-                        else
-                            Nothing
-
-            else
-                Nothing
-
-
-
-{- INTERRUPTION DEBUG2 -}
+{- INTERRUPTION -}
 
 
 applyInterruptions : TimelineDetails event -> TimelineDetails event
@@ -722,24 +651,17 @@ applyInterruptionHelper interrupts timeline =
             timeline
 
         inter :: remaining ->
-            let
-                delay =
-                    case inter of
-                        Schedule d _ _ ->
-                            d
+            applyInterruptionHelper remaining
+                { timeline
+                    | events =
+                        if timeline.scale == 1 then
+                            interrupt timeline
+                                inter
 
-                newEvents =
-                    if timeline.scale == 1 then
-                        interrupt timeline
-                            (Time.advanceBy delay timeline.now)
-                            inter
-
-                    else
-                        interrupt timeline
-                            (Time.advanceBy delay timeline.now)
-                            (scaleSchedule timeline.scale inter)
-            in
-            applyInterruptionHelper remaining { timeline | events = newEvents }
+                        else
+                            interrupt timeline
+                                (scaleSchedule timeline.scale inter)
+                }
 
 
 {-| Interrupt a current timetable with a new list of events.
@@ -749,32 +671,38 @@ applyInterruptionHelper interrupts timeline =
     - otherwise, add as a new `Line` to the timetable.
 
 -}
-interrupt : TimelineDetails events -> Time.Absolute -> Schedule events -> Timetable events
-interrupt details startAt scheduled =
-    case details.events of
+interrupt : TimelineDetails events -> Schedule events -> Timetable events
+interrupt timeline scheduled =
+    case timeline.events of
         Timetable lines ->
-            case interruptLines details.now startAt scheduled [] lines of
+            case interruptLines timeline.now scheduled [] lines of
                 Nothing ->
-                    enqueue details startAt scheduled
+                    enqueue timeline timeline.now scheduled
 
                 Just interrupted ->
                     Timetable interrupted
 
 
-interruptLines : Time.Absolute -> Time.Absolute -> Schedule event -> List (Line event) -> List (Line event) -> Maybe (List (Line event))
-interruptLines now startInterruption scheduled pastLines lines =
+interruptLines : Time.Absolute -> Schedule event -> List (Line event) -> List (Line event) -> Maybe (List (Line event))
+interruptLines now scheduled pastLines lines =
+    let
+        startInterruption =
+            case scheduled of
+                Schedule scheduleDelay _ _ ->
+                    Time.advanceBy scheduleDelay now
+    in
     case lines of
         [] ->
             Nothing
 
         startLine :: remaining ->
             if interruptionHappensLater startInterruption remaining then
-                interruptLines now startInterruption scheduled (startLine :: pastLines) remaining
+                interruptLines now scheduled (startLine :: pastLines) remaining
 
             else
-                case interruptLine startInterruption scheduled startLine remaining of
+                case interruptLine now scheduled startLine remaining of
                     Nothing ->
-                        interruptLines now startInterruption scheduled (startLine :: pastLines) remaining
+                        interruptLines now scheduled (startLine :: pastLines) remaining
 
                     Just interruption ->
                         if scheduleMatchesExisting scheduled startLine then
@@ -802,7 +730,13 @@ interruptionHappensLater startInterruption remaining =
 
 
 interruptLine : Time.Absolute -> Schedule event -> Line event -> List (Line event) -> Maybe (List (Line event))
-interruptLine startInterruption scheduled line future =
+interruptLine now scheduled line future =
+    let
+        startInterruption =
+            case scheduled of
+                Schedule scheduleDelay _ _ ->
+                    Time.advanceBy scheduleDelay now
+    in
     case line of
         Line start startEvent trailing ->
             if Time.thisAfterOrEqualThat startInterruption start then
@@ -813,7 +747,7 @@ interruptLine startInterruption scheduled line future =
                             Nothing ->
                                 if beforeLineEnd startInterruption line then
                                     Just
-                                        [ createLine startInterruption scheduled
+                                        [ createLine now scheduled
                                         ]
 
                                 else
@@ -822,18 +756,26 @@ interruptLine startInterruption scheduled line future =
 
                             Just last2Events ->
                                 Just
-                                    [ interruptAtExactly startInterruption scheduled last2Events ]
+                                    [ interruptAtExactly now scheduled last2Events ]
 
                     (Line nextStart next nextEvents) :: futureRemaining ->
                         -- we need to find the target event we're currently enroute to.
                         -- if the next line has already started, but the event hasnt happened yet
                         -- then we know `next` is the target
-                        if Time.thisAfterOrEqualThat startInterruption nextStart && Time.thisBeforeOrEqualThat startInterruption (startTime next) then
+                        if
+                            Time.thisAfterOrEqualThat startInterruption nextStart
+                                && Time.thisBeforeOrEqualThat startInterruption (startTime next)
+                        then
                             Just
                                 (Line nextStart next nextEvents
-                                    :: interruptAtExactly startInterruption
+                                    :: interruptAtExactly now
                                         scheduled
-                                        (LastTwoEvents (endTime startEvent) (getEvent startEvent) (startTime next) (getEvent next))
+                                        (LastTwoEvents
+                                            (endTime startEvent)
+                                            (getEvent startEvent)
+                                            (startTime next)
+                                            (getEvent next)
+                                        )
                                     :: futureRemaining
                                 )
 
@@ -861,12 +803,14 @@ getTransitionAt interruptionTime prev trailing =
 
 
 interruptAtExactly : Time.Absolute -> Schedule event -> LastTwoEvents event -> Line event
-interruptAtExactly startInterruption scheduled ((LastTwoEvents penultimateTime penultimate lastEventTime lastEvent) as last) =
+interruptAtExactly now scheduled ((LastTwoEvents penultimateTime penultimate lastEventTime lastEvent) as last) =
     case scheduled of
         Schedule delay_ startingEvent reverseQueued ->
             let
                 amountProgress =
-                    Time.progress penultimateTime lastEventTime startInterruption
+                    Time.progress penultimateTime
+                        lastEventTime
+                        (Time.advanceBy delay_ now)
 
                 newStartingEvent =
                     -- we apply the discount if we are returning to a state
@@ -877,7 +821,7 @@ interruptAtExactly startInterruption scheduled ((LastTwoEvents penultimateTime p
                     else
                         startingEvent
             in
-            createLine startInterruption
+            createLine now
                 (Schedule delay_ newStartingEvent reverseQueued)
 
 
@@ -951,10 +895,12 @@ addToCurrentLine now scheduled lines =
 
 
 createLine : Time.Absolute -> Schedule events -> Line events
-createLine now ((Schedule _ (Event dur startEvent maybeDwell) reverseQueued) as scheduled) =
+createLine now (Schedule delay (Event dur startEvent maybeDwell) reverseQueued) =
     let
         start =
-            Time.advanceBy dur now
+            now
+                |> Time.advanceBy dur
+                |> Time.advanceBy delay
 
         startNextEvent =
             case maybeDwell of
@@ -970,7 +916,11 @@ createLine now ((Schedule _ (Event dur startEvent maybeDwell) reverseQueued) as 
                 |> Tuple.second
                 |> List.reverse
     in
-    Line now (Occurring startEvent start startNextEvent) events
+    Line
+        (Time.advanceBy delay now)
+        -- now
+        (Occurring startEvent start startNextEvent)
+        events
 
 
 {-| Given our explanation above, this function does the following
@@ -980,46 +930,45 @@ createLine now ((Schedule _ (Event dur startEvent maybeDwell) reverseQueued) as 
 
 -}
 addEventsToLine : Time.Absolute -> Schedule events -> Line events -> List (Line events) -> List (Line events)
-addEventsToLine now ((Schedule delay scheduledStartingEvent reverseQueued) as scheduled) ((Line startLineAt startingEvent events) as existing) lines =
-    let
-        start =
-            Time.advanceBy delay now
-    in
+addEventsToLine now ((Schedule scheduleDelay _ _) as scheduled) (Line startLineAt startingEvent events) lines =
     case List.reverse events of
         [] ->
             let
                 startNewEventsAt =
-                    Time.latest (Time.advanceBy delay (endTime startingEvent)) start
+                    Time.latest
+                        (endTime startingEvent)
+                        now
 
                 newLine =
                     createLine startNewEventsAt scheduled
 
                 startingEventWithDwell =
                     case startingEvent of
-                        Occurring ev lastEventTime _ ->
-                            if Time.thisAfterThat start lastEventTime then
-                                Occurring ev lastEventTime start
-
-                            else
-                                Occurring ev lastEventTime lastEventTime
+                        Occurring ev eventStart _ ->
+                            -- if the scheduled events are way after the current event
+                            -- extend that events dwell until the start of the scheduled stuff
+                            Occurring ev eventStart (Time.advanceBy scheduleDelay startNewEventsAt)
             in
             Line startLineAt startingEventWithDwell [] :: newLine :: lines
 
         (Occurring lastEvent lastEventTime lastEventFinish) :: eventTail ->
             let
                 startNewEventsAt =
-                    Time.latest (Time.advanceBy delay lastEventFinish) start
+                    Time.latest
+                        lastEventFinish
+                        now
 
                 newLine =
                     createLine startNewEventsAt scheduled
 
                 -- we need to increase the dwell time of the last event
                 -- to match the start time of the new queued events.
-                -- let
                 newLastEvent =
                     Occurring lastEvent
                         lastEventTime
-                        startNewEventsAt
+                        -- createLine handles applying the schedule scheduleDelay
+                        -- but we need to apply it here manually
+                        (Time.advanceBy scheduleDelay startNewEventsAt)
             in
             Line startLineAt
                 startingEvent
@@ -1098,23 +1047,20 @@ foldpAll lookup toStart transitionTo (Timeline timelineDetails) =
             let
                 start =
                     toStart (lookup timelineDetails.initial)
-
-                beginning =
-                    case timetable of
-                        [] ->
-                            Occurring timelineDetails.initial timelineDetails.now timelineDetails.now
-
-                        (Line lineStart firstEvent remain) :: _ ->
-                            Occurring timelineDetails.initial lineStart lineStart
             in
-            visitAll2
-                lookup
-                transitionTo
-                timelineDetails
-                beginning
-                []
-                timetable
-                start
+            case timetable of
+                [] ->
+                    start
+
+                (Line lineStart firstEvent remain) :: _ ->
+                    visitAll2
+                        lookup
+                        transitionTo
+                        timelineDetails
+                        (Occurring timelineDetails.initial lineStart lineStart)
+                        []
+                        timetable
+                        start
 
 
 {-| -}
