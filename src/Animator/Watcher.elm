@@ -128,6 +128,7 @@ watching get setValue (Timeline.Animator isRunning updateModel) =
         )
 
 
+{-| -}
 list :
     (model -> List item)
     -> (List item -> model -> model)
