@@ -4,12 +4,11 @@ module Animator exposing
     , rotation, x, y, scale, scaleX, scaleY
     , color, px, int, float
     , withBezier, withImpulse
-    , Duration, ms
+    , Duration, ms, delay
     , spinning, pulsing, bouncing, pinging
     , Step, set, wait, step
     , keyframes, loop, loopFor
     , onTimeline, onTimelineWith
-    , delay
     , div, node
     , Css, css
     )
@@ -26,7 +25,7 @@ module Animator exposing
 
 @docs withBezier, withImpulse
 
-@docs Duration, ms
+@docs Duration, ms, delay
 
 
 # Premade
@@ -69,9 +68,10 @@ Here's an element that's blinking.
 
 @docs keyframes, loop, loopFor
 
-@docs onTimeline, onTimelineWith
 
-@docs delay
+# On a Timeline
+
+@docs onTimeline, onTimelineWith
 
 
 # Rendering
@@ -203,7 +203,17 @@ withWobble wob prop =
             Css.ColorProp name (Move.withWobble wob move)
 
 
-{-| -}
+{-| Choosing a nice duration can depend on:
+
+  - The size of the thing moving
+  - The type of movement
+  - The distance it's traveling.
+
+So, start with a nice default and adjust it as you start to understand your specific needs.
+
+**Note** — Here's [a very good overview on animation durations and speeds](https://uxdesign.cc/the-ultimate-guide-to-proper-use-of-animation-in-ux-10bd98614fa9).
+
+-}
 type alias Duration =
     Time.Duration
 
@@ -708,7 +718,7 @@ onTimelineWith timeline toPropsAndSteps =
         [ Html.text "Hello!" ]
 
 -}
-transition : Animator.Timeline.Duration -> List Attribute -> Animation
+transition : Duration -> List Attribute -> Animation
 transition transitionDuration props =
     let
         imminent =

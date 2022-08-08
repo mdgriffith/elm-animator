@@ -1,7 +1,6 @@
 module Animator.Timeline exposing
     ( Timeline, init
     , to
-    , Duration, ms
     , update, isRunning
     , interrupt, queue
     , Step, wait, transitionTo
@@ -13,8 +12,6 @@ module Animator.Timeline exposing
 
 
 # Getting started
-
-`elm-animator` is about taking pieces of your model, turning them into **Timelines** of values, and animate between their states
 
 @docs Timeline, init
 
@@ -29,8 +26,6 @@ In order to do that we need to specify both —
   - a `Duration` for how long this transition should take.
 
 @docs to
-
-@docs Duration, ms
 
 @docs update, isRunning
 
@@ -84,6 +79,11 @@ Behind the scenes this is roughly a list of states and the times that they shoul
 -}
 type alias Timeline state =
     Timeline.Timeline state
+
+
+{-| -}
+type alias Duration =
+    Time.Duration
 
 
 {-| Create a timeline with an initial `state`.
@@ -257,31 +257,10 @@ upcomingWith =
 -- future : Timeline state -> List ( TIme.Posix, state )
 
 
-{-| Choosing a nice duration can depend on:
-
-  - The size of the thing moving
-  - The type of movement
-  - The distance it's traveling.
-
-So, start with a nice default and adjust it as you start to understand your specific needs.
-
-**Note** — Here's [a very good overview on animation durations and speeds](https://uxdesign.cc/the-ultimate-guide-to-proper-use-of-animation-in-ux-10bd98614fa9).
-
--}
-type alias Duration =
-    Time.Duration
-
-
-{-| -}
-ms : Float -> Duration
-ms =
-    Duration.milliseconds
-
-
 {-| -}
 type Step state
-    = Wait Duration
-    | TransitionTo Duration state
+    = Wait Time.Duration
+    | TransitionTo Time.Duration state
 
 
 {-| -}
@@ -308,7 +287,7 @@ queue steps (Timeline.Timeline tl) =
                     Nothing ->
                         -- This consumes the first `wait` and adds it to the schedule as the initial delay
                         -- It also consumes the first real event
-                        case initializeSchedule (ms 0) steps of
+                        case initializeSchedule (Duration.milliseconds 0) steps of
                             Nothing ->
                                 tl.queued
 
@@ -321,9 +300,6 @@ queue steps (Timeline.Timeline tl) =
 
 
 {-| Go to a new state!
-
-You'll need to specify a `Duration` as well. Try starting with `Animator.quickly` and adjust up or down as necessary.
-
 -}
 to : Duration -> state -> Timeline state -> Timeline state
 to duration ev timeline =
@@ -338,7 +314,7 @@ interrupt steps (Timeline.Timeline tl) =
         { tl
             | running = True
             , interruption =
-                case initializeSchedule (ms 0) steps of
+                case initializeSchedule (Duration.milliseconds 0) steps of
                     Nothing ->
                         tl.interruption
 
