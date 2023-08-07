@@ -1,4 +1,4 @@
-module Internal.Random exposing (random)
+module InternalAnim.Random exposing (random)
 
 {-| -}
 

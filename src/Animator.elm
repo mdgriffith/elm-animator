@@ -86,13 +86,13 @@ import Animator.Timeline exposing (Timeline)
 import Color
 import Html exposing (Html)
 import Html.Attributes as Attr
-import Internal.Css as Css
-import Internal.Css.Props
-import Internal.Duration as Duration
-import Internal.Move as Move
-import Internal.Quantity as Quantity
-import Internal.Time as Time
-import Internal.Timeline as Timeline
+import InternalAnim.Css as Css
+import InternalAnim.Css.Props
+import InternalAnim.Duration as Duration
+import InternalAnim.Move as Move
+import InternalAnim.Quantity as Quantity
+import InternalAnim.Time as Time
+import InternalAnim.Timeline as Timeline
 import Time
 
 
@@ -105,80 +105,80 @@ type alias Attribute =
 opacity : Float -> Attribute
 opacity o =
     Css.Prop
-        Internal.Css.Props.ids.opacity
+        InternalAnim.Css.Props.ids.opacity
         "opacity"
         (Move.to o)
-        Internal.Css.Props.float
+        InternalAnim.Css.Props.float
 
 
 {-| -}
 xAsSingleProp : Float -> Attribute
 xAsSingleProp o =
     Css.Prop
-        Internal.Css.Props.ids.opacity
+        InternalAnim.Css.Props.ids.opacity
         "transform"
         (Move.to o)
-        Internal.Css.Props.translateX
+        InternalAnim.Css.Props.translateX
 
 
 {-| -}
 scale : Float -> Attribute
 scale s =
     Css.Prop
-        Internal.Css.Props.ids.scale
+        InternalAnim.Css.Props.ids.scale
         ""
         (Move.to s)
-        Internal.Css.Props.float
+        InternalAnim.Css.Props.float
 
 
 {-| -}
 scaleX : Float -> Attribute
 scaleX s =
     Css.Prop
-        Internal.Css.Props.ids.scaleX
+        InternalAnim.Css.Props.ids.scaleX
         ""
         (Move.to s)
-        Internal.Css.Props.float
+        InternalAnim.Css.Props.float
 
 
 {-| -}
 scaleY : Float -> Attribute
 scaleY s =
     Css.Prop
-        Internal.Css.Props.ids.scaleY
+        InternalAnim.Css.Props.ids.scaleY
         ""
         (Move.to s)
-        Internal.Css.Props.float
+        InternalAnim.Css.Props.float
 
 
 {-| -}
 rotation : Float -> Attribute
 rotation n =
     Css.Prop
-        Internal.Css.Props.ids.rotation
+        InternalAnim.Css.Props.ids.rotation
         ""
         (Move.to n)
-        Internal.Css.Props.float
+        InternalAnim.Css.Props.float
 
 
 {-| -}
 x : Float -> Attribute
 x n =
     Css.Prop
-        Internal.Css.Props.ids.x
+        InternalAnim.Css.Props.ids.x
         ""
         (Move.to n)
-        Internal.Css.Props.float
+        InternalAnim.Css.Props.float
 
 
 {-| -}
 y : Float -> Attribute
 y n =
     Css.Prop
-        Internal.Css.Props.ids.y
+        InternalAnim.Css.Props.ids.y
         ""
         (Move.to n)
-        Internal.Css.Props.float
+        InternalAnim.Css.Props.float
 
 
 {-| -}
@@ -524,30 +524,30 @@ firstMatch prop props =
 px : String -> Float -> Attribute
 px name n =
     Css.Prop
-        Internal.Css.Props.noId
+        InternalAnim.Css.Props.noId
         name
         (Move.to n)
-        Internal.Css.Props.px
+        InternalAnim.Css.Props.px
 
 
 {-| -}
 int : String -> Float -> Attribute
 int name n =
     Css.Prop
-        Internal.Css.Props.noId
+        InternalAnim.Css.Props.noId
         name
         (Move.to n)
-        Internal.Css.Props.int
+        InternalAnim.Css.Props.int
 
 
 {-| -}
 float : String -> Float -> Attribute
 float name n =
     Css.Prop
-        Internal.Css.Props.noId
+        InternalAnim.Css.Props.noId
         name
         (Move.to n)
-        Internal.Css.Props.float
+        InternalAnim.Css.Props.float
 
 
 {-| -}
@@ -790,6 +790,7 @@ node name (Animation now renderedProps) attrs children =
 type alias Css =
     { hash : String
     , keyframes : String
+    , transition : String
     , props : List ( String, String )
     }
 

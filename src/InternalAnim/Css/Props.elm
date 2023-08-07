@@ -1,4 +1,4 @@
-module Internal.Css.Props exposing
+module InternalAnim.Css.Props exposing
     ( Id, ids, hash, default, defaultPosition
     , isTransformId
     , Format, format, float, int, px
@@ -20,7 +20,7 @@ module Internal.Css.Props exposing
 
 import Bitwise
 import Color
-import Internal.Move as Move
+import InternalAnim.Move as Move
 
 
 roundFloat : Float -> Float

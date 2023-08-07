@@ -1,4 +1,4 @@
-module Internal.Spring exposing
+module InternalAnim.Spring exposing
     ( SpringParams
     , analytical
     ,  criticalDamping
@@ -13,9 +13,9 @@ module Internal.Spring exposing
     , wobble2Damping
     )
 
-import Internal.Bezier as Bezier
-import Internal.Duration as Duration
-import Internal.Time as Time
+import InternalAnim.Bezier as Bezier
+import InternalAnim.Duration as Duration
+import InternalAnim.Time as Time
 
 
 {-| Calculate the position and velocity analytically instead of iteratively.

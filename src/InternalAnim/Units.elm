@@ -1,4 +1,4 @@
-module Internal.Units exposing
+module InternalAnim.Units exposing
     ( Pixels
     , PixelsPerSecond
     , inPixels
@@ -11,7 +11,7 @@ module Internal.Units exposing
 
 {-| -}
 
-import Internal.Quantity as Quantity
+import InternalAnim.Quantity as Quantity
 
 
 type PixelsPerSecondUnit

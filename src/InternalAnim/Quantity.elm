@@ -1,4 +1,4 @@
-module Internal.Quantity exposing
+module InternalAnim.Quantity exposing
     ( Quantity(..)
     , divideBy
     , equalWithin

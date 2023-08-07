@@ -1,4 +1,4 @@
-module Internal.Transition exposing
+module InternalAnim.Transition exposing
     ( Transition(..)
     , linear, standard, wobble, bezier
     , initialVelocity, atX
@@ -62,11 +62,11 @@ Goals:
 
 -}
 
-import Internal.Bezier as Bezier
-import Internal.Quantity as Quantity
-import Internal.Spring as Spring
-import Internal.Time as Time
-import Internal.Units as Units
+import InternalAnim.Bezier as Bezier
+import InternalAnim.Quantity as Quantity
+import InternalAnim.Spring as Spring
+import InternalAnim.Time as Time
+import InternalAnim.Units as Units
 
 
 {-| A transition are all the bezier curves between A and B that we want to transition through.

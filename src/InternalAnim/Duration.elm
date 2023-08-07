@@ -1,6 +1,6 @@
-module Internal.Duration exposing (Duration, inMilliseconds, inSeconds, milliseconds)
+module InternalAnim.Duration exposing (Duration, inMilliseconds, inSeconds, milliseconds)
 
-import Internal.Quantity as Quantity
+import InternalAnim.Quantity as Quantity
 
 
 type alias Duration =

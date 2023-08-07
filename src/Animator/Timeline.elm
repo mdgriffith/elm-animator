@@ -65,10 +65,10 @@ Well, we can ask the `Timeline` all sorts of questions.
 
 -}
 
-import Internal.Duration as Duration
-import Internal.Quantity as Quantity
-import Internal.Time as Time
-import Internal.Timeline as Timeline
+import InternalAnim.Duration as Duration
+import InternalAnim.Quantity as Quantity
+import InternalAnim.Time as Time
+import InternalAnim.Timeline as Timeline
 import Time
 
 

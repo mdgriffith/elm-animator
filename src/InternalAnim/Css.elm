@@ -1,4 +1,4 @@
-module Internal.Css exposing
+module InternalAnim.Css exposing
     ( Prop(..)
     , RenderedProp(..)
     , cssFromProps
@@ -12,16 +12,16 @@ module Internal.Css exposing
 import Color
 import Html
 import Html.Attributes as Attr exposing (id)
-import Internal.Bezier as Bezier
-import Internal.Bits as Bits
-import Internal.Css.Props as Props
-import Internal.Duration as Duration
-import Internal.Move as Move
-import Internal.Quantity as Quantity
-import Internal.Time as Time
-import Internal.Timeline as Timeline
-import Internal.Transition as Transition
-import Internal.Units as Units
+import InternalAnim.Bezier as Bezier
+import InternalAnim.Bits as Bits
+import InternalAnim.Css.Props as Props
+import InternalAnim.Duration as Duration
+import InternalAnim.Move as Move
+import InternalAnim.Quantity as Quantity
+import InternalAnim.Time as Time
+import InternalAnim.Timeline as Timeline
+import InternalAnim.Transition as Transition
+import InternalAnim.Units as Units
 import Set exposing (Set)
 
 
@@ -116,6 +116,7 @@ propsToRenderedProps timeline lookup =
 type alias Css =
     { hash : String
     , keyframes : String
+    , transition : String
     , props : List ( String, String )
     }
 
@@ -128,6 +129,7 @@ toCss now renderedProps =
     in
     { hash = cssDetails.hash
     , keyframes = cssDetails.keyframes
+    , transition = cssDetails.transition
     , props =
         case cssDetails.animation of
             "" ->

@@ -1,4 +1,4 @@
-module Internal.Bezier exposing
+module InternalAnim.Bezier exposing
     ( Spline(..), Point, hash, normalize
     , atX, pointOn
     , firstX, firstY, lastX, lastY
@@ -38,7 +38,7 @@ Thanks Ian!
 
 -}
 
-import Internal.Bits as Bits
+import InternalAnim.Bits as Bits
 
 
 

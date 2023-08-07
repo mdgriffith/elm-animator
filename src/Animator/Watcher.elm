@@ -16,8 +16,8 @@ module Animator.Watcher exposing
 
 import Animator.Timeline exposing (Timeline)
 import Browser.Events
-import Internal.Time as Time
-import Internal.Timeline as Timeline
+import InternalAnim.Time as Time
+import InternalAnim.Timeline as Timeline
 import Time
 
 

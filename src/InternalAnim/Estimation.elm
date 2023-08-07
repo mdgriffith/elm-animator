@@ -1,16 +1,16 @@
-module Internal.Estimation exposing (velocity, velocityAtTarget)
+module InternalAnim.Estimation exposing (velocity, velocityAtTarget)
 
 {-| -}
 
 import Animator
 import Animator.Timeline
 import Animator.Value
-import Internal.Duration as Duration
-import Internal.Move as Move
-import Internal.Quantity as Quantity
-import Internal.Time as Time
-import Internal.Timeline as Timeline
-import Internal.Units as Units exposing (Pixels, PixelsPerSecond)
+import InternalAnim.Duration as Duration
+import InternalAnim.Move as Move
+import InternalAnim.Quantity as Quantity
+import InternalAnim.Time as Time
+import InternalAnim.Timeline as Timeline
+import InternalAnim.Units as Units exposing (Pixels, PixelsPerSecond)
 import Time
 
 

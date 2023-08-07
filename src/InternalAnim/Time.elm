@@ -1,4 +1,4 @@
-module Internal.Time exposing
+module InternalAnim.Time exposing
     ( thisBeforeOrEqualThat, thisAfterOrEqualThat, equal
     , Absolute, AbsoluteTime(..), Duration, absolute, duration, progress
     , inMilliseconds
@@ -18,8 +18,8 @@ module Internal.Time exposing
 
 -}
 
-import Internal.Duration as Duration
-import Internal.Quantity as Quantity
+import InternalAnim.Duration as Duration
+import InternalAnim.Quantity as Quantity
 import Time
 
 

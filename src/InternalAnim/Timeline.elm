@@ -1,4 +1,4 @@
-module Internal.Timeline exposing
+module InternalAnim.Timeline exposing
     ( Timeline(..), TimelineDetails, Occurring(..), getEvents
     , Schedule(..), Event(..)
     , needsUpdate, update, updateWith
@@ -33,9 +33,9 @@ module Internal.Timeline exposing
 
 -}
 
-import Internal.Duration as Duration
-import Internal.Quantity as Quantity
-import Internal.Time as Time
+import InternalAnim.Duration as Duration
+import InternalAnim.Quantity as Quantity
+import InternalAnim.Time as Time
 import Time
 
 

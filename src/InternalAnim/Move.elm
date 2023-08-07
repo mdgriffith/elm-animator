@@ -1,4 +1,4 @@
-module Internal.Move exposing
+module InternalAnim.Move exposing
     ( Move(..), to, toWith
     , State, init
     , lerpColor, lerpFloat, lerpTransform
@@ -36,12 +36,12 @@ module Internal.Move exposing
 -}
 
 import Color
-import Internal.Bezier as Bezier
-import Internal.Duration as Duration
-import Internal.Quantity as Quantity
-import Internal.Time as Time
-import Internal.Transition as Transition
-import Internal.Units as Units
+import InternalAnim.Bezier as Bezier
+import InternalAnim.Duration as Duration
+import InternalAnim.Quantity as Quantity
+import InternalAnim.Time as Time
+import InternalAnim.Transition as Transition
+import InternalAnim.Units as Units
 
 
 {-| -}
