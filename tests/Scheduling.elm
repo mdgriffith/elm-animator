@@ -6,10 +6,10 @@ import Animator.Value as Value
 import Expect exposing (Expectation, FloatingPointTolerance(..))
 import Fuzz exposing (Fuzzer, float, int, list, string)
 import Fuzz.Timeline
-import Internal.Duration as Duration
-import Internal.Quantity as Quantity
-import Internal.Time as Time
-import Internal.Timeline as Timeline
+import InternalAnim.Duration as Duration
+import InternalAnim.Quantity as Quantity
+import InternalAnim.Time as Time
+import InternalAnim.Timeline as Timeline
 import Random
 import Result
 import Test exposing (..)

@@ -33,8 +33,8 @@ Timeline Fuzzer:
 import Animator
 import Animator.Timeline
 import Fuzz exposing (Fuzzer, float, int, list, string)
-import Internal.Time as Time
-import Internal.Timeline as Timeline
+import InternalAnim.Time as Time
+import InternalAnim.Timeline as Timeline
 import Time
 
 

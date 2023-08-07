@@ -10,9 +10,9 @@ module TimelineState exposing
 
 import Animator.Timeline
 import Expect exposing (Expectation, FloatingPointTolerance(..))
-import Internal.Duration as Duration
-import Internal.Estimation as Estimate
-import Internal.Timeline as Timeline
+import InternalAnim.Duration as Duration
+import InternalAnim.Estimation as Estimate
+import InternalAnim.Timeline as Timeline
 import Test exposing (..)
 import Time
 

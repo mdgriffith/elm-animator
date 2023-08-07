@@ -4,13 +4,13 @@ module Bezier exposing (..)
 
 import Expect exposing (Expectation, FloatingPointTolerance(..))
 import Fuzz exposing (Fuzzer, float, int, list, string)
-import Internal.Bezier as Bezier
-import Internal.Duration as Duration
-import Internal.Move as Move
-import Internal.Quantity as Quantity
-import Internal.Time as Time
-import Internal.Transition as Transition
-import Internal.Units as Units
+import InternalAnim.Bezier as Bezier
+import InternalAnim.Duration as Duration
+import InternalAnim.Move as Move
+import InternalAnim.Quantity as Quantity
+import InternalAnim.Time as Time
+import InternalAnim.Transition as Transition
+import InternalAnim.Units as Units
 import Test exposing (..)
 
 

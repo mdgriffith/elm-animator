@@ -1,13 +1,13 @@
 module Oscillations.outOfDate exposing (oscillations)
 
 import Animator
-import Internal.Duration as Duration
+import InternalAnim.Duration as Duration
 import Expect exposing (Expectation, FloatingPointTolerance(..))
 import Fuzz exposing (Fuzzer, float, int, list, string)
-import Internal.Interpolate as Interpolate
-import Internal.Timeline as Timeline
+import InternalAnim.Interpolate as Interpolate
+import InternalAnim.Timeline as Timeline
 import Pixels
-import Internal.Quantity as Quantity
+import InternalAnim.Quantity as Quantity
 import Test exposing (..)
 import Time
 
