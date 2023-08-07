@@ -12,6 +12,7 @@ This example is meant to show a few things.
 
 import Animator
 import Animator.Timeline as Timeline
+import Animator.Value
 import Animator.Watcher as Watcher
 import Browser
 import Browser.Events
@@ -20,12 +21,11 @@ import Color
 import Html exposing (..)
 import Html.Attributes as Attr
 import Html.Events as Events
+import InternalAnim.Css
+import InternalAnim.Timeline
 import Playground.View.Bezier
-import Internal.Timeline
-import Internal.Css
 import Time
-import Animator.Value
-import Animator.Watcher
+
 
 {-| -}
 type alias Model =
@@ -45,9 +45,9 @@ main =
     Browser.element
         { init =
             \() ->
-                ( { ball = 
-                    Timeline.init positions.start
-                        |> Timeline.scale 0.5
+                ( { ball =
+                        Timeline.init positions.start
+                            |> Timeline.scale 0.5
                   , queue = False
                   }
                 , Cmd.none
@@ -61,8 +61,6 @@ main =
                         |> Watcher.toSubscription Tick model
                     ]
         }
-
-
 
 
 animator : Watcher.Watching Model
@@ -102,7 +100,7 @@ update msg model =
                         let
                             current =
                                 Timeline.current model.ball
-                                    
+
                             range =
                                 if target > current then
                                     List.range current target
@@ -188,14 +186,11 @@ view model =
                     text "direct"
                 ]
 
-            -- , Playground.View.Bezier.view 
-            --     [ { startedAt = Internal.Timeline.getCurrentTime model.ball
-            --       , props = Internal.Css.propsToRenderedProps model.ball renderProps
-
+            -- , Playground.View.Bezier.view
+            --     [ { startedAt = InternalAnim.Timeline.getCurrentTime model.ball
+            --       , props = InternalAnim.Css.propsToRenderedProps model.ball renderProps
             --     }
-
             --     ]
-
             ]
         ]
 
@@ -210,19 +205,22 @@ viewBallTarget index =
         []
 
 
-red = Color.rgb 1 0 0
+red =
+    Color.rgb 1 0 0
 
-blue = Color.rgb 0 0 1
+
+blue =
+    Color.rgb 0 0 1
+
 
 viewBall timeline =
-    Animator.div 
+    Animator.div
         (Animator.onTimeline timeline
             renderProps
         )
-        -- (Timeline.current timeline 
+        -- (Timeline.current timeline
         --     |> renderProps
         --     |> Animator.transition (Animator.ms 1000)
-
         -- )
         [ Attr.class "ball"
         ]
@@ -230,22 +228,21 @@ viewBall timeline =
 
 
 renderProps index =
-    [ 
-        
-        -- Animator.x (toFloat index * 200)
-     Animator.rotation (toFloat index )
-        --, Animator.px "border-width" (toFloat index * 3)
-    ,   Animator.x (toFloat index * 200)
-           
-    -- , 
-    -- , Animator.color "background-color" 
+    [ -- Animator.x (toFloat index * 200)
+      Animator.rotation (toFloat index)
+
+    --, Animator.px "border-width" (toFloat index * 3)
+    , Animator.x (toFloat index * 200)
+
+    -- ,
+    -- , Animator.color "background-color"
     --     (if modBy 2 index  == 0 then
     --         red
-    --     else     
+    --     else
     --         blue
     --     )
     ]
-        
+
 
 
 {- Less Exciting Stuff

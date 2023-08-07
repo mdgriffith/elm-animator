@@ -31,17 +31,17 @@ module Playground.Timeline exposing (main)
 import Animator
 import Animator.Css2
 import Browser
-import Internal.Duration as Duration
 import Html exposing (Html, button, div, h1, text)
 import Html.Attributes as Attr
 import Html.Events exposing (onClick)
-import Internal.Bezier as Bezier
-import Internal.Css as Css
-import Internal.Css.Props
-import Internal.Interpolate as Interpolate
-import Internal.Spring as Spring
-import Internal.Time as Time
-import Internal.Timeline as Timeline
+import InternalAnim.Bezier as Bezier
+import InternalAnim.Css as Css
+import InternalAnim.Css.Props
+import InternalAnim.Duration as Duration
+import InternalAnim.Interpolate as Interpolate
+import InternalAnim.Spring as Spring
+import InternalAnim.Time as Time
+import InternalAnim.Timeline as Timeline
 import Pixels
 import Playground.View.Timeline
 import Svg
@@ -243,7 +243,7 @@ toProps (State state) =
             toFloat state * 100
     in
     -- Interpolate.Pos Interpolate.standardDefault (toFloat (state * 100))
-    [ -- Css.Prop Internal.Css.Props.ids.opacity
+    [ -- Css.Prop InternalAnim.Css.Props.ids.opacity
       -- (wave (Timeline.Repeat 5 (Animator.millis 200)) base (base + 100))
       Animator.Css2.opacity
         (Animator.at (base / 500))

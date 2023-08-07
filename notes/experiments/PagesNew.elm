@@ -129,7 +129,7 @@ update msg model =
 
         ClickedLink request ->
             case request of
-                Browser.Internal url ->
+                Browser.InternalAnim url ->
                     -- Note -  Ideally, starting a new animation with `toNewPage` would only happen in `UrlChanged`
                     -- which occurs immediately after this message if we use `Browser.Navigation.pushUrl`
                     --

@@ -3,15 +3,15 @@ module Basic exposing (main, subscriptions, update, view)
 import Animator
 import Browser
 import Color
-import Internal.Duration as Duration
 import Ease
 import Help.Plot
 import Html
 import Html.Attributes as Attr
 import Html.Events as Events
-import Internal.Interpolate as Interpolate
-import Internal.Spring as Spring
-import Internal.Timeline
+import InternalAnim.Duration as Duration
+import InternalAnim.Interpolate as Interpolate
+import InternalAnim.Spring as Spring
+import InternalAnim.Timeline
 import Time
 
 
@@ -21,7 +21,7 @@ import Time
 
 singleEvent =
     Animator.init Hufflepuff
-        |> Internal.Timeline.updateWith False (Time.millisToPosix 0)
+        |> InternalAnim.Timeline.updateWith False (Time.millisToPosix 0)
 
 
 doubleEvent =
@@ -30,7 +30,7 @@ doubleEvent =
             [ Animator.wait (Animator.millis 500)
             , Animator.transitionTo (Animator.millis 250) Griffyndor
             ]
-        |> Internal.Timeline.updateWith False (Time.millisToPosix 0)
+        |> InternalAnim.Timeline.updateWith False (Time.millisToPosix 0)
 
 
 fourContinuous =
@@ -40,7 +40,7 @@ fourContinuous =
             , Animator.transitionTo (Animator.seconds 1) Slytherin
             , Animator.transitionTo (Animator.seconds 1) Ravenclaw
             ]
-        |> Internal.Timeline.update (Time.millisToPosix 0)
+        |> InternalAnim.Timeline.update (Time.millisToPosix 0)
 
 
 fourWithPause =
@@ -54,7 +54,7 @@ fourWithPause =
             , Animator.transitionTo (Animator.seconds 1) Ravenclaw
             , Animator.wait (Animator.seconds 1)
             ]
-        |> Internal.Timeline.updateWith False (Time.millisToPosix 0)
+        |> InternalAnim.Timeline.updateWith False (Time.millisToPosix 0)
 
 
 
@@ -64,24 +64,24 @@ fourWithPause =
 doubleInterrupted =
     doubleEvent
         |> Animator.go (Animator.seconds 1) Ravenclaw
-        |> Internal.Timeline.updateWith False (Time.millisToPosix 1500)
+        |> InternalAnim.Timeline.updateWith False (Time.millisToPosix 1500)
 
 
 doubleInterruptedInterrupted =
     doubleInterrupted
         |> Animator.go (Animator.seconds 1) Slytherin
-        |> Internal.Timeline.updateWith False (Time.millisToPosix 3001)
+        |> InternalAnim.Timeline.updateWith False (Time.millisToPosix 3001)
 
 
 fourContinuousInterrupted =
     fourContinuous
-        |> Internal.Timeline.update (Time.millisToPosix 1000)
+        |> InternalAnim.Timeline.update (Time.millisToPosix 1000)
         |> Animator.go (Animator.seconds 1) Ravenclaw
-        |> Internal.Timeline.update (Time.millisToPosix 1500)
+        |> InternalAnim.Timeline.update (Time.millisToPosix 1500)
 
 
 
--- |> Internal.Timeline.update (Time.millisToPosix 3000)
+-- |> InternalAnim.Timeline.update (Time.millisToPosix 3000)
 
 
 fourWithPauseInterrupted =
@@ -95,7 +95,7 @@ fourWithPauseInterrupted =
             , Animator.transitionTo (Animator.seconds 1) Ravenclaw
             , Animator.wait (Animator.seconds 1)
             ]
-        |> Internal.Timeline.updateWith False (Time.millisToPosix 3000)
+        |> InternalAnim.Timeline.updateWith False (Time.millisToPosix 3000)
 
 
 fourWithPauseQueued =
@@ -109,7 +109,7 @@ fourWithPauseQueued =
             , Animator.transitionTo (Animator.seconds 1) Ravenclaw
             , Animator.wait (Animator.seconds 1)
             ]
-        |> Internal.Timeline.updateWith False (Time.millisToPosix 3000)
+        |> InternalAnim.Timeline.updateWith False (Time.millisToPosix 3000)
 
 
 main =
@@ -634,7 +634,7 @@ renderPoints move timeline toPos =
                 currentTime =
                     Time.millisToPosix (i * 16)
             in
-            case move (Internal.Timeline.update currentTime timeline) toPos of
+            case move (InternalAnim.Timeline.update currentTime timeline) toPos of
                 current ->
                     { time = toFloat i * 16
                     , position = current.position
@@ -652,7 +652,7 @@ renderVelocities move timeline toPos =
                 currentTime =
                     Time.millisToPosix (i * 16)
             in
-            case move (Internal.Timeline.update currentTime timeline) toPos of
+            case move (InternalAnim.Timeline.update currentTime timeline) toPos of
                 current ->
                     { time = toFloat i * 16
                     , position = current.velocity
@@ -717,8 +717,8 @@ update msg model =
                         , Animator.wait (Animator.seconds 3)
                         ]
                         model.timeline
-                        |> Internal.Timeline.update (Time.millisToPosix 0)
-                        |> Internal.Timeline.update (Time.millisToPosix 1409)
+                        |> InternalAnim.Timeline.update (Time.millisToPosix 0)
+                        |> InternalAnim.Timeline.update (Time.millisToPosix 1409)
               }
             , Cmd.none
             )
@@ -740,7 +740,7 @@ update msg model =
             ( { model
                 | time = newPosix
                 , timeline =
-                    Internal.Timeline.update newPosix model.timeline
+                    InternalAnim.Timeline.update newPosix model.timeline
               }
             , Cmd.none
             )

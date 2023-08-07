@@ -4,13 +4,14 @@ import Browser
 import Html exposing (Html, button, div, h1, text)
 import Html.Attributes as Attr
 import Html.Events exposing (onClick)
+import InternalAnim.Bezier as Bezier
+import InternalAnim.Css as Css
+import InternalAnim.Duration as Duration
+import InternalAnim.Interpolate as Interpolate
+import InternalAnim.Spring as Spring
 import Svg
 import Svg.Attributes as SvgA
-import Internal.Spring as Spring
-import Internal.Duration as Duration
-import Internal.Interpolate as Interpolate
-import Internal.Bezier as Bezier
-import Internal.Css as Css
+
 
 
 {- Welcome to the Spring Playground!
@@ -50,23 +51,30 @@ basic : Spring.SpringParams
 basic =
     -- Spring.select 0.5 (Duration.milliseconds 1000)
     Spring.select 0.5 (Duration.milliseconds 1000)
-        -- |> Debug.log "params"
-        
+
+
+
+-- |> Debug.log "params"
+
 
 full : Spring.SpringParams
 full =
     -- Spring.select 0.5 (Duration.milliseconds 1000)
     Spring.select 1 (Duration.milliseconds 1000)
-        -- |> Debug.log "params"
+
+
+
+-- |> Debug.log "params"
 
 
 null : Spring.SpringParams
 null =
     -- Spring.select 0.5 (Duration.milliseconds 1000)
     Spring.select 0 (Duration.milliseconds 1000)
-        -- |> Debug.log "params"
-       
 
+
+
+-- |> Debug.log "params"
 
 
 main : Html msg
@@ -79,17 +87,15 @@ main =
             , SvgA.viewBox "0 -100 1000 1400"
             , SvgA.style "border: 4px dashed #eee;"
             ]
-            [ 
-                 viewSpring basic
+            [ viewSpring basic
             , viewZeros basic
+
             --  viewSpring full
             -- , viewZeros full
             -- , viewSpring null
             -- , viewZeros null
-            -- , viewBezier 
-            --     (Spline 
-                
-                
+            -- , viewBezier
+            --     (Spline
             --     )
             , Svg.line
                 [ SvgA.x1 "0"
@@ -115,70 +121,59 @@ viewSpringBezier spring =
                 }
 
         pairs =
-            List.map2 Tuple.pair 
+            List.map2 Tuple.pair
                 ps
                 (List.drop 1 ps)
-
-        
     in
-   Svg.g [] 
-            (List.map 
-                (\(one, two) -> 
-                     let
-                        posOne =
-                            Spring.analytical spring
-                                (Duration.milliseconds one)
-                                1000
-                                { velocity = 0
-                                , position = 0
-                                }
-                                
-                        
-                        posTwo =
-                            Spring.analytical spring
-                                (Duration.milliseconds two)
-                                1000
-                                { velocity = 0
-                                , position = 0
-                                }
-                               
-                        offsetOne =
-                            (two - one) 
-                                * ((0.25) )
-
-                        ctrlOne =
-                             Point (round ((one) + offsetOne)) (round (1000 - posOne.position))
-
-
-                        offsetTwo =
-                            (two - one) 
-                               
-                                * ((0.55 ))
-                        
-                        ctrlTwo =
-                            Point (round ((two) - offsetTwo)) (round (1000 - posTwo.position))
-                            
-                           
-
-                    in
-                    Svg.g [] 
-                        [ viewBezier
-                            { one = 
-                                Point (round one) (round (1000 - posOne.position))
-                            , oneControl =
-                                ctrlOne
-                            , two =
-                                Point (round two) (round (1000 - posTwo.position))
-                            , twoControl =
-                                ctrlTwo
+    Svg.g []
+        (List.map
+            (\( one, two ) ->
+                let
+                    posOne =
+                        Spring.analytical spring
+                            (Duration.milliseconds one)
+                            1000
+                            { velocity = 0
+                            , position = 0
                             }
-                       
-                        
-                        ]
-                )
-                (pairs)
+
+                    posTwo =
+                        Spring.analytical spring
+                            (Duration.milliseconds two)
+                            1000
+                            { velocity = 0
+                            , position = 0
+                            }
+
+                    offsetOne =
+                        (two - one)
+                            * 0.25
+
+                    ctrlOne =
+                        Point (round (one + offsetOne)) (round (1000 - posOne.position))
+
+                    offsetTwo =
+                        (two - one)
+                            * 0.55
+
+                    ctrlTwo =
+                        Point (round (two - offsetTwo)) (round (1000 - posTwo.position))
+                in
+                Svg.g []
+                    [ viewBezier
+                        { one =
+                            Point (round one) (round (1000 - posOne.position))
+                        , oneControl =
+                            ctrlOne
+                        , two =
+                            Point (round two) (round (1000 - posTwo.position))
+                        , twoControl =
+                            ctrlTwo
+                        }
+                    ]
             )
-        
+            pairs
+        )
 
 
 viewZeros spring =
@@ -192,13 +187,11 @@ viewZeros spring =
                 }
 
         pairs =
-            List.map2 Tuple.pair 
+            List.map2 Tuple.pair
                 ps
                 (List.drop 1 ps)
-
-        
     in
-    Svg.g [] 
+    Svg.g []
         [ Svg.g []
             (List.map
                 (\z ->
@@ -210,27 +203,23 @@ viewZeros spring =
                                 { velocity = 0
                                 , position = 0
                                 }
-
                     in
                     Svg.line
-                            [ SvgA.x1 (String.fromFloat z)
-                            , SvgA.y1 "0"
-                            , SvgA.x2 (String.fromFloat z)
-                            , SvgA.y2 "1000"
-                            , SvgA.stroke "black"
-                            , SvgA.strokeWidth "3"
-                            ]
-                            []
-                        
-                        
-                        
+                        [ SvgA.x1 (String.fromFloat z)
+                        , SvgA.y1 "0"
+                        , SvgA.x2 (String.fromFloat z)
+                        , SvgA.y2 "1000"
+                        , SvgA.stroke "black"
+                        , SvgA.strokeWidth "3"
+                        ]
+                        []
                 )
-                ( ps)
+                ps
             )
-        , Svg.g [] 
-            (List.map 
-                (\(one, two) -> 
-                     let
+        , Svg.g []
+            (List.map
+                (\( one, two ) ->
+                    let
                         posOne =
                             Spring.analytical spring
                                 (Duration.milliseconds one)
@@ -238,8 +227,7 @@ viewZeros spring =
                                 { velocity = 0
                                 , position = 0
                                 }
-                                
-                        
+
                         posTwo =
                             Spring.analytical spring
                                 (Duration.milliseconds two)
@@ -247,92 +235,77 @@ viewZeros spring =
                                 { velocity = 0
                                 , position = 0
                                 }
-                               
 
                         -- factor = 0.05
-
                         -- spread = 0.1
-                        factor = 0
+                        factor =
+                            0
 
-                        spread = 0
+                        spread =
+                            0
 
                         offsetOne =
-                            (two - one) 
+                            (two - one)
                                 -- * 0.257
                                 * ((0.33 - factor) - spread)
 
                         ctrlOne =
                             -- + 90
-                             Point (round ((one) + offsetOne)) (round (1000 - posOne.position))
-
+                            Point (round (one + offsetOne)) (round (1000 - posOne.position))
 
                         offsetTwo =
-                            (two - one) 
+                            (two - one)
                                 -- * 0.55182845698119
                                 * ((0.55 + factor) - spread)
-                        
+
                         ctrlTwo =
                             -- - 197
-                            Point (round ((two) - offsetTwo)) (round (1000 - posTwo.position))
-                            
-                            -- 140
+                            Point (round (two - offsetTwo)) (round (1000 - posTwo.position))
 
-                            -- 355
-
-                            -- 140 / 355 -> 0.39
-
-                            -- (355 - 140) / 355 -> 0.605
-
+                        -- 140
+                        -- 355
+                        -- 140 / 355 -> 0.39
+                        -- (355 - 140) / 355 -> 0.605
                         bez =
-                            { one = 
+                            { one =
                                 Point (round one) (round (1000 - posOne.position))
                             , oneControl =
                                 ctrlOne
                             , two =
                                 Point (round two) (round (1000 - posTwo.position))
                             , twoControl =
-                               ctrlTwo
+                                ctrlTwo
                             }
 
                         spline =
-                            Bezier.Spline 
-                                ( Bezier.Point ( one) ( (1000 - posOne.position)))
-                                 { x = toFloat ctrlOne.x
-                                ,  y = toFloat ctrlOne.y
-
+                            Bezier.Spline
+                                (Bezier.Point one (1000 - posOne.position))
+                                { x = toFloat ctrlOne.x
+                                , y = toFloat ctrlOne.y
                                 }
                                 { x = toFloat ctrlTwo.x
-                                ,  y = toFloat ctrlTwo.y
-
+                                , y = toFloat ctrlTwo.y
                                 }
-                                ( Bezier.Point ( two) ( (1000 - posTwo.position)))
+                                (Bezier.Point two (1000 - posTwo.position))
 
-                        mid = 
+                        mid =
                             round (one + (0.5 * (two - one)))
-
                     in
-                    Svg.g [] 
+                    Svg.g []
                         [ viewBezier bez
                         , dot (Debug.log "point" (Bezier.pointOn spline 0.5))
-                        , line 
+                        , line
                             { x = mid
                             , y = 0
-
                             }
                             { x = mid
                             , y = 1000
-
                             }
-                       
-                        
                         ]
                 )
-                (pairs)
+                pairs
             )
         ]
-        
-
-    
 
 
 viewSpring spring =
@@ -343,7 +316,7 @@ viewSpring spring =
                 (\t ->
                     let
                         old =
-                            Spring.stepOver  (Duration.milliseconds (toFloat t))
+                            Spring.stepOver (Duration.milliseconds (toFloat t))
                                 spring
                                 1000
                                 { velocity = 0
@@ -357,7 +330,9 @@ viewSpring spring =
                                 { velocity = 0
                                 , position = 0
                                 }
-                        _ = Debug.log "spring" (t, new)
+
+                        _ =
+                            Debug.log "spring" ( t, new )
                     in
                     Svg.g []
                         [ Svg.circle
@@ -407,10 +382,6 @@ viewSpring spring =
         )
 
 
-
-
-
-
 type alias Bezier =
     { one : Point
     , oneControl : Point
@@ -423,62 +394,54 @@ type alias Point =
     { x : Int, y : Int }
 
 
-
 viewBezier : Bezier -> Html msg
 viewBezier bez =
-    Svg.g [] 
+    Svg.g []
         [ Svg.path
-            [ SvgA.d 
+            [ SvgA.d
                 -- ("M 10 10 C 20 20, 40 20, 50 10")
                 (String.join " "
                     [ "M "
-                    ++ renderPoint bez.one
-                    ++ " C "
+                        ++ renderPoint bez.one
+                        ++ " C "
                         ++ renderPoint bez.oneControl
                         ++ ", "
                         ++ renderPoint bez.twoControl
                         ++ ", "
                         ++ renderPoint bez.two
                     ]
-
                 )
             , SvgA.stroke "black"
             , SvgA.strokeWidth "5"
             , SvgA.fill "rgba(0,0,0,0)"
             ]
             []
-
-         ,  Svg.circle
+        , Svg.circle
             [ SvgA.cx (String.fromInt bez.one.x)
             , SvgA.cy (String.fromInt bez.one.y)
             , SvgA.r "25"
             , SvgA.fill "black"
-            
             ]
             []
-
-        ,  Svg.circle
+        , Svg.circle
             [ SvgA.cx (String.fromInt bez.two.x)
             , SvgA.cy (String.fromInt bez.two.y)
             , SvgA.r "25"
             , SvgA.fill "black"
-            
             ]
             []
-
-        ,  Svg.circle
+        , Svg.circle
             [ SvgA.cx (String.fromInt bez.oneControl.x)
             , SvgA.cy (String.fromInt bez.oneControl.y)
             , SvgA.r "15"
             , SvgA.fill "red"
             ]
             []
-        ,  Svg.circle
+        , Svg.circle
             [ SvgA.cx (String.fromInt bez.twoControl.x)
             , SvgA.cy (String.fromInt bez.twoControl.y)
             , SvgA.r "15"
             , SvgA.fill "red"
-            
             ]
             []
         , line bez.one bez.oneControl
@@ -498,16 +461,17 @@ dot point =
         ]
         []
 
+
 line one two =
     Svg.line
-    [ SvgA.x1 (String.fromInt one.x)
-    , SvgA.y1 (String.fromInt one.y)
-    , SvgA.x2 (String.fromInt two.x)
-    , SvgA.y2 (String.fromInt two.y)
-    , SvgA.stroke "black"
-    , SvgA.strokeWidth "3"
-    ]
-    []
+        [ SvgA.x1 (String.fromInt one.x)
+        , SvgA.y1 (String.fromInt one.y)
+        , SvgA.x2 (String.fromInt two.x)
+        , SvgA.y2 (String.fromInt two.y)
+        , SvgA.stroke "black"
+        , SvgA.strokeWidth "3"
+        ]
+        []
 
 
 viewPath : List Bezier -> Html msg
@@ -556,5 +520,3 @@ renderPoint p =
       - Stiffness and mass are constants here as they don't meaningfully affect the personality of the spring's movement.
 
 -}
-
-

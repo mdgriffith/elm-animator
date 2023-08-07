@@ -9,7 +9,7 @@ import Color
 import Html exposing (..)
 import Html.Attributes as Attr
 import Html.Events as Events
-import Internal.Timeline
+import InternalAnim.Timeline
 import Time
 
 
@@ -346,12 +346,12 @@ viewDescription timeline =
 
 describeEvent description =
     case description of
-        Internal.Timeline.DescribeStartTransition time ->
+        InternalAnim.Timeline.DescribeStartTransition time ->
             Html.div []
                 [ Html.text "start"
                 ]
 
-        Internal.Timeline.DescribeEvent time event ->
+        InternalAnim.Timeline.DescribeEvent time event ->
             Html.div
                 [ Attr.style "display" "flex"
                 , Attr.style "flex-direction" "column"
@@ -362,7 +362,7 @@ describeEvent description =
                 , viewTime time
                 ]
 
-        Internal.Timeline.DescribeInterruption details ->
+        InternalAnim.Timeline.DescribeInterruption details ->
             Html.div
                 [ Attr.style "display" "flex"
                 , Attr.style "flex-direction" "column"

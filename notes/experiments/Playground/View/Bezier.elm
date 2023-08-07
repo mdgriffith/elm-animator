@@ -3,32 +3,29 @@ module Playground.View.Bezier exposing (view)
 import Animator
 import Animator.Watcher as Watcher
 import Html
-import Internal.Bezier as Bezier
-import Internal.Css
-import Internal.Transition as Transition
+import InternalAnim.Bezier as Bezier
+import InternalAnim.Css
+import InternalAnim.Time as Time
+import InternalAnim.Transition as Transition
 import Pixels
 import Svg exposing (Svg)
 import Svg.Attributes exposing (..)
-import Internal.Time as Time
 
 
 type alias RenderedGroup =
     { startedAt : Time.Absolute
-    , props : List Internal.Css.RenderedProp
-
+    , props : List InternalAnim.Css.RenderedProp
     }
 
 
 view : List RenderedGroup -> Svg msg
 view group =
-     Svg.svg
+    Svg.svg
         [ width "1200"
         , height "1200"
         , viewBox "-200 -200 1000 1000"
         ]
-        [ 
-        ]
-
+        []
 
 
 
