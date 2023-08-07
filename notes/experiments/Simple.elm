@@ -3,15 +3,15 @@ module Simple exposing (main)
 import Animator
 import Browser
 import Color
-import Internal.Duration as Duration
 import Ease
 import Help.Plot
 import Html
 import Html.Attributes as Attr
 import Html.Events as Events
-import Internal.Interpolate as Interpolate
-import Internal.Spring as Spring
-import Internal.Timeline
+import InternalAnim.Duration as Duration
+import InternalAnim.Interpolate as Interpolate
+import InternalAnim.Spring as Spring
+import InternalAnim.Timeline
 import Time
 
 
@@ -21,7 +21,7 @@ import Time
 
 singleEvent =
     Animator.init Hufflepuff
-        |> Internal.Timeline.updateWith False (Time.millisToPosix 0)
+        |> InternalAnim.Timeline.updateWith False (Time.millisToPosix 0)
 
 
 doubleEvent =
@@ -30,7 +30,7 @@ doubleEvent =
             [ Animator.wait (Animator.seconds 1)
             , Animator.transitionTo (Animator.millis 250) Griffyndor
             ]
-        |> Internal.Timeline.updateWith False (Time.millisToPosix 0)
+        |> InternalAnim.Timeline.updateWith False (Time.millisToPosix 0)
 
 
 main =
@@ -121,7 +121,7 @@ view model =
         _ =
             Interpolate.details
                 (doubleEvent
-                    |> Internal.Timeline.updateWith False (Time.millisToPosix 1002)
+                    |> InternalAnim.Timeline.updateWith False (Time.millisToPosix 1002)
                  -- |> Debug.log "timeline"
                 )
                 (toHousePosition >> Interpolate.withStandardDefault)
@@ -202,7 +202,7 @@ renderPoints move timeline toPos =
                 currentTime =
                     Time.millisToPosix (i * 16)
             in
-            case move (Internal.Timeline.update currentTime timeline) toPos of
+            case move (InternalAnim.Timeline.update currentTime timeline) toPos of
                 current ->
                     { time = toFloat i * 16
                     , position = current.position
@@ -220,7 +220,7 @@ renderVelocities move timeline toPos =
                 currentTime =
                     Time.millisToPosix (i * 16)
             in
-            case move (Internal.Timeline.update currentTime timeline) toPos of
+            case move (InternalAnim.Timeline.update currentTime timeline) toPos of
                 current ->
                     { time = toFloat i * 16
                     , position = current.velocity
@@ -285,8 +285,8 @@ update msg model =
                         , Animator.wait (Animator.seconds 3)
                         ]
                         model.timeline
-                        |> Internal.Timeline.update (Time.millisToPosix 0)
-                        |> Internal.Timeline.update (Time.millisToPosix 1409)
+                        |> InternalAnim.Timeline.update (Time.millisToPosix 0)
+                        |> InternalAnim.Timeline.update (Time.millisToPosix 1409)
               }
             , Cmd.none
             )
@@ -308,7 +308,7 @@ update msg model =
             ( { model
                 | time = newPosix
                 , timeline =
-                    Internal.Timeline.update newPosix model.timeline
+                    InternalAnim.Timeline.update newPosix model.timeline
               }
             , Cmd.none
             )

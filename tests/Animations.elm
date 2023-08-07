@@ -7,8 +7,8 @@ import Animator
 import Animator.Timeline
 import Expect
 import Fuzz exposing (Fuzzer, float, int, list, string)
-import Internal.Time as Time
-import Internal.Timeline
+import InternalAnim.Time as Time
+import InternalAnim.Timeline
 import Test exposing (..)
 import Time
 
@@ -77,16 +77,16 @@ suite =
                         Time.advanceBy transitionDuration imminent
 
                     timeline =
-                        Internal.Timeline.Timeline
+                        InternalAnim.Timeline.Timeline
                             { initial = []
                             , now = imminent
                             , delay = Time.zeroDuration
                             , scale = 1
                             , events =
-                                Internal.Timeline.Timetable
-                                    [ Internal.Timeline.Line
+                                InternalAnim.Timeline.Timetable
+                                    [ InternalAnim.Timeline.Line
                                         imminent
-                                        (Internal.Timeline.Occurring
+                                        (InternalAnim.Timeline.Occurring
                                             [ Animator.opacity 0.5
                                             ]
                                             startTime

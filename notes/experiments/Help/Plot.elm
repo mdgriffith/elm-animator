@@ -16,13 +16,13 @@ module Help.Plot exposing
 import Animator
 import Browser
 import Color
-import Internal.Duration as Duration
 import Html exposing (Html, div, h1, node, p, text)
 import Html.Attributes exposing (class)
-import Internal.Estimation as Estimate
-import Internal.Interpolate as Interpolate
-import Internal.Spring as Spring
-import Internal.Timeline
+import InternalAnim.Duration as Duration
+import InternalAnim.Estimation as Estimate
+import InternalAnim.Interpolate as Interpolate
+import InternalAnim.Spring as Spring
+import InternalAnim.Timeline
 import LineChart as LineChart
 import LineChart.Area as Area
 import LineChart.Axis as Axis
@@ -145,7 +145,7 @@ timeline :
 timeline config =
     let
         lines =
-            Internal.Timeline.getEvents config.timeline
+            InternalAnim.Timeline.getEvents config.timeline
 
         ( start, end ) =
             getStartAndEnd (List.concat lines)
@@ -431,7 +431,7 @@ render myTimeline toPos config =
             { time = currentTime
             , value =
                 Interpolate.details
-                    (Internal.Timeline.atTime currentTime myTimeline)
+                    (InternalAnim.Timeline.atTime currentTime myTimeline)
                     (toPos >> Interpolate.withStandardDefault)
             }
                 :: rendered
@@ -457,7 +457,7 @@ renderPoints move tl toPos =
                 currentTime =
                     Time.millisToPosix (i * 16)
             in
-            case move (Internal.Timeline.atTime currentTime tl) toPos of
+            case move (InternalAnim.Timeline.atTime currentTime tl) toPos of
                 current ->
                     { time = toFloat i * 16
                     , position = current.position
@@ -475,7 +475,7 @@ renderVelocities move tl toPos =
                 currentTime =
                     Time.millisToPosix (i * 16)
             in
-            case move (Internal.Timeline.atTime currentTime tl) toPos of
+            case move (InternalAnim.Timeline.atTime currentTime tl) toPos of
                 current ->
                     { time = toFloat i * 16
                     , position = current.velocity
