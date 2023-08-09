@@ -999,7 +999,7 @@ cssForSections now startPos name lerp toString toHashString sections anim =
                         _ ->
                             renderTransition name delay stepDur spline ++ ", " ++ anim.transition
                 , props =
-                    ( name, toString v )
+                    ( name, toString v ++ " !important" )
                         :: anim.props
             }
 
@@ -1134,7 +1134,7 @@ keyframes name lerp startPos toString (Sequence _ _ dur steps) rendered =
     keyframeHelper name
         lerp
         startPos
-        (\v -> name ++ ":" ++ toString v)
+        (\v -> name ++ ":" ++ toString v ++ "!important")
         dur
         zeroDuration
         steps
