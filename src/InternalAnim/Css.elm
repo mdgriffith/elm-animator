@@ -1047,7 +1047,7 @@ colorOrDefault targetName default props =
                 clr
 
             else
-                colorOrDefault name default remain
+                colorOrDefault targetName default remain
 
 
 matchForMovement : Id -> String -> List Prop -> Maybe (Move.Move Float)
