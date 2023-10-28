@@ -3,7 +3,7 @@ module Animator exposing
     , Attribute, opacity
     , rotation, x, y, scale, scaleX, scaleY
     , color, px, int, float
-    , withBezier, withImpulse
+    , withTransition
     , Duration, ms, delay
     , spinning, pulsing, bouncing, pinging
     , Step, set, wait, step
@@ -23,7 +23,7 @@ module Animator exposing
 
 @docs color, px, int, float
 
-@docs withBezier, withImpulse
+@docs withTransition
 
 @docs Duration, ms, delay
 
@@ -83,6 +83,7 @@ Here's an element that's blinking.
 -}
 
 import Animator.Timeline exposing (Timeline)
+import Animator.Transition
 import Color
 import Html exposing (Html)
 import Html.Attributes as Attr
@@ -182,25 +183,14 @@ y n =
 
 
 {-| -}
-withBezier : Float -> Float -> Float -> Float -> Attribute -> Attribute
-withBezier one two three four prop =
+withTransition : Animator.Transition.Transition -> Attribute -> Attribute
+withTransition trans prop =
     case prop of
         Css.Prop id name move format ->
-            Css.Prop id name (Move.withBezier one two three four move) format
+            Css.Prop id name (Move.withTransition trans move) format
 
         Css.ColorProp name move ->
-            Css.ColorProp name (Move.withBezier one two three four move)
-
-
-{-| -}
-withWobble : Float -> Attribute -> Attribute
-withWobble wob prop =
-    case prop of
-        Css.Prop id name move format ->
-            Css.Prop id name (Move.withWobble wob move) format
-
-        Css.ColorProp name move ->
-            Css.ColorProp name (Move.withWobble wob move)
+            Css.ColorProp name (Move.withTransition trans move)
 
 
 {-| Choosing a nice duration can depend on:
@@ -600,7 +590,7 @@ bouncing dur distance =
 
             startingY =
                 y 0
-                    |> withBezier 0.8 0 1 1
+                    |> withTransition (Animator.Transition.bezier 0.8 0 1 1)
         in
         keyframes
             [ loop
@@ -608,7 +598,7 @@ bouncing dur distance =
                     [ startingY ]
                 , step half
                     [ y distance
-                        |> withBezier 0 0 0.2 1
+                        |> withTransition (Animator.Transition.bezier 0 0 0.2 1)
                     ]
                 , step half
                     [ startingY

@@ -1,7 +1,7 @@
 module Animator.Value exposing
     ( color
     , float, velocity, movement, Movement, to, xy, xyz
-    , withWobble
+    , withTransition
     )
 
 {-| You may want to animate a value manually, without generating any CSS.
@@ -14,14 +14,12 @@ You'll need to track a `Timeline` in your model and update it using `AnimationFr
 
 @docs float, velocity, movement, Movement, to, xy, xyz
 
-
-# Transition personality
-
-@docs withWobble
+@docs withTransition
 
 -}
 
 import Animator.Timeline exposing (Timeline)
+import Animator.Transition
 import Color exposing (Color)
 import InternalAnim.Move as Move
 import InternalAnim.Quantity as Quantity
@@ -187,15 +185,10 @@ unwrapUnits state =
 {- PERSONALITY -}
 
 
-{-| This will make the transition use a spring!
-
-  - `withWobble 0` - absolutely no wobble
-  - `withWobble 1` - all the wobble
-
--}
-withWobble : Float -> Movement -> Movement
-withWobble =
-    Move.withWobble
+{-| -}
+withTransition : Animator.Transition.Transition -> Movement -> Movement
+withTransition =
+    Move.withTransition
 
 
 

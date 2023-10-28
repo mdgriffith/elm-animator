@@ -6,7 +6,7 @@ module InternalAnim.Move exposing
     , Step(..), step, stepWith, set
     , sequences
     , addSequence, cssForSections
-    , withWobble, withVelocities, withBezier
+    , withTransition, withVelocities
     , at, atX, transitionTo
     , denormalize, normalizeOver, toReal
     , floatToString, initialSequenceVelocity, move
@@ -27,7 +27,7 @@ module InternalAnim.Move exposing
 
 @docs addSequence, cssForSections
 
-@docs withWobble, withVelocities, withBezier
+@docs withTransition, withVelocities
 
 @docs at, atX, transitionTo
 
@@ -76,18 +76,11 @@ withVelocities intro exit ((Pos trans val dwell) as untouched) =
             dwell
 
 
-withWobble : Float -> Move value -> Move value
-withWobble wob (Pos trans value sequence) =
+{-| -}
+withTransition : Transition.Transition -> Move value -> Move value
+withTransition trans (Pos _ value sequence) =
     Pos
-        (Transition.wobble wob)
-        value
-        sequence
-
-
-withBezier : Float -> Float -> Float -> Float -> Move value -> Move value
-withBezier one two three four (Pos trans value sequence) =
-    Pos
-        (Transition.bezier one two three four)
+        trans
         value
         sequence
 
