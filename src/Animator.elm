@@ -11,6 +11,7 @@ module Animator exposing
     , onTimeline, onTimelineWith
     , div, node
     , Css, css
+    , toCss
     )
 
 {-|
@@ -737,6 +738,12 @@ transition transitionDuration props =
     in
     Animation (Timeline.getCurrentTime timeline)
         (Css.propsToRenderedProps timeline identity)
+
+
+{-| -}
+toCss : Animation -> Css
+toCss (Animation now renderedProps) =
+    Css.toCss now renderedProps
 
 
 {-| -}
