@@ -1,0 +1,5 @@
+{
+	"devDependencies": {
+		"elm-review": "^2.11.1"
+	}
+}
