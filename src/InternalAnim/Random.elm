@@ -16,4 +16,8 @@ fract x =
 
 random : Float -> Float -> Float -> Float
 random seed low high =
-    (fract (sin seed * 100000.0) + 1.5707) / pi
+    if isInfinite seed || isNaN seed then
+        0
+
+    else
+        (fract (sin seed * 100000.0) + 1.5707) / pi
