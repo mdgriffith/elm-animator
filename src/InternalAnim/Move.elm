@@ -1156,9 +1156,6 @@ keyframeHelper name lerp startPos toString sequenceDuration currentDur steps ren
 
         (Step dur transition val) :: [] ->
             let
-                last =
-                    "100% { " ++ (toString val ++ ";}")
-
                 startPercent =
                     Time.progressWithin currentDur sequenceDuration * 100
 
@@ -1174,7 +1171,7 @@ keyframeHelper name lerp startPos toString sequenceDuration currentDur steps ren
                         endPercent
                         transition
             in
-            rendered ++ frames ++ last
+            rendered ++ frames
 
         (Step dur transition val) :: remaining ->
             let
