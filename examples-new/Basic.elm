@@ -1,8 +1,6 @@
 module Basic exposing (main)
 
-{-| 
-
--}
+{-| -}
 
 import Animator
 import Browser
@@ -13,7 +11,8 @@ import Html.Events as Events
 import Time
 
 
-type alias Model = {}
+type alias Model =
+    {}
 
 
 main =
@@ -21,12 +20,12 @@ main =
         { init =
             {}
         , view = view
-        , update = update     
+        , update = update
         }
 
 
 type Msg
-    =  Check Bool
+    = Check Bool
 
 
 update : Msg -> Model -> Model
@@ -34,8 +33,6 @@ update msg model =
     case msg of
         Check newChecked ->
             model
-           
-           
 
 
 view : Model -> Html Msg
@@ -54,12 +51,7 @@ box animation =
     Animator.div animation
         [ Attr.class "box"
         ]
-        [
-
-        ]
-
-    
-
+        []
 
 
 stylesheet : Html msg

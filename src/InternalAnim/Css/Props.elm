@@ -2,7 +2,7 @@ module InternalAnim.Css.Props exposing
     ( Id, ids, hash, default, defaultPosition
     , isTransformId
     , Format, format, float, int, px
-    , roundFloat, floatToString, hashFloat
+    , roundFloat, floatToString
     , colorHash, name, noId, toStr, translateX, transparent, zero
     )
 
@@ -14,12 +14,13 @@ module InternalAnim.Css.Props exposing
 
 @docs Format, format, float, int, px
 
-@docs roundFloat, floatToString, hashFloat
+@docs roundFloat, floatToString
 
 -}
 
 import Bitwise
 import Color
+import InternalAnim.Hash as Hash
 import InternalAnim.Move as Move
 
 
@@ -38,23 +39,11 @@ transparent =
     Color.rgba 0 0 0 0
 
 
-hashFloat : Float -> String
-hashFloat f =
-    let
-        base =
-            floor f
-
-        decimal =
-            floor (100 * (f - toFloat base))
-    in
-    String.fromInt base ++ "_" ++ String.fromInt decimal
-
-
 hashFormat : Format -> Float -> String
 hashFormat form num =
     case form of
         AsFloat ->
-            hashFloat num
+            Hash.float num
 
         AsInt ->
             String.fromInt (round num)

@@ -62,9 +62,11 @@ Goals:
 
 -}
 
-import InternalAnim.Bezier as Bezier
+import Bezier
+import Bezier.Spring as Spring
+import InternalAnim.Duration as Duration
+import InternalAnim.Hash as Hash
 import InternalAnim.Quantity as Quantity
-import InternalAnim.Spring as Spring
 import InternalAnim.Time as Time
 import InternalAnim.Units as Units
 
@@ -99,7 +101,7 @@ type Transition
 bezier : Float -> Float -> Float -> Float -> Transition
 bezier one two three four =
     Transition <|
-        Bezier.Spline
+        Bezier.fromPoints
             { x = 0
             , y = 0
             }
@@ -135,25 +137,13 @@ We can then multiply those by our domain
 standard : Transition
 standard =
     Transition <|
-        Bezier.Spline
-            { x = 0
-            , y = 0
-            }
-            { x = 0.4
-            , y = 0
-            }
-            { x = 0.2
-            , y = 1
-            }
-            { x = 1
-            , y = 1
-            }
+        Bezier.standard
 
 
 linear : Transition
 linear =
     Transition <|
-        Bezier.Spline
+        Bezier.fromPoints
             { x = 0
             , y = 0
             }
@@ -171,7 +161,11 @@ linear =
 isStandard : Transition -> Bool
 isStandard trans =
     case trans of
-        Transition (Bezier.Spline one two three four) ->
+        Transition spline ->
+            let
+                { one, two, three, four } =
+                    toBezierPoints spline
+            in
             (one
                 == { x = 0
                    , y = 0
@@ -240,15 +234,21 @@ atX progress domain introVelocity exitVelocity transition =
                     Time.inMilliseconds domain.end.x - Time.inMilliseconds domain.start.x
 
                 params =
-                    Spring.select wob.wobble
-                        (Quantity.Quantity totalX)
+                    Spring.new
+                        { wobble = wob.wobble
+                        , quickness = 0.5
+                        , settleMax = totalX
+                        }
             in
-            Spring.analytical params
-                (Quantity.Quantity (totalX * progress))
-                (Units.inPixels domain.end.y)
-                { position = Units.inPixels domain.start.y
-                , velocity = Units.inPixelsPerMs introVelocity
+            Spring.at
+                { spring = params
+                , initial =
+                    { position = Units.inPixels domain.start.y
+                    , velocity = Units.inPixelsPerMs introVelocity
+                    }
+                , target = Units.inPixels domain.end.y
                 }
+                (totalX * progress)
                 |> wrapUnits
 
 
@@ -279,16 +279,22 @@ atX2 progress transition =
                     1
 
                 params =
-                    Spring.select wob.wobble
-                        (Quantity.Quantity totalX)
+                    Spring.new
+                        { wobble = wob.wobble
+                        , quickness = 0.5
+                        , settleMax = totalX
+                        }
 
                 sprung =
-                    Spring.analytical params
-                        (Quantity.Quantity (totalX * progress))
-                        1
-                        { position = 0
-                        , velocity = wob.introVelocity
+                    Spring.at
+                        { spring = params
+                        , initial =
+                            { position = 0
+                            , velocity = wob.introVelocity
+                            }
+                        , target = totalX * progress
                         }
+                        1
             in
             { position =
                 { x = progress
@@ -299,10 +305,6 @@ atX2 progress transition =
                 , y = sprung.velocity
                 }
             }
-
-
-
--- Debug.todo "atX2 - Wobble"
 
 
 withVelocities : Float -> Float -> Transition -> Transition
@@ -416,8 +418,11 @@ Maybe it's a constant like 1/3 or something....
 
 -}
 toDomain : Domain -> Float -> Float -> Bezier.Spline -> Bezier.Spline
-toDomain domain introVelocity exitVelocity (Bezier.Spline one two three four) =
+toDomain domain introVelocity exitVelocity spline =
     let
+        { one, two, three, four } =
+            toBezierPoints spline
+
         totalX =
             domain.end.x - domain.start.x
 
@@ -448,16 +453,28 @@ toDomain domain introVelocity exitVelocity (Bezier.Spline one two three four) =
             }
                 |> rotateAround angle domain.end
     in
-    Bezier.Spline
+    Bezier.fromPoints
         domain.start
         ctrl1
         ctrl2
         domain.end
 
 
+toBezierPoints : Bezier.Spline -> { one : Bezier.Point, two : Bezier.Point, three : Bezier.Point, four : Bezier.Point }
+toBezierPoints spline =
+    { one = Bezier.first spline
+    , two = Bezier.controlOne spline
+    , three = Bezier.controlTwo spline
+    , four = Bezier.last spline
+    }
+
+
 inTimeDomain : TimeDomain -> Units.PixelsPerSecond -> Units.PixelsPerSecond -> Bezier.Spline -> Bezier.Spline
-inTimeDomain domain introVelocity exitVelocity (Bezier.Spline one two three four) =
+inTimeDomain domain introVelocity exitVelocity spline =
     let
+        { one, two, three, four } =
+            toBezierPoints spline
+
         totalX =
             Time.inMilliseconds domain.end.x - Time.inMilliseconds domain.start.x
 
@@ -488,7 +505,7 @@ inTimeDomain domain introVelocity exitVelocity (Bezier.Spline one two three four
             }
                 |> rotateAroundTimePoint angle domain.end
     in
-    Bezier.Spline
+    Bezier.fromPoints
         { x = Time.inMilliseconds domain.start.x
         , y = Units.inPixels domain.start.y
         }
@@ -587,10 +604,10 @@ hash : Transition -> String
 hash transition =
     case transition of
         Transition spline ->
-            Bezier.hash spline
+            Hash.bezier spline
 
         Wobble f ->
-            "wob-" ++ String.fromFloat f.wobble
+            "wob-" ++ Hash.float f.wobble
 
 
 {-| -}
@@ -610,13 +627,17 @@ keyframes interpolate startPercent endPercent transition =
 
         Wobble wob ->
             let
-                params =
-                    Spring.select wob.wobble
-                        -- (Quantity.Quantity (domain.end.x - domain.start.x))
-                        (Quantity.Quantity 1000)
-
                 splines =
-                    Spring.segments params
+                    Spring.segments
+                        -- Select a spring that will wobble and settle in 1000 milliseconds
+                        (Spring.new
+                            { wobble = wob.wobble
+                            , quickness = 0.5
+                            , settleMax =
+                                -- (Quantity.Quantity (endPercent - startPercent))
+                                1000
+                            }
+                        )
                         { position = 0
 
                         -- intro velocity
@@ -639,7 +660,7 @@ kf percent prop spline =
         ++ "% {"
         ++ prop
         ++ ";animation-timing-function:"
-        ++ Bezier.cssTimingString spline
+        ++ Bezier.toCss spline
         ++ ";}"
 
 
@@ -663,13 +684,39 @@ keyframeListFromNonNormalizedBezier steps toString str =
         [] ->
             str
 
+        top :: [] ->
+            let
+                percent =
+                    (Bezier.first top |> .x) / 10
+
+                value =
+                    Bezier.first top
+                        |> .y
+                        |> toString
+
+                normalizedSpline =
+                    Bezier.normalize top
+
+                finalPercent =
+                    (Bezier.last top |> .x) / 10
+
+                finalValue =
+                    Bezier.last top
+                        |> .y
+                        |> toString
+            in
+            str
+                ++ keyframeFromSpline percent value identity normalizedSpline
+                ++ keyframeFromSpline finalPercent finalValue identity normalizedSpline
+
         top :: remain ->
             let
                 percent =
-                    Bezier.firstX top
+                    (Bezier.first top |> .x) / 10
 
                 value =
-                    Bezier.firstY top
+                    Bezier.first top
+                        |> .y
                         |> toString
 
                 normalizedSpline =
@@ -710,7 +757,7 @@ keyframeFromSpline percent start toString spline =
         ++ "% {"
         ++ toString start
         ++ ";animation-timing-function:"
-        ++ Bezier.cssTimingString spline
+        ++ Bezier.toCss spline
         ++ ";}"
 
 

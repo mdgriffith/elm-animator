@@ -9,13 +9,14 @@ module InternalAnim.Css exposing
 
 {-| -}
 
+import Bezier
 import Color
 import Html
 import Html.Attributes as Attr exposing (id)
-import InternalAnim.Bezier as Bezier
 import InternalAnim.Bits as Bits
 import InternalAnim.Css.Props as Props
 import InternalAnim.Duration as Duration
+import InternalAnim.Hash as Hash
 import InternalAnim.Move as Move
 import InternalAnim.Quantity as Quantity
 import InternalAnim.Time as Time
@@ -527,7 +528,7 @@ splineListHash splines str =
             str
 
         top :: remain ->
-            splineListHash remain (str ++ Bezier.hash top)
+            splineListHash remain (str ++ Hash.bezier top)
 
 
 isEmptyAnim : { css | keyframes : String } -> Bool

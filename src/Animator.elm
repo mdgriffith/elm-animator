@@ -3,15 +3,14 @@ module Animator exposing
     , Attribute, opacity
     , rotation, x, y, scale, scaleX, scaleY
     , color, px, int, float
-    , withTransition
+    , withTransition, withStepTransition
     , Duration, ms, delay
     , spinning, pulsing, bouncing, pinging
     , Step, set, wait, step
-    , keyframes, loop, loopFor
+    , keyframes, loop, loopFor, sequence
     , onTimeline, onTimelineWith
     , div, node
-    , Css, css
-    , toCss
+    , Css, css, toCss
     )
 
 {-|
@@ -24,7 +23,7 @@ module Animator exposing
 
 @docs color, px, int, float
 
-@docs withTransition
+@docs withTransition, withStepTransition
 
 @docs Duration, ms, delay
 
@@ -67,7 +66,7 @@ Here's an element that's blinking.
 
 @docs Step, set, wait, step
 
-@docs keyframes, loop, loopFor
+@docs keyframes, loop, loopFor, sequence
 
 
 # On a Timeline
@@ -79,7 +78,7 @@ Here's an element that's blinking.
 
 @docs div, node
 
-@docs Css, css
+@docs Css, css, toCss
 
 -}
 
@@ -194,6 +193,12 @@ withTransition trans prop =
             Css.ColorProp name (Move.withTransition trans move)
 
 
+{-| -}
+withStepTransition : Animator.Transition.Transition -> Step -> Step
+withStepTransition trans (Step duration attrs) =
+    Step duration (List.map (withTransition trans) attrs)
+
+
 {-| Choosing a nice duration can depend on:
 
   - The size of the thing moving
@@ -244,10 +249,6 @@ type Animation
 {-| -}
 type Step
     = Step Duration (List Attribute)
-
-
-
--- | LoopFor Int (List Step)
 
 
 {-| -}
@@ -338,6 +339,12 @@ toOccurring currentTime (Step dur props) =
             Time.advanceBy dur currentTime
     in
     ( time, Timeline.Occurring props time time )
+
+
+{-| -}
+sequence : List Step -> Step
+sequence steps =
+    loopFor 1 steps
 
 
 {-| -}

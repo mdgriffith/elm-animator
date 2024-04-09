@@ -35,8 +35,8 @@ module InternalAnim.Move exposing
 
 -}
 
+import Bezier
 import Color
-import InternalAnim.Bezier as Bezier
 import InternalAnim.Duration as Duration
 import InternalAnim.Quantity as Quantity
 import InternalAnim.Time as Time
@@ -351,7 +351,7 @@ denormalize startTime targetTime startPosition targetPosition state =
         let
             scaled =
                 state.velocity
-                    |> Bezier.scaleXYBy
+                    |> scaleXYBy
                         { x =
                             Duration.inSeconds
                                 (Time.duration startTime targetTime)
@@ -364,6 +364,11 @@ denormalize startTime targetTime startPosition targetPosition state =
         else
             Units.pixelsPerSecond (scaled.y / scaled.x)
     }
+
+
+scaleXYBy : { x : Float, y : Float } -> Bezier.Point -> Bezier.Point
+scaleXYBy { x, y } point =
+    { x = point.x * x, y = point.y * y }
 
 
 {-|
@@ -1017,7 +1022,7 @@ renderTransition prop delay duration spline =
         ++ " "
         ++ Time.durationToString duration
         ++ " "
-        ++ Bezier.cssTimingString spline
+        ++ Bezier.toCss spline
         ++ " "
         ++ Time.durationToString delay
 
