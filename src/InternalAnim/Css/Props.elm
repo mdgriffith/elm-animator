@@ -190,35 +190,35 @@ hashId : Id -> String
 hashId id =
     case id of
         0 ->
-            "x-"
+            "x"
 
         1 ->
-            "y-"
+            "y"
 
         2 ->
-            "z-"
+            "z"
 
         3 ->
-            "r-"
+            "r"
 
         4 ->
-            "s-"
+            "s"
 
         5 ->
-            "sx-"
+            "sx"
 
         6 ->
-            "sy-"
+            "sy"
 
         13 ->
             -- opacity
-            "o-"
+            "o"
 
         14 ->
-            "bgc-"
+            "bgc"
 
         _ ->
-            "unknown-"
+            "unknown"
 
 
 name : Id -> String

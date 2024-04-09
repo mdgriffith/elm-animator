@@ -459,14 +459,34 @@ props2Css now renderedProps anim =
 
 transformToHash : { a | x : Float, y : Float, rotation : Float, scale : Float } -> String
 transformToHash trans =
-    "t-"
-        ++ String.fromInt (round trans.x)
-        ++ "-"
-        ++ String.fromInt (round trans.y)
-        ++ "-"
-        ++ String.fromInt (round (trans.rotation * 100))
-        ++ "-"
-        ++ String.fromInt (round (trans.scale * 100))
+    let
+        scaleStr =
+            if trans.scale == 1 then
+                ""
+
+            else
+                "s" ++ String.fromInt (round (trans.scale * 100))
+
+        rotationStr =
+            if trans.rotation == 0 then
+                ""
+
+            else
+                "r" ++ String.fromInt (round (trans.rotation * 100))
+
+        translateStr =
+            if trans.x == 0 && trans.y == 0 then
+                ""
+
+            else
+                "t"
+                    ++ String.fromInt (round trans.x)
+                    ++ "-"
+                    ++ String.fromInt (round trans.y)
+    in
+    translateStr
+        ++ rotationStr
+        ++ scaleStr
 
 
 stateToTransform : TransformState -> Transform
