@@ -740,7 +740,7 @@ keyframeListFromNonNormalizedBezier :
     -> String
     -> String
 keyframeListFromNonNormalizedBezier steps toString str =
-    case Debug.log "STEPS" steps of
+    case steps of
         [] ->
             str
 
