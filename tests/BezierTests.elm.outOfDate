@@ -1,10 +1,10 @@
-module Bezier exposing (..)
+module BezierTests exposing (..)
 
 {-| -}
 
+import Bezier
 import Expect exposing (Expectation, FloatingPointTolerance(..))
 import Fuzz exposing (Fuzzer, float, int, list, string)
-import InternalAnim.Bezier as Bezier
 import InternalAnim.Duration as Duration
 import InternalAnim.Move as Move
 import InternalAnim.Quantity as Quantity

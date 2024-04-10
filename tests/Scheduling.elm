@@ -71,9 +71,9 @@ valueAtEquals time val tl =
         val
 
 
-seconds : Float -> Animator.Timeline.Duration
+seconds : Float -> Animator.Duration
 seconds s =
-    Animator.Timeline.ms (s * 1000)
+    Animator.ms (s * 1000)
 
 
 timeline =
@@ -688,7 +688,7 @@ cleaning =
                     now =
                         qty 1578168893838
                 in
-                Expect.true "This timeline at this time should still be active"
+                Expect.equal True
                     (Timeline.linesAreActive now lines)
         , test "Marked as running correctly, now after interuption" <|
             \_ ->
@@ -710,7 +710,7 @@ cleaning =
                     now =
                         qty 1578168893839
                 in
-                Expect.true "This timeline at this time should still be active"
+                Expect.equal True
                     (Timeline.linesAreActive now lines)
         , test "Don't eliminate penultimate event as it's needed for Timeline.previous" <|
             \_ ->
@@ -771,7 +771,7 @@ cleaning =
 
 tailRecursion =
     describe "Tail recursion"
-        [ test "Enqueueing" <|
+        [ test "Enqueueing - Successfully enqueued 10,000 events" <|
             \_ ->
                 let
                     newTimeline =
@@ -781,8 +781,8 @@ tailRecursion =
                                 (List.map (Animator.Timeline.transitionTo (seconds 1)) (List.range 0 10000))
                             |> Timeline.update (Time.millisToPosix 5000)
                 in
-                Expect.true "Successfully enqueued 10,000 events" True
-        , test "Interrupting" <|
+                Expect.equal True True
+        , test "Interrupting - Successfully interupt with 10,000 events" <|
             \_ ->
                 let
                     newTimeline =
@@ -792,8 +792,8 @@ tailRecursion =
                                 (List.map (Animator.Timeline.transitionTo (seconds 1)) (List.range 0 10000))
                             |> Timeline.update (Time.millisToPosix 5000)
                 in
-                Expect.true "Successfully interupt with 10,000 events" True
-        , test "Interpolating" <|
+                Expect.equal True True
+        , test "Interpolating - Successfully interpolate with 10,000 events" <|
             \_ ->
                 let
                     newTimeline =
@@ -811,7 +811,7 @@ tailRecursion =
                             )
                             (\x -> Value.to (toFloat x))
                 in
-                Expect.true "Successfully interpolate with 10,000 events" True
+                Expect.equal True True
         ]
 
 
@@ -831,7 +831,7 @@ ordering =
                                     ( lastTime, orderPreserved ) =
                                         List.foldl isOrderPreserved ( 0, True ) lines
                                 in
-                                Expect.true "Line order is not preserved"
+                                Expect.equal True
                                     orderPreserved
         , test "Line order test case253" <|
             \_ ->
@@ -855,7 +855,7 @@ ordering =
                                     order =
                                         List.foldl isOrderPreserved ( 0, True ) lines
                                 in
-                                Expect.true "Line order is not preserved"
+                                Expect.equal True
                                     (Tuple.second order)
         , test "Line order test case 3" <|
             \_ ->
@@ -880,7 +880,7 @@ ordering =
                                     order =
                                         List.foldl isOrderPreserved ( 0, True ) lines
                                 in
-                                Expect.true "Line order is not preserved"
+                                Expect.equal True
                                     (Tuple.second order)
         , test "Line order test case 1" <|
             \_ ->
@@ -906,7 +906,7 @@ ordering =
                                     order =
                                         List.foldl isOrderPreserved ( 0, True ) lines
                                 in
-                                Expect.true "Line order is not preserved"
+                                Expect.equal True
                                     (Tuple.second order)
         , test "Line order test case 2" <|
             \_ ->
@@ -931,7 +931,7 @@ ordering =
                                     order =
                                         List.foldl isOrderPreserved ( 0, True ) lines
                                 in
-                                Expect.true "Line order is not preserved"
+                                Expect.equal True
                                     (Tuple.second order)
         , fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
             "Event order is always preserved"
@@ -945,7 +945,7 @@ ordering =
                                     preserved =
                                         List.all isEventOrderPreserved lines
                                 in
-                                Expect.true "Event order is preserved"
+                                Expect.equal True
                                     preserved
         , fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
             "GC doesn't affect order"
@@ -955,7 +955,7 @@ ordering =
                     Timeline.Timeline details ->
                         case details.events of
                             Timeline.Timetable lines ->
-                                Expect.true "Event order after GC is preserved"
+                                Expect.equal True
                                     (List.all isEventOrderPreserved lines)
         , fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
             "GC is idempotent"
@@ -1059,7 +1059,7 @@ ordering =
                     movement =
                         Value.movement timelineAt toPosition
                 in
-                Expect.true "Is NaN"
+                Expect.equal True
                     (not (isNaN movement.position))
         , test "GC trims down a single line if necessary" <|
             \_ ->

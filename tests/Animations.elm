@@ -31,8 +31,8 @@ suite =
                                 ( animated, [] )
                             )
                 in
-                Expect.true
-                    "Expected a `transition` to be in the props list"
+                Expect.equal
+                    True
                     (List.any
                         (\( k, v ) ->
                             k == "transition"
@@ -56,8 +56,8 @@ suite =
                                     ( animated, [] )
                                 )
                 in
-                Expect.true
-                    "Expected a `transition` to be in the props list"
+                Expect.equal
+                    True
                     (List.any
                         (\( k, v ) ->
                             k == "transition"
@@ -104,8 +104,8 @@ suite =
                         Animator.css timeline
                             (\animated -> ( animated, [] ))
                 in
-                Expect.true
-                    "Expected a `transition` to be in the props list and no keygrames present"
+                Expect.equal
+                    True
                     (List.any
                         (\( k, v ) ->
                             k == "transition"
