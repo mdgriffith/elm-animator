@@ -1,7 +1,7 @@
 module Animator.Transition exposing
     ( Transition
     , linear, standard
-    , wobble, bezier
+    , spring, bezier
     )
 
 {-|
@@ -10,7 +10,7 @@ module Animator.Transition exposing
 
 @docs linear, standard
 
-@docs wobble, bezier
+@docs spring, bezier
 
 -}
 
@@ -35,8 +35,8 @@ standard =
 
 
 {-| -}
-wobble : Float -> Transition
-wobble =
+spring : { wobble : Float, quickness : Float } -> Transition
+spring =
     InternalAnim.Transition.wobble
 
 

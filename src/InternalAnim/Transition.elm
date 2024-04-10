@@ -19,8 +19,6 @@ module InternalAnim.Transition exposing
 
 @docs hash, keyframes
 
-@docs splines
-
 Current bezier formats for elm-animator
 
        Standard:
@@ -95,7 +93,11 @@ There are likewise three situations a transition will be in.
 -}
 type Transition
     = Transition Bezier.Spline
-    | Wobble { introVelocity : Float, wobble : Float }
+    | Wobble
+        { introVelocity : Float
+        , wobble : Float
+        , quickness : Float
+        }
 
 
 bezier : Float -> Float -> Float -> Float -> Transition
@@ -117,9 +119,13 @@ bezier one two three four =
 
 
 {-| -}
-wobble : Float -> Transition
-wobble w =
-    Wobble { introVelocity = 0, wobble = clamp 0 1 w }
+wobble : { wobble : Float, quickness : Float } -> Transition
+wobble options =
+    Wobble
+        { introVelocity = 0
+        , wobble = clamp 0 1 options.wobble
+        , quickness = clamp 0 1 options.quickness
+        }
 
 
 {-| Ideally we'd store a bezier
@@ -236,7 +242,7 @@ atX progress domain introVelocity exitVelocity transition =
                 params =
                     Spring.new
                         { wobble = wob.wobble
-                        , quickness = 0.5
+                        , quickness = wob.quickness
                         , settleMax = totalX
                         }
             in
@@ -281,7 +287,7 @@ atX2 progress transition =
                 params =
                     Spring.new
                         { wobble = wob.wobble
-                        , quickness = 0.5
+                        , quickness = wob.quickness
                         , settleMax = totalX
                         }
 
@@ -316,6 +322,7 @@ withVelocities intro exit transition =
         Wobble wob ->
             Wobble
                 { wobble = wob.wobble
+                , quickness = wob.quickness
                 , introVelocity = intro
                 }
 
@@ -420,7 +427,7 @@ Maybe it's a constant like 1/3 or something....
 toDomain : Domain -> Float -> Float -> Bezier.Spline -> Bezier.Spline
 toDomain domain introVelocity exitVelocity spline =
     let
-        { one, two, three, four } =
+        { two, three } =
             toBezierPoints spline
 
         totalX =
@@ -604,10 +611,10 @@ hash : Transition -> String
 hash transition =
     case transition of
         Transition spline ->
-            Hash.bezier spline
+            Hash.bezierNormalized spline
 
         Wobble f ->
-            "wob-" ++ Hash.float f.wobble
+            "wob" ++ Hash.float f.wobble
 
 
 {-| -}
@@ -618,50 +625,103 @@ keyframes :
     -> Transition
     -> String
 keyframes interpolate startPercent endPercent transition =
-    case transition of
-        Transition spline ->
-            kf
-                startPercent
-                (interpolate 0)
-                spline
+    if startPercent == endPercent then
+        ""
 
-        Wobble wob ->
-            let
-                splines =
-                    Spring.segments
-                        -- Select a spring that will wobble and settle in 1000 milliseconds
-                        (Spring.new
-                            { wobble = wob.wobble
-                            , quickness = 0.5
-                            , settleMax =
-                                -- (Quantity.Quantity (endPercent - startPercent))
-                                1000
+    else
+        case transition of
+            Transition spline ->
+                kf startPercent (interpolate 0) spline
+                    ++ (if endPercent == 100 then
+                            kf endPercent (interpolate 1) spline
+
+                        else
+                            ""
+                       )
+
+            Wobble wob ->
+                let
+                    splines =
+                        Spring.segments
+                            -- Select a spring that will wobble and settle in 1000 milliseconds
+                            (Spring.new
+                                { wobble = wob.wobble
+                                , quickness = wob.quickness
+                                , settleMax =
+                                    -- (Quantity.Quantity (endPercent - startPercent))
+                                    1000
+
+                                -- endPercent - startPercent
+                                }
+                            )
+                            { position = 0
+
+                            -- intro velocity
+                            , velocity = wob.introVelocity
+
+                            -- 0
+                            -- NOTE: need to normalize introVelocity to the 0-1 domain
                             }
-                        )
-                        { position = 0
-
-                        -- intro velocity
-                        , velocity =
-                            -- wob.introVelocity
-                            0
-
-                        -- NOTE: need to normalize introVelocity to the 0-1 domain
-                        }
-                        1
-            in
-            keyframeListFromNonNormalizedBezier splines
-                interpolate
-                ""
+                            1000
+                in
+                keyframeListFromNonNormalizedBezier splines
+                    interpolate
+                    ""
 
 
+{-|
+
+    Some nuances for keyframes!
+
+    1. animation-timing-function applies to the *upcoming* transition, so always needs to be on the preceeding keyframe
+    2. Values always correspond to the *end* of the keyframe!
+    3. We generally don't want to specify a value for the first keyframe value because this allows the browser to
+
+-}
 kf : Float -> String -> Bezier.Spline -> String
 kf percent prop spline =
-    String.fromInt (floor percent)
-        ++ "% {"
-        ++ prop
-        ++ ";animation-timing-function:"
-        ++ Bezier.toCss spline
-        ++ ";}"
+    if percent == 0 then
+        String.fromInt (floor percent)
+            ++ "% {animation-timing-function:"
+            ++ Bezier.toCss spline
+            ++ ";}"
+
+    else if percent == 100 then
+        String.fromInt (floor percent)
+            ++ "% {"
+            ++ prop
+            ++ ";}"
+
+    else
+        String.fromInt (floor percent)
+            ++ "% {"
+            ++ prop
+            ++ ";animation-timing-function:"
+            ++ Bezier.toCss spline
+            ++ ";}"
+
+
+keyframeFromSpline : Float -> value -> (value -> String) -> Bezier.Spline -> String
+keyframeFromSpline percent start toString spline =
+    if percent == 0 then
+        String.fromInt (floor percent)
+            ++ "% {animation-timing-function:"
+            ++ Bezier.toCss spline
+            ++ ";}"
+
+    else if percent == 100 then
+        String.fromInt (floor percent)
+            ++ "% {"
+            ++ toString start
+            ++ ";}"
+
+    else
+        String.fromInt (floor percent)
+            ++ "% {"
+            ++ toString start
+            ++ ";animation-timing-function:"
+            ++ Bezier.toCss spline
+            ++ ";}"
 
 
 {-| The beziers are mapped
@@ -680,25 +740,24 @@ keyframeListFromNonNormalizedBezier :
     -> String
     -> String
 keyframeListFromNonNormalizedBezier steps toString str =
-    case steps of
+    case Debug.log "STEPS" steps of
         [] ->
             str
 
         top :: [] ->
             let
                 percent =
-                    (Bezier.first top |> .x) / 10
+                    (Bezier.first top |> .x) / 1000
 
                 value =
-                    Bezier.first top
-                        |> .y
+                    ((Bezier.first top |> .y) / 1000)
                         |> toString
 
                 normalizedSpline =
                     Bezier.normalize top
 
                 finalPercent =
-                    (Bezier.last top |> .x) / 10
+                    (Bezier.last top |> .x) / 1000
 
                 finalValue =
                     Bezier.last top
@@ -706,17 +765,18 @@ keyframeListFromNonNormalizedBezier steps toString str =
                         |> toString
             in
             str
-                ++ keyframeFromSpline percent value identity normalizedSpline
-                ++ keyframeFromSpline finalPercent finalValue identity normalizedSpline
+                ++ keyframeFromSpline (percent * 100) value identity normalizedSpline
+                ++ keyframeFromSpline (finalPercent * 100) finalValue identity normalizedSpline
 
         top :: remain ->
             let
                 percent =
-                    (Bezier.first top |> .x) / 10
+                    (Bezier.first top |> .x) / 1000
 
                 value =
-                    Bezier.first top
-                        |> .y
+                    -- Bezier.first top
+                    --     |> .y
+                    ((Bezier.first top |> .y) / 1000)
                         |> toString
 
                 normalizedSpline =
@@ -726,44 +786,29 @@ keyframeListFromNonNormalizedBezier steps toString str =
                 remain
                 toString
                 (str
-                    ++ keyframeFromSpline percent value identity normalizedSpline
+                    ++ keyframeFromSpline (percent * 100) value identity normalizedSpline
                 )
 
 
-keyframeList :
-    List
-        { normalizedSpline : Bezier.Spline
-        , value : String
-        , percent : Float
-        }
-    -> String
-    -> String
-keyframeList steps str =
-    case steps of
-        [] ->
-            str
 
-        top :: remain ->
-            keyframeList
-                remain
-                (str
-                    ++ keyframeFromSpline top.percent top.value identity top.normalizedSpline
-                )
-
-
-keyframeFromSpline : Float -> value -> (value -> String) -> Bezier.Spline -> String
-keyframeFromSpline percent start toString spline =
-    String.fromInt (floor percent)
-        ++ "% {"
-        ++ toString start
-        ++ ";animation-timing-function:"
-        ++ Bezier.toCss spline
-        ++ ";}"
-
-
-finalFrame : value -> (value -> String) -> String
-finalFrame finalValue toString =
-    "100% {" ++ toString finalValue ++ ";}"
+-- keyframeList :
+--     List
+--         { normalizedSpline : Bezier.Spline
+--         , value : String
+--         , percent : Float
+--         }
+--     -> String
+--     -> String
+-- keyframeList steps str =
+--     case steps of
+--         [] ->
+--             str
+--         top :: remain ->
+--             keyframeList
+--                 remain
+--                 (str
+--                     ++ keyframeFromSpline top.percent top.value identity top.normalizedSpline
+--                 )
 
 
 {-| -}

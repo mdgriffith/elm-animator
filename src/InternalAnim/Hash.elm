@@ -1,4 +1,4 @@
-module InternalAnim.Hash exposing (bezier, float)
+module InternalAnim.Hash exposing (bezierNormalized, float)
 
 {-|
 
@@ -10,38 +10,20 @@ import Bezier
 import InternalAnim.Bits as Bits
 
 
+{-| Will only capture 2 decimal places.
+-}
 float : Float -> String
 float f =
+    String.fromInt (round (f * 100))
+
+
+bezierNormalized : Bezier.Spline -> String
+bezierNormalized spline =
     let
-        base =
-            floor f
-
-        decimal =
-            floor (100 * (f - toFloat base))
-    in
-    String.fromInt base ++ "_" ++ String.fromInt decimal
-
-
-dash : String
-dash =
-    "-"
-
-
-bezier : Bezier.Spline -> String
-bezier spline =
-    let
-        one =
-            Bezier.first spline
-
         two =
             Bezier.controlOne spline
 
         three =
             Bezier.controlTwo spline
-
-        four =
-            Bezier.last spline
     in
-    String.fromInt (Bits.value (Bits.store4Float one.x one.y two.x two.y))
-        ++ dash
-        ++ String.fromInt (Bits.value (Bits.store4Float three.x three.y four.x four.y))
+    "b" ++ String.fromInt (Bits.value (Bits.store4Float two.x two.y three.x three.y))

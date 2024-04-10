@@ -866,13 +866,14 @@ hash now name (Sequence n delay dur steps) toString =
     -- IM LOOKIN AT YOU, CHROME
     name
         ++ String.fromInt (round <| Time.inMilliseconds now)
-        ++ "-"
-        ++ String.fromInt n
-        ++ "-"
-        ++ hashDuration delay
-        ++ "-"
-        ++ hashDuration dur
-        ++ "-"
+        ++ (if n == 1 then
+                ""
+
+            else
+                "n" ++ String.fromInt n
+           )
+        ++ hashDuration "dl" delay
+        ++ hashDuration "d" dur
         ++ stepHash steps toString ""
 
 
@@ -887,9 +888,8 @@ stepHash steps toString hashed =
                 remain
                 toString
                 (hashed
-                    ++ "--"
-                    ++ hashDuration dur
-                    ++ "-"
+                    -- ++ "--"
+                    ++ hashDuration "d" dur
                     ++ Transition.hash trans
                     ++ "-"
                     ++ toString v
@@ -906,10 +906,19 @@ floatToString f =
     String.fromFloat (roundFloat f)
 
 
-hashDuration : Duration.Duration -> String
-hashDuration dur =
-    String.fromInt
-        (round (Duration.inSeconds dur))
+hashDuration : String -> Duration.Duration -> String
+hashDuration prefix dur =
+    let
+        seconds =
+            Duration.inSeconds dur
+    in
+    if seconds == 0 then
+        ""
+
+    else
+        prefix
+            ++ String.fromInt
+                (round (Duration.inSeconds dur))
 
 
 lastPosOr : value -> Sequence value -> value
@@ -1153,25 +1162,6 @@ keyframeHelper name lerp startPos toString sequenceDuration currentDur steps ren
     case steps of
         [] ->
             rendered
-
-        (Step dur transition val) :: [] ->
-            let
-                startPercent =
-                    Time.progressWithin currentDur sequenceDuration * 100
-
-                endPercent =
-                    100
-
-                frames =
-                    Transition.keyframes
-                        (\t ->
-                            lerp t startPos val
-                        )
-                        startPercent
-                        endPercent
-                        transition
-            in
-            rendered ++ frames
 
         (Step dur transition val) :: remaining ->
             let

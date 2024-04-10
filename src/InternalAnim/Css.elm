@@ -512,43 +512,64 @@ renderTransformState :
     -> String
 renderTransformState state =
     "translate("
-        ++ String.fromFloat (Units.inPixels state.x.position)
+        ++ pixelsToString state.x.position
         ++ "px, "
-        ++ String.fromFloat (Units.inPixels state.y.position)
+        ++ pixelsToString state.y.position
         ++ "px) rotate("
-        ++ String.fromFloat (Units.inPixels state.rotation.position)
+        ++ pixelsToString state.rotation.position
         ++ "turn)"
         ++ " scale("
-        ++ String.fromFloat (Units.inPixels state.scale.position)
+        ++ pixelsToString state.scale.position
         ++ ")"
+
+
+pixelsToString : Units.Pixels -> String
+pixelsToString pixels =
+    floatToString (Units.inPixels pixels)
+
+
+floatToString : Float -> String
+floatToString plusMinus =
+    let
+        float =
+            abs plusMinus
+
+        base =
+            floor float
+
+        decimal =
+            floor (100 * (float - toFloat base))
+
+        toString f =
+            if plusMinus < 0 then
+                "-" ++ String.fromInt f
+
+            else
+                String.fromInt f
+    in
+    if decimal == 0 then
+        toString base
+
+    else
+        toString base ++ "." ++ String.fromInt decimal
 
 
 transformToString trans =
     "translate("
-        ++ String.fromFloat trans.x
+        ++ floatToString trans.x
         ++ "px, "
-        ++ String.fromFloat trans.y
+        ++ floatToString trans.y
         ++ "px) rotate("
-        ++ String.fromFloat trans.rotation
+        ++ floatToString trans.rotation
         ++ "turn)"
         ++ " scale("
-        ++ String.fromFloat trans.scale
+        ++ floatToString trans.scale
         ++ ")"
 
 
 infinite : String
 infinite =
     "infinite"
-
-
-splineListHash : List Bezier.Spline -> String -> String
-splineListHash splines str =
-    case splines of
-        [] ->
-            str
-
-        top :: remain ->
-            splineListHash remain (str ++ Hash.bezier top)
 
 
 isEmptyAnim : { css | keyframes : String } -> Bool
