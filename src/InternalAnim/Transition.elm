@@ -774,8 +774,6 @@ keyframeListFromNonNormalizedBezier steps toString str =
                     (Bezier.first top |> .x) / 1000
 
                 value =
-                    -- Bezier.first top
-                    --     |> .y
                     ((Bezier.first top |> .y) / 1000)
                         |> toString
 
@@ -788,27 +786,6 @@ keyframeListFromNonNormalizedBezier steps toString str =
                 (str
                     ++ keyframeFromSpline (percent * 100) value identity normalizedSpline
                 )
-
-
-
--- keyframeList :
---     List
---         { normalizedSpline : Bezier.Spline
---         , value : String
---         , percent : Float
---         }
---     -> String
---     -> String
--- keyframeList steps str =
---     case steps of
---         [] ->
---             str
---         top :: remain ->
---             keyframeList
---                 remain
---                 (str
---                     ++ keyframeFromSpline top.percent top.value identity top.normalizedSpline
---                 )
 
 
 {-| -}
