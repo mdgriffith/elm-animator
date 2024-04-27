@@ -1006,7 +1006,7 @@ cssForSections now startPos name lerp toString toHashString sections anim =
                         _ ->
                             renderTransition name delay stepDur spline ++ ", " ++ anim.transition
                 , props =
-                    ( name, toString v ++ " !important" )
+                    ( name, toString v )
                         :: anim.props
             }
 
@@ -1079,13 +1079,7 @@ css :
     -> (value -> String)
     -> (value -> String)
     -> Sequence value
-    ->
-        { hash : String
-        , animation : String
-        , keyframes : String
-        , transition : String
-        , props : List a
-        }
+    -> CssAnim
 css now startPos name lerp toString toHashString seq =
     let
         animationName =
@@ -1130,18 +1124,33 @@ css now startPos name lerp toString toHashString seq =
             ++ animationName
     , keyframes =
         ("@keyframes " ++ animationName ++ " {\n")
-            ++ keyframes name lerp startPos toString seq ""
+            ++ keyframes name lerp startPos seq ""
             ++ "\n}"
-    , props = []
+    , props = initialProps name toString startPos seq
     }
 
 
-keyframes : String -> (Float -> value -> value -> String) -> value -> (value -> String) -> Sequence value -> String -> String
-keyframes name lerp startPos toString (Sequence _ _ dur steps) rendered =
+{-| If the first step is a `set`, then we set those properties immediately
+-}
+initialProps : String -> (value -> String) -> value -> Sequence value -> List ( String, String )
+initialProps name toString startPos (Sequence _ _ _ steps) =
+    case steps of
+        [] ->
+            []
+
+        (Step dur transition val) :: _ ->
+            if Duration.isZero dur then
+                [ ( name, toString val ) ]
+
+            else
+                []
+
+
+keyframes : String -> (Float -> value -> value -> String) -> value -> Sequence value -> String -> String
+keyframes name lerp startPos (Sequence _ _ dur steps) rendered =
     keyframeHelper name
         lerp
         startPos
-        (\v -> name ++ ":" ++ toString v ++ "!important")
         dur
         zeroDuration
         steps
@@ -1152,13 +1161,12 @@ keyframeHelper :
     String
     -> (Float -> value -> value -> String)
     -> value
-    -> (value -> String)
     -> Time.Duration
     -> Time.Duration
     -> List (Step value)
     -> String
     -> String
-keyframeHelper name lerp startPos toString sequenceDuration currentDur steps rendered =
+keyframeHelper name lerp startPos sequenceDuration currentDur steps rendered =
     case steps of
         [] ->
             rendered
@@ -1187,7 +1195,6 @@ keyframeHelper name lerp startPos toString sequenceDuration currentDur steps ren
                 name
                 lerp
                 val
-                toString
                 sequenceDuration
                 nextCurrent
                 remaining

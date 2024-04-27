@@ -1,4 +1,4 @@
-module InternalAnim.Duration exposing (Duration, inMilliseconds, inSeconds, milliseconds)
+module InternalAnim.Duration exposing (Duration, inMilliseconds, inSeconds, isZero, milliseconds)
 
 import InternalAnim.Quantity as Quantity
 
@@ -9,6 +9,11 @@ type alias Duration =
 
 type Seconds
     = Seconds
+
+
+isZero : Duration -> Bool
+isZero (Quantity.Quantity seconds) =
+    seconds == 0
 
 
 inMilliseconds : Duration -> Float
