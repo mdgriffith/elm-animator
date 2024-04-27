@@ -68,10 +68,21 @@ type Prop
     | ColorProp String (Move.Move Color.Color)
 
 
+isTransformProp : Prop -> Bool
 isTransformProp prop =
     case prop of
         Prop id name _ _ ->
             Props.isTransformId id
+
+        ColorProp _ _ ->
+            False
+
+
+isGroupProp : Id -> Prop -> Bool
+isGroupProp groupId prop =
+    case prop of
+        Prop id _ _ _ ->
+            Props.isGroup groupId id
 
         ColorProp _ _ ->
             False
@@ -169,22 +180,29 @@ cssFromProps timeline lookup =
 getInitial : Timeline.Timeline event -> (event -> List Prop) -> List RenderedProp
 getInitial timeline lookup =
     let
-        ( maybeTransform, renderedProps ) =
+        rendered =
             Timeline.foldpAll lookup
                 (\props ->
-                    toInitialProps props ( Nothing, [] )
+                    toInitialProps props { props = [], translation = Nothing, scale = Nothing }
                 )
                 (\get prev target now startTime endTime future cursor ->
                     addInitialProps (get (Timeline.getEvent target)) cursor
                 )
                 timeline
     in
-    case maybeTransform of
+    rendered.props
+        |> addMaybeVector rendered.translation
+        |> addMaybeVector rendered.scale
+
+
+addMaybeVector : Maybe VectorDetails -> List RenderedProp -> List RenderedProp
+addMaybeVector maybeVector renderedProps =
+    case maybeVector of
         Nothing ->
             renderedProps
 
-        Just trans ->
-            TransformProp trans :: renderedProps
+        Just vector ->
+            VectorProp vector :: renderedProps
 
 
 initState x =
@@ -194,11 +212,26 @@ initState x =
     }
 
 
-toInitialProps : List Prop -> ( Maybe TransformPropDetails, List RenderedProp ) -> ( Maybe TransformPropDetails, List RenderedProp )
-toInitialProps props (( maybeTransform, rendered ) as untouched) =
+type alias AllRenderedProps =
+    { props : List RenderedProp
+    , translation : Maybe VectorDetails
+    , scale : Maybe VectorDetails
+    }
+
+
+initVector : Float -> VectorState
+initVector i =
+    { x = initState i
+    , y = initState i
+    , z = initState i
+    }
+
+
+toInitialProps : List Prop -> AllRenderedProps -> AllRenderedProps
+toInitialProps props rendered =
     case props of
         [] ->
-            untouched
+            rendered
 
         (Prop id name movement format) :: remaining ->
             let
@@ -207,48 +240,71 @@ toInitialProps props (( maybeTransform, rendered ) as untouched) =
                         (Props.default id)
             in
             toInitialProps remaining
-                (if Props.isTransformId id then
-                    case maybeTransform of
+                (if Props.isTranslateId id then
+                    case rendered.translation of
                         Nothing ->
-                            ( Just
-                                { sections = []
-                                , state =
-                                    { x = initState 0
-                                    , y = initState 0
-                                    , scale = initState 1
-                                    , rotation = initState 0
+                            { props = rendered.props
+                            , translation =
+                                Just
+                                    { group = Props.groups.translation
+                                    , name = name
+                                    , format = format
+                                    , sections = []
+                                    , state = initVector 0
                                     }
-                                }
-                            , rendered
-                            )
+                            , scale = rendered.scale
+                            }
 
-                        Just trans ->
+                        Just _ ->
                             -- we've already initialized the transform
-                            untouched
+                            rendered
+
+                 else if Props.isScaleId id then
+                    case rendered.scale of
+                        Nothing ->
+                            { props = rendered.props
+                            , translation = rendered.scale
+                            , scale =
+                                Just
+                                    { group = Props.groups.scaling
+                                    , name = name
+                                    , format = format
+                                    , sections = []
+                                    , state = initVector 1
+                                    }
+                            }
+
+                        Just _ ->
+                            -- we've already initialized the transform
+                            rendered
 
                  else
-                    ( maybeTransform
-                    , RenderedProp
-                        { id = id
-                        , name = name
-                        , format = format
-                        , sections = []
-                        , state = state
-                        }
-                        :: rendered
-                    )
+                    { props =
+                        RenderedProp
+                            { id = id
+                            , name = name
+                            , format = format
+                            , sections = []
+                            , state = state
+                            }
+                            :: rendered.props
+                    , translation = rendered.translation
+                    , scale = rendered.scale
+                    }
                 )
 
         (ColorProp name (Move.Pos _ color _)) :: remaining ->
             toInitialProps remaining
-                ( maybeTransform
-                , RenderedColorProp
-                    { name = name
-                    , color = color
-                    , sections = []
-                    }
-                    :: rendered
-                )
+                { props =
+                    RenderedColorProp
+                        { name = name
+                        , color = color
+                        , sections = []
+                        }
+                        :: rendered.props
+                , translation = rendered.translation
+                , scale = rendered.scale
+                }
 
 
 matchProp : Id -> RenderedProp -> Bool
@@ -261,6 +317,9 @@ matchProp id renderedProp =
             False
 
         TransformProp details ->
+            False
+
+        VectorProp details ->
             False
 
 
@@ -276,56 +335,75 @@ matchColor name renderedProp =
         TransformProp details ->
             False
 
+        VectorProp details ->
+            False
+
 
 {-| If a props isn't defined in the first state, but is defined in the future, we want to add it.
 -}
-addInitialProps : List Prop -> ( Maybe TransformPropDetails, List RenderedProp ) -> ( Maybe TransformPropDetails, List RenderedProp )
-addInitialProps props (( maybeTransform, rendered ) as untouched) =
+addInitialProps : List Prop -> AllRenderedProps -> AllRenderedProps
+addInitialProps props rendered =
     case props of
         [] ->
-            untouched
+            rendered
 
         (Prop id name movement format) :: remaining ->
             let
                 new =
-                    if Props.isTransformId id then
-                        case maybeTransform of
+                    if Props.isTranslateId id then
+                        case rendered.translation of
                             Nothing ->
-                                ( Just
-                                    { sections = []
-                                    , state =
-                                        { x = initState 0
-                                        , y = initState 0
-                                        , scale = initState 1
-                                        , rotation = initState 0
+                                { props = rendered.props
+                                , translation =
+                                    Just
+                                        { group = Props.groups.translation
+                                        , name = name
+                                        , format = format
+                                        , sections = []
+                                        , state = initVector 0
                                         }
-                                    }
-                                , rendered
-                                )
+                                , scale = rendered.scale
+                                }
 
-                            Just trans ->
+                            Just _ ->
                                 -- we've already initialized the transform
-                                untouched
+                                rendered
 
-                    else if List.any (\renderedProp -> matchProp id renderedProp) rendered then
-                        untouched
+                    else if Props.isScaleId id then
+                        case rendered.scale of
+                            Nothing ->
+                                { props = rendered.props
+                                , translation = rendered.scale
+                                , scale =
+                                    Just
+                                        { group = Props.groups.scaling
+                                        , name = name
+                                        , format = format
+                                        , sections = []
+                                        , state = initVector 1
+                                        }
+                                }
+
+                            Just _ ->
+                                -- we've already initialized the transform
+                                rendered
+
+                    else if List.any (\renderedProp -> matchProp id renderedProp) rendered.props then
+                        rendered
 
                     else
-                        let
-                            state =
-                                Move.init
-                                    (Props.default id)
-                        in
-                        ( maybeTransform
-                        , RenderedProp
-                            { id = id
-                            , name = name
-                            , format = format
-                            , sections = []
-                            , state = state
-                            }
-                            :: rendered
-                        )
+                        { props =
+                            RenderedProp
+                                { id = id
+                                , name = name
+                                , format = format
+                                , sections = []
+                                , state = Move.init (Props.default id)
+                                }
+                                :: rendered.props
+                        , translation = rendered.translation
+                        , scale = rendered.scale
+                        }
             in
             addInitialProps remaining
                 new
@@ -333,18 +411,20 @@ addInitialProps props (( maybeTransform, rendered ) as untouched) =
         (ColorProp name (Move.Pos _ color _)) :: remaining ->
             let
                 new =
-                    if List.any (\renderedProp -> matchColor name renderedProp) rendered then
-                        untouched
+                    if List.any (\renderedProp -> matchColor name renderedProp) rendered.props then
+                        rendered
 
                     else
-                        ( maybeTransform
-                        , RenderedColorProp
-                            { name = name
-                            , color = color
-                            , sections = []
-                            }
-                            :: rendered
-                        )
+                        { props =
+                            RenderedColorProp
+                                { name = name
+                                , color = color
+                                , sections = []
+                                }
+                                :: rendered.props
+                        , translation = rendered.translation
+                        , scale = rendered.scale
+                        }
             in
             addInitialProps remaining
                 new
@@ -426,6 +506,37 @@ props2Css now renderedProps anim =
                             |> combine anim
                 )
 
+        (VectorProp details) :: remain ->
+            props2Css now
+                remain
+                (case details.sections of
+                    [] ->
+                        { anim
+                            | hash = vectorToHash details.group (vectorStateToVector details.state) ++ anim.hash
+                            , props =
+                                ( details.name
+                                , Props.vectorToString details.group (vectorStateToVector details.state)
+                                )
+                                    :: anim.props
+                        }
+
+                    _ ->
+                        Move.cssForSections now
+                            (vectorStateToVector details.state)
+                            details.name
+                            (\t one two ->
+                                details.name
+                                    ++ ": "
+                                    ++ Props.vectorToString details.group
+                                        (Move.lerpVector t one two)
+                            )
+                            (Props.vectorToString details.group)
+                            (vectorToHash details.group)
+                            (List.reverse details.sections)
+                            emptyAnim
+                            |> combine anim
+                )
+
         (TransformProp details) :: remain ->
             props2Css now
                 remain
@@ -455,6 +566,32 @@ props2Css now renderedProps anim =
                             emptyAnim
                             |> combine anim
                 )
+
+
+vectorToHash : Props.Id -> Vector -> String
+vectorToHash group vec =
+    if vec.x == 0 && vec.y == 0 && vec.z == 0 then
+        ""
+
+    else
+        let
+            tag =
+                case group of
+                    10 ->
+                        "t"
+
+                    20 ->
+                        "s"
+
+                    _ ->
+                        "v"
+        in
+        tag
+            ++ Hash.float vec.x
+            ++ "-"
+            ++ Hash.float vec.y
+            ++ "-"
+            ++ Hash.float vec.z
 
 
 transformToHash : { a | x : Float, y : Float, rotation : Float, scale : Float } -> String
@@ -487,6 +624,17 @@ transformToHash trans =
     translateStr
         ++ rotationStr
         ++ scaleStr
+
+
+vectorStateToVector : VectorState -> Vector
+vectorStateToVector state =
+    { x =
+        Units.inPixels state.x.position
+    , y =
+        Units.inPixels state.y.position
+    , z =
+        Units.inPixels state.z.position
+    }
 
 
 stateToTransform : TransformState -> Transform
@@ -732,6 +880,122 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                     targetProp
                         }
 
+                VectorProp details ->
+                    -- for each prop
+                    --  calculate a new state
+                    --  calculate a new transition
+                    --     (for now), take the most "different" curve
+                    --  Compose a new `Move Transform` with the transition
+                    --
+                    let
+                        targetProps : List Prop
+                        targetProps =
+                            Timeline.getEvent target
+                                |> lookup
+                                |> List.filter (isGroupProp details.group)
+
+                        commonTransition =
+                            if not (Time.equal (Timeline.endTime prev) startTime) then
+                                let
+                                    fastestVelocity =
+                                        firstNonZero
+                                            [ normalizeVelocity
+                                                startTime
+                                                targetTime
+                                                (Units.inPixels details.state.x.position)
+                                                targets.x
+                                                details.state.x.velocity
+                                            , normalizeVelocity
+                                                startTime
+                                                targetTime
+                                                (Units.inPixels details.state.y.position)
+                                                targets.y
+                                                details.state.y.velocity
+                                            , normalizeVelocity
+                                                startTime
+                                                targetTime
+                                                (Units.inPixels details.state.z.position)
+                                                targets.z
+                                                details.state.z.velocity
+                                            ]
+                                in
+                                getCommonTransformTransition
+                                    targetProps
+                                    Transition.standard
+                                    |> Transition.withVelocities fastestVelocity
+                                        -- If we do any transition smoothing
+                                        -- we'll need to normalize this velocity too
+                                        --Estimation.velocityAtTarget lookupState target future
+                                        0
+
+                            else
+                                getCommonTransformTransition
+                                    targetProps
+                                    Transition.standard
+
+                        commonSequence =
+                            getCommonVectorSequence details.group
+                                targetProps
+                                []
+
+                        targets =
+                            { x =
+                                getVectorSlot details.group Props.X targetProps
+                            , y =
+                                getVectorSlot details.group Props.Y targetProps
+                            , z =
+                                getVectorSlot details.group Props.Z targetProps
+                            }
+
+                        commonMovement =
+                            Move.move commonTransition
+                                targets
+                                commonSequence
+                    in
+                    VectorProp
+                        { group = details.group
+                        , name = details.name
+                        , format = details.format
+                        , sections =
+                            if finished then
+                                details.sections
+
+                            else
+                                Move.sequences
+                                    startTime
+                                    targetTime
+                                    now
+                                    endTime
+                                    commonMovement
+                                    details.sections
+                        , state =
+                            { x =
+                                Move.at progress
+                                    startTime
+                                    targetTime
+                                    (Move.toWith commonTransition
+                                        targets.x
+                                    )
+                                    details.state.x
+                            , y =
+                                Move.at progress
+                                    startTime
+                                    targetTime
+                                    (Move.toWith commonTransition
+                                        targets.y
+                                    )
+                                    details.state.y
+                            , z =
+                                Move.at progress
+                                    startTime
+                                    targetTime
+                                    (Move.toWith commonTransition
+                                        targets.z
+                                    )
+                                    details.state.z
+                            }
+                        }
+
                 TransformProp details ->
                     -- for each prop
                     --  calculate a new state
@@ -887,7 +1151,120 @@ firstNonZero list =
     *warning! this need to be called with pre-filtered props that are only transform props!
 
 -}
-getCommonTransformSequence : List Prop -> List (Move.Sequence Transform) -> List (Move.Sequence Transform)
+getCommonVectorSequence :
+    Props.Id
+    -> List Prop
+    -> List (Move.Sequence Vector)
+    -> List (Move.Sequence Vector)
+getCommonVectorSequence groupId props sequences =
+    case props of
+        (Prop id name (Move.Pos trans v propSeq) format) :: _ ->
+            -- sequences
+            vectorSeq groupId props propSeq 0 []
+
+        _ ->
+            sequences
+
+
+vectorSeq :
+    Id
+    -> List Prop
+    -> List (Move.Sequence Float)
+    -> Int
+    -> List (Move.Sequence Vector)
+    -> List (Move.Sequence Vector)
+vectorSeq groupId props pilotSequence seqLevel renderedSeq =
+    case pilotSequence of
+        [] ->
+            renderedSeq
+
+        (Move.Sequence n delay dur steps) :: remain ->
+            vectorSeq groupId
+                props
+                remain
+                (seqLevel + 1)
+                (Move.Sequence n
+                    delay
+                    dur
+                    (gatherVectorSteps groupId
+                        seqLevel
+                        0
+                        steps
+                        props
+                        []
+                    )
+                    :: renderedSeq
+                )
+
+
+gatherVectorSteps :
+    Id
+    -> Int
+    -> Int
+    -> List (Move.Step Float)
+    -> List Prop
+    -> List (Move.Step Vector)
+    -> List (Move.Step Vector)
+gatherVectorSteps groupId seqLevel stepLevel steps props transforms =
+    case steps of
+        [] ->
+            transforms
+
+        (Move.Step dur trans target) :: remainingSteps ->
+            gatherVectorSteps groupId
+                seqLevel
+                (stepLevel + 1)
+                remainingSteps
+                props
+                (getVectorStepAt groupId dur trans seqLevel stepLevel props
+                    :: transforms
+                )
+
+
+getVectorStepAt groupId dur trans seqLevel stepLevel props =
+    let
+        x =
+            Props.vectorSlotToId groupId Props.X
+
+        y =
+            Props.vectorSlotToId groupId Props.Y
+
+        z =
+            Props.vectorSlotToId groupId Props.Z
+    in
+    Move.Step dur
+        trans
+        { x =
+            getTransformSequenceValueAt seqLevel
+                stepLevel
+                x
+                props
+        , y =
+            getTransformSequenceValueAt seqLevel
+                stepLevel
+                y
+                props
+        , z =
+            getTransformSequenceValueAt seqLevel
+                stepLevel
+                z
+                props
+        }
+
+
+
+{- END VECTOR -}
+
+
+{-|
+
+    *warning! this need to be called with pre-filtered props that are only transform props!
+
+-}
+getCommonTransformSequence :
+    List Prop
+    -> List (Move.Sequence Transform)
+    -> List (Move.Sequence Transform)
 getCommonTransformSequence props sequences =
     case props of
         (Prop id name (Move.Pos trans v propSeq) format) :: _ ->
@@ -898,7 +1275,12 @@ getCommonTransformSequence props sequences =
             sequences
 
 
-transformSeq : List Prop -> List (Move.Sequence Float) -> Int -> List (Move.Sequence Transform) -> List (Move.Sequence Transform)
+transformSeq :
+    List Prop
+    -> List (Move.Sequence Float)
+    -> Int
+    -> List (Move.Sequence Transform)
+    -> List (Move.Sequence Transform)
 transformSeq props pilotSequence seqLevel renderedTransforms =
     case pilotSequence of
         [] ->
@@ -1012,7 +1394,10 @@ getAt i list =
                 getAt (i - 1) remain
 
 
-getCommonTransformTransition : List Prop -> Transition.Transition -> Transition.Transition
+getCommonTransformTransition :
+    List Prop
+    -> Transition.Transition
+    -> Transition.Transition
 getCommonTransformTransition props currentTrans =
     case props of
         [] ->
@@ -1027,6 +1412,50 @@ getCommonTransformTransition props currentTrans =
 
         (ColorProp _ (Move.Pos trans _ _)) :: remain ->
             getCommonTransformTransition remain trans
+
+
+getVectorSlot : Id -> Props.VectorSlot -> List Prop -> Float
+getVectorSlot groupId slot props =
+    valueOrDefault (Props.groupToCompoundId groupId)
+        (Props.vectorSlotToId groupId slot)
+        props
+        Nothing
+
+
+{-| -}
+valueOrDefault : Maybe Id -> Id -> List Prop -> Maybe Float -> Float
+valueOrDefault maybeDefaultid targetId props defaultVal =
+    case props of
+        [] ->
+            case defaultVal of
+                Nothing ->
+                    Props.defaultPosition targetId
+
+                Just val ->
+                    val
+
+        (Prop id name move _) :: remain ->
+            if id - targetId == 0 then
+                case move of
+                    Move.Pos _ v _ ->
+                        v
+
+            else
+                case maybeDefaultid of
+                    Nothing ->
+                        valueOrDefault maybeDefaultid targetId remain defaultVal
+
+                    Just defaultId ->
+                        if id - defaultId == 0 then
+                            case move of
+                                Move.Pos _ v _ ->
+                                    valueOrDefault Nothing targetId remain (Just v)
+
+                        else
+                            valueOrDefault maybeDefaultid targetId remain defaultVal
+
+        (ColorProp name movement) :: remain ->
+            valueOrDefault maybeDefaultid targetId remain defaultVal
 
 
 {-| -}
@@ -1125,6 +1554,33 @@ type RenderedProp
     = RenderedProp RenderedPropDetails
     | RenderedColorProp RenderedColorPropDetails
     | TransformProp TransformPropDetails
+      -- transform can now be deconstructed into its parts
+      -- This is for translation and scaling
+      -- Rotation is a RenderedProp
+    | VectorProp VectorDetails
+
+
+type alias Vector =
+    { x : Float
+    , y : Float
+    , z : Float
+    }
+
+
+type alias VectorState =
+    { x : Move.State
+    , y : Move.State
+    , z : Move.State
+    }
+
+
+type alias VectorDetails =
+    { group : Id
+    , name : String
+    , format : Props.Format
+    , sections : List (Move.Sequence Vector)
+    , state : VectorState
+    }
 
 
 type alias RenderedPropDetails =

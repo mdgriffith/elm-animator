@@ -1,7 +1,9 @@
 module Animator exposing
     ( Animation, transition
     , Attribute, opacity
-    , rotation, x, y, scale, scaleX, scaleY
+    , rotation, rotationAround
+    , x, y, z
+    , scale, scaleX, scaleY, scaleZ
     , color, px, int, float
     , withTransition, withStepTransition
     , Duration, ms, delay
@@ -19,7 +21,11 @@ module Animator exposing
 
 @docs Attribute, opacity
 
-@docs rotation, x, y, scale, scaleX, scaleY
+@docs rotation, rotationAround
+
+@docs x, y, z
+
+@docs scale, scaleX, scaleY, scaleZ
 
 @docs color, px, int, float
 
@@ -127,7 +133,7 @@ scale : Float -> Attribute
 scale s =
     Css.Prop
         InternalAnim.Css.Props.ids.scale
-        ""
+        "scale"
         (Move.to s)
         InternalAnim.Css.Props.float
 
@@ -137,7 +143,7 @@ scaleX : Float -> Attribute
 scaleX s =
     Css.Prop
         InternalAnim.Css.Props.ids.scaleX
-        ""
+        "scale"
         (Move.to s)
         InternalAnim.Css.Props.float
 
@@ -147,7 +153,17 @@ scaleY : Float -> Attribute
 scaleY s =
     Css.Prop
         InternalAnim.Css.Props.ids.scaleY
-        ""
+        "scale"
+        (Move.to s)
+        InternalAnim.Css.Props.float
+
+
+{-| -}
+scaleZ : Float -> Attribute
+scaleZ s =
+    Css.Prop
+        InternalAnim.Css.Props.ids.scaleZ
+        "scale"
         (Move.to s)
         InternalAnim.Css.Props.float
 
@@ -157,9 +173,23 @@ rotation : Float -> Attribute
 rotation n =
     Css.Prop
         InternalAnim.Css.Props.ids.rotation
-        ""
+        "rotate"
         (Move.to n)
-        InternalAnim.Css.Props.float
+        (InternalAnim.Css.Props.turns zAxis)
+
+
+{-| -}
+rotationAround : { x : Float, y : Float, z : Float } -> Float -> Attribute
+rotationAround axis n =
+    Css.Prop
+        InternalAnim.Css.Props.ids.rotation
+        "rotate"
+        (Move.to n)
+        (InternalAnim.Css.Props.turns axis)
+
+
+zAxis =
+    { x = 0, y = 0, z = 1 }
 
 
 {-| -}
@@ -167,7 +197,7 @@ x : Float -> Attribute
 x n =
     Css.Prop
         InternalAnim.Css.Props.ids.x
-        ""
+        "translate"
         (Move.to n)
         InternalAnim.Css.Props.float
 
@@ -177,7 +207,17 @@ y : Float -> Attribute
 y n =
     Css.Prop
         InternalAnim.Css.Props.ids.y
-        ""
+        "translate"
+        (Move.to n)
+        InternalAnim.Css.Props.float
+
+
+{-| -}
+z : Float -> Attribute
+z n =
+    Css.Prop
+        InternalAnim.Css.Props.ids.z
+        "translate"
         (Move.to n)
         InternalAnim.Css.Props.float
 

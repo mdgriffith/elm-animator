@@ -1,20 +1,23 @@
 module InternalAnim.Css.Props exposing
-    ( Id, ids, hash, default, defaultPosition
-    , isTransformId
-    , Format, format, float, int, px
+    ( Id, ids, hash, default, defaultPosition, groups
+    , isTransformId, isTranslateId, isRotateId, isScaleId
+    , Format, format, float, int, px, turns
     , roundFloat, floatToString
-    , colorHash, name, noId, toStr, translateX, transparent, zero
+    , isGroup
+    , VectorSlot(..), colorHash, groupToCompoundId, name, noId, toStr, translateX, transparent, vectorSlotToId, vectorToString, zero
     )
 
 {-|
 
-@docs Id, ids, hash, default, defaultPosition
+@docs Id, ids, hash, default, defaultPosition, groups
 
-@docs isTransformId
+@docs isTransformId, isTranslateId, isRotateId, isScaleId
 
-@docs Format, format, float, int, px
+@docs Format, format, float, int, px, turns
 
 @docs roundFloat, floatToString
+
+@docs translateToString, isGroup
 
 -}
 
@@ -22,6 +25,91 @@ import Bitwise
 import Color
 import InternalAnim.Hash as Hash
 import InternalAnim.Move as Move
+
+
+vectorToString : Id -> { x : Float, y : Float, z : Float } -> String
+vectorToString id vec =
+    case id of
+        10 ->
+            translateToString vec
+
+        20 ->
+            scaleToString vec
+
+        _ ->
+            vectorToCssString vec
+
+
+translateToString : { x : Float, y : Float, z : Float } -> String
+translateToString { x, y, z } =
+    floatToString x ++ "px " ++ floatToString y ++ "px " ++ floatToString z ++ "px"
+
+
+scaleToString : { x : Float, y : Float, z : Float } -> String
+scaleToString vec =
+    vectorToCssString vec
+
+
+vectorToCssString : { x : Float, y : Float, z : Float } -> String
+vectorToCssString { x, y, z } =
+    floatToString x ++ " " ++ floatToString y ++ " " ++ floatToString z
+
+
+type VectorSlot
+    = X
+    | Y
+    | Z
+
+
+type alias Vector =
+    { x : Float
+    , y : Float
+    , z : Float
+    }
+
+
+{-| Giving the scaling group, return the property that sets all scaling/
+-}
+groupToCompoundId : Id -> Maybe Id
+groupToCompoundId groupId =
+    case groupId of
+        10 ->
+            Nothing
+
+        20 ->
+            Just 4
+
+        _ ->
+            Nothing
+
+
+vectorSlotToId : Id -> VectorSlot -> Id
+vectorSlotToId id slot =
+    case id of
+        10 ->
+            case slot of
+                X ->
+                    0
+
+                Y ->
+                    1
+
+                Z ->
+                    2
+
+        20 ->
+            case slot of
+                X ->
+                    5
+
+                Y ->
+                    6
+
+                Z ->
+                    7
+
+        _ ->
+            0
 
 
 roundFloat : Float -> Float
@@ -51,6 +139,9 @@ hashFormat form num =
         Px ->
             String.fromInt (round num) ++ "px"
 
+        Turns vec ->
+            Hash.float num
+
         TranslateX ->
             "translateX(" ++ String.fromInt (round num) ++ "px)"
 
@@ -67,6 +158,9 @@ format form num =
         Px ->
             String.fromInt (round num) ++ "px"
 
+        Turns vec ->
+            vectorToCssString vec ++ " " ++ String.fromFloat (roundFloat num) ++ "turn"
+
         TranslateX ->
             "translateX(" ++ String.fromInt (round num) ++ "px)"
 
@@ -76,6 +170,12 @@ type Format
     | AsInt
     | Px
     | TranslateX
+    | Turns Vector
+
+
+turns : Vector -> Format
+turns vec =
+    Turns vec
 
 
 float : Format
@@ -110,6 +210,50 @@ noId =
     100000
 
 
+isGroup : Id -> Id -> Bool
+isGroup groupId id =
+    case groupId of
+        10 ->
+            case id of
+                0 ->
+                    True
+
+                1 ->
+                    True
+
+                3 ->
+                    True
+
+                _ ->
+                    False
+
+        20 ->
+            case id of
+                4 ->
+                    True
+
+                5 ->
+                    True
+
+                6 ->
+                    True
+
+                7 ->
+                    True
+
+                _ ->
+                    False
+
+        _ ->
+            False
+
+
+groups =
+    { scaling = 20
+    , translation = 10
+    }
+
+
 ids =
     { x = 0
     , y = 1
@@ -118,6 +262,7 @@ ids =
     , scale = 4
     , scaleX = 5
     , scaleY = 6
+    , scaleZ = 7
     , opacity = 13
     }
 
@@ -134,6 +279,21 @@ type alias Id =
 isTransformId : Id -> Bool
 isTransformId id =
     id < 12
+
+
+isTranslateId : Id -> Bool
+isTranslateId id =
+    id < 3
+
+
+isRotateId : Id -> Bool
+isRotateId id =
+    id == 3
+
+
+isScaleId : Id -> Bool
+isScaleId id =
+    id == 4 || id == 5 || id == 6 || id == 7
 
 
 hash :
@@ -296,6 +456,10 @@ defaultPosition id =
 
         6 ->
             -- scalex
+            1
+
+        7 ->
+            -- scalez
             1
 
         _ ->

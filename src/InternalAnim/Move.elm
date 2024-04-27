@@ -1,7 +1,7 @@
 module InternalAnim.Move exposing
     ( Move(..), to, toWith
     , State, init
-    , lerpColor, lerpFloat, lerpTransform
+    , lerpColor, lerpFloat, lerpTransform, lerpVector
     , Sequence(..)
     , Step(..), step, stepWith, set
     , sequences
@@ -18,7 +18,7 @@ module InternalAnim.Move exposing
 
 @docs State, init
 
-@docs lerpColor, lerpFloat, lerpTransform
+@docs lerpColor, lerpFloat, lerpTransform, lerpVector
 
 @docs Sequence
 @docs Step, step, stepWith, set
@@ -217,6 +217,24 @@ lerpColor progress from target =
 average : Float -> Float -> Float -> Float
 average x y progress =
     sqrt ((x * x) * (1 - progress) + (y * y) * progress)
+
+
+type alias Vector =
+    { x : Float
+    , y : Float
+    , z : Float
+    }
+
+
+lerpVector : Float -> Vector -> Vector -> Vector
+lerpVector t one two =
+    { x =
+        lerpFloat t one.x two.x
+    , y =
+        lerpFloat t one.y two.y
+    , z =
+        lerpFloat t one.z two.z
+    }
 
 
 lerpTransform : Float -> Transform -> Transform -> Transform
