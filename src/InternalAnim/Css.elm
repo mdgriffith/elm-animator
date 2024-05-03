@@ -1237,18 +1237,24 @@ getVectorStepAt groupId dur trans seqLevel stepLevel props =
         { x =
             getTransformSequenceValueAt seqLevel
                 stepLevel
+                (Props.groupToCompoundId groupId)
                 x
                 props
+                Nothing
         , y =
             getTransformSequenceValueAt seqLevel
                 stepLevel
+                (Props.groupToCompoundId groupId)
                 y
                 props
+                Nothing
         , z =
             getTransformSequenceValueAt seqLevel
                 stepLevel
+                (Props.groupToCompoundId groupId)
                 z
                 props
+                Nothing
         }
 
 
@@ -1331,31 +1337,44 @@ getTransformStepAt dur trans seqLevel stepLevel props =
         { x =
             getTransformSequenceValueAt seqLevel
                 stepLevel
+                Nothing
                 Props.ids.x
                 props
+                Nothing
         , y =
             getTransformSequenceValueAt seqLevel
                 stepLevel
+                Nothing
                 Props.ids.y
                 props
+                Nothing
         , scale =
             getTransformSequenceValueAt seqLevel
                 stepLevel
+                Nothing
                 Props.ids.scale
                 props
+                Nothing
         , rotation =
             getTransformSequenceValueAt seqLevel
                 stepLevel
+                Nothing
                 Props.ids.rotation
                 props
+                Nothing
         }
 
 
-getTransformSequenceValueAt : Int -> Int -> Props.Id -> List Prop -> Float
-getTransformSequenceValueAt seqLevel stepLevel targetId props =
+getTransformSequenceValueAt : Int -> Int -> Maybe Props.Id -> Props.Id -> List Prop -> Maybe Float -> Float
+getTransformSequenceValueAt seqLevel stepLevel maybeDefaultId targetId props defaultValue =
     case props of
         [] ->
-            Props.defaultPosition targetId
+            case defaultValue of
+                Nothing ->
+                    Props.defaultPosition targetId
+
+                Just default ->
+                    default
 
         (Prop id name move _) :: remain ->
             if id - targetId == 0 then
@@ -1374,10 +1393,35 @@ getTransformSequenceValueAt seqLevel stepLevel targetId props =
                                         stepValue
 
             else
-                getTransformSequenceValueAt seqLevel stepLevel targetId remain
+                case maybeDefaultId of
+                    Nothing ->
+                        getTransformSequenceValueAt seqLevel stepLevel maybeDefaultId targetId remain defaultValue
+
+                    Just defaultId ->
+                        if id - defaultId == 0 then
+                            let
+                                newDefaultValue =
+                                    case move of
+                                        Move.Pos _ v seq ->
+                                            case getAt seqLevel seq of
+                                                Nothing ->
+                                                    v
+
+                                                Just (Move.Sequence _ _ _ seqSteps) ->
+                                                    case getAt stepLevel seqSteps of
+                                                        Nothing ->
+                                                            v
+
+                                                        Just (Move.Step _ _ stepValue) ->
+                                                            stepValue
+                            in
+                            getTransformSequenceValueAt seqLevel stepLevel Nothing targetId remain (Just newDefaultValue)
+
+                        else
+                            getTransformSequenceValueAt seqLevel stepLevel maybeDefaultId targetId remain defaultValue
 
         (ColorProp name movement) :: remain ->
-            getTransformSequenceValueAt seqLevel stepLevel targetId remain
+            getTransformSequenceValueAt seqLevel stepLevel maybeDefaultId targetId remain defaultValue
 
 
 getAt : Int -> List a -> Maybe a

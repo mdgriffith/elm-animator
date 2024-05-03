@@ -140,7 +140,7 @@ hashFormat form num =
             String.fromInt (round num) ++ "px"
 
         Turns vec ->
-            Hash.float num
+            String.fromInt (round num)
 
         TranslateX ->
             "translateX(" ++ String.fromInt (round num) ++ "px)"
@@ -159,7 +159,8 @@ format form num =
             String.fromInt (round num) ++ "px"
 
         Turns vec ->
-            vectorToCssString vec ++ " " ++ String.fromFloat (roundFloat num) ++ "turn"
+            -- Number here is 1/1000 of a turn
+            vectorToCssString vec ++ " " ++ String.fromFloat (num / 1000) ++ "turn"
 
         TranslateX ->
             "translateX(" ++ String.fromInt (round num) ++ "px)"
