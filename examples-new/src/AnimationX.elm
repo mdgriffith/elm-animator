@@ -27,24 +27,24 @@ type alias Model =
 
 type Msg
     = NewPosix Time.Posix
-    | StopAnimation
+    | Start
 
 
 init : ( Model, Cmd Msg )
 init =
     let
-        initialTimeline : Animator.Timeline.Timeline number
+        initialTimeline : Animator.Timeline.Timeline Float
         initialTimeline =
             Animator.Timeline.init 10
 
-        queuedSteps : List (Animator.Timeline.Step number)
+        queuedSteps : List (Animator.Timeline.Step Float)
         queuedSteps =
             [ Animator.Timeline.transitionTo (Animator.ms 1000) 100
             , Animator.Timeline.transitionTo (Animator.ms 1000) 50
             , Animator.Timeline.transitionTo (Animator.ms 1000) 5
             ]
 
-        timelineWithSteps : Animator.Timeline.Timeline number
+        timelineWithSteps : Animator.Timeline.Timeline Float
         timelineWithSteps =
             Animator.Timeline.scale 3 <| Animator.Timeline.queue queuedSteps initialTimeline
     in
@@ -57,10 +57,10 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         NewPosix posix ->
-            ( { model | timeline = Animator.Timeline.update posix model.timeline }, Cmd.none )
+            ( { model | timeline = Animator.Timeline.update posix model.timeline, isAnimating = Animator.Timeline.isRunning model.timeline }, Cmd.none )
 
-        StopAnimation ->
-            ( { model | isAnimating = False }, Cmd.none )
+        Start ->
+            init
 
 
 subscriptions : Model -> Sub Msg
@@ -88,5 +88,5 @@ view model =
             [ Html.div [] [ Html.text ("Position Standard: " ++ String.fromFloat positionStandard) ]
             , Html.div [] [ Html.text ("Position Linear: " ++ String.fromFloat positionLinear) ]
             ]
-        , Html.button [ Html.Events.onClick StopAnimation ] [ Html.text "Stop" ]
+        , Html.button [ Html.Events.onClick Start ] [ Html.text "Re-Start" ]
         ]
