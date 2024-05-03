@@ -22,7 +22,7 @@ main =
 
 
 type alias Model =
-    { timeline : Animator.Timeline.Timeline Float, isAnimating : Bool }
+    { timeline : Animator.Timeline.Timeline Float }
 
 
 type Msg
@@ -48,7 +48,7 @@ init =
         timelineWithSteps =
             Animator.Timeline.scale 3 <| Animator.Timeline.queue queuedSteps initialTimeline
     in
-    ( { timeline = timelineWithSteps, isAnimating = True }
+    ( { timeline = timelineWithSteps }
     , Cmd.none
     )
 
@@ -57,7 +57,7 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         NewPosix posix ->
-            ( { model | timeline = Animator.Timeline.update posix model.timeline, isAnimating = Animator.Timeline.isRunning model.timeline }, Cmd.none )
+            ( { model | timeline = Animator.Timeline.update posix model.timeline }, Cmd.none )
 
         Start ->
             init
@@ -65,7 +65,7 @@ update msg model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    if model.isAnimating then
+    if Animator.Timeline.isRunning model.timeline then
         Browser.Events.onAnimationFrame NewPosix
 
     else
