@@ -168,13 +168,14 @@ scaleZ s =
         InternalAnim.Css.Props.float
 
 
-{-| -}
+{-| Given as 'turns'.
+-}
 rotation : Float -> Attribute
 rotation n =
     Css.Prop
         InternalAnim.Css.Props.ids.rotation
         "rotate"
-        (Move.to n)
+        (Move.to (1000 * n))
         (InternalAnim.Css.Props.turns zAxis)
 
 
@@ -184,7 +185,7 @@ rotationAround axis n =
     Css.Prop
         InternalAnim.Css.Props.ids.rotation
         "rotate"
-        (Move.to n)
+        (Move.to (1000 * n))
         (InternalAnim.Css.Props.turns axis)
 
 
@@ -605,6 +606,8 @@ spinning dur =
                 ]
             , step dur
                 [ rotation 1
+                    |> withTransition
+                        Animator.Transition.linear
                 ]
             ]
         ]
@@ -613,13 +616,21 @@ spinning dur =
 {-| -}
 pulsing : Duration -> Animation
 pulsing dur =
+    let
+        half =
+            dur
+                |> Quantity.divideBy 2
+    in
     keyframes
         [ loop
             [ set
                 [ opacity 1
                 ]
-            , step dur
-                [ opacity 0.5
+            , step half
+                [ opacity 0.4
+                ]
+            , step half
+                [ opacity 1
                 ]
             ]
         ]
@@ -661,11 +672,11 @@ pinging dur =
     keyframes
         [ loop
             [ set
-                [ rotation 0
+                [ scale 1
                 , opacity 1
                 ]
             , step dur
-                [ rotation 1
+                [ scale 1.2
                 , opacity 0
                 ]
             ]
@@ -688,7 +699,7 @@ import Html.Attributes
 Anim.div
     (Anim.onTimeline model.timeline
         (\state ->
-            if state.open
+            if state.open then
                 [ Anim.opacity 1
                 ]
 
