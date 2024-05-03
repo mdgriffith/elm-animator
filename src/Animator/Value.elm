@@ -99,9 +99,7 @@ movement timeline lookup =
                     Timeline.startTime target
 
                 isHappening =
-                    (Time.thisAfterOrEqualThat now startTransition
-                        && Time.thisBeforeOrEqualThat now arrived
-                    )
+                    Time.thisAfterOrEqualThat now startTransition
                         || (List.isEmpty future
                                 && Time.thisAfterThat now interruptedOrEnd
                            )
