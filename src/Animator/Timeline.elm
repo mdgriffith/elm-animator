@@ -408,9 +408,6 @@ update =
 
 
 {-| Does this timeline have upcoming events?
-
-**Note** this is only useful if you're not using a `Animator.Watcher`
-
 -}
 isRunning : Timeline state -> Bool
 isRunning (Timeline.Timeline tl) =
