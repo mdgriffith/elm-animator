@@ -45,7 +45,8 @@ config =
           -- }
           -- ,
           Docs.ReviewLinksAndSections.rule
-        , Docs.ReviewAtDocs.rule
+
+        -- , Docs.ReviewAtDocs.rule
         , Docs.UpToDateReadmeLinks.rule
         , NoConfusingPrefixOperator.rule
         , NoDebug.Log.rule
@@ -54,8 +55,6 @@ config =
         , NoExposingEverything.rule
         , NoImportingEverything.rule []
         , NoMissingTypeAnnotation.rule
-
-        -- , NoMissingTypeAnnotationInLetIn.rule
         , NoMissingTypeExpose.rule
         , NoSimpleLetBody.rule
         , NoPrematureLetComputation.rule
@@ -63,7 +62,6 @@ config =
         , NoUnused.CustomTypeConstructorArgs.rule
         , NoUnused.Dependencies.rule
         , NoUnused.Exports.rule
-        , NoUnused.Parameters.rule
         , NoUnused.Patterns.rule
         , NoUnused.Variables.rule
         , Simplify.rule Simplify.defaults
