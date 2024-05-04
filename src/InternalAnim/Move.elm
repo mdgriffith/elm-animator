@@ -118,7 +118,7 @@ toWith t v =
     Pos t v []
 
 
-move : value -> Move value
+move : Transition.Transition -> value -> List (Sequence value) -> Move value
 move =
     Pos
 
