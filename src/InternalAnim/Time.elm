@@ -2,8 +2,8 @@ module InternalAnim.Time exposing
     ( thisBeforeOrEqualThat, thisAfterOrEqualThat, equal
     , Absolute, AbsoluteTime(..), Duration, absolute, duration, progress
     , inMilliseconds
-    , latest, earliest, toPosix, durationToString, reduceDurationBy
-    , advanceBy, equalDuration, expand, isZeroDuration, maxDuration, millis, numberOfFrames, positiveDuration, progressWithin, rollbackBy, scaleDuration, thisAfterThat, thisBeforeThat, zeroDuration
+    , latest, toPosix, durationToString
+    , advanceBy, expand, isZeroDuration, maxDuration, millis, positiveDuration, progressWithin, rollbackBy, scaleDuration, thisAfterThat, thisBeforeThat, zeroDuration
     )
 
 {-|
@@ -14,7 +14,7 @@ module InternalAnim.Time exposing
 
 @docs inMilliseconds
 
-@docs latest, earliest, toPosix, durationToString, reduceDurationBy
+@docs latest, toPosix, durationToString
 
 -}
 
@@ -72,11 +72,6 @@ absolute posix =
 expand : Duration -> Duration -> Duration
 expand one two =
     Quantity.plus one two
-
-
-reduceDurationBy : Duration -> Duration -> Duration
-reduceDurationBy one two =
-    Quantity.minus one two
 
 
 advanceBy : Duration -> Absolute -> Absolute
@@ -147,15 +142,6 @@ latest ((Quantity.Quantity one) as oneQty) ((Quantity.Quantity two) as twoQty) =
         oneQty
 
 
-earliest : Absolute -> Absolute -> Absolute
-earliest ((Quantity.Quantity one) as oneQty) ((Quantity.Quantity two) as twoQty) =
-    if (one - two) >= 0 then
-        twoQty
-
-    else
-        oneQty
-
-
 thisBeforeThat : Absolute -> Absolute -> Bool
 thisBeforeThat (Quantity.Quantity this) (Quantity.Quantity that) =
     (this - that) < 0
@@ -189,34 +175,3 @@ isZeroDuration (Quantity.Quantity dur) =
 equal : Absolute -> Absolute -> Bool
 equal (Quantity.Quantity this) (Quantity.Quantity that) =
     (this - that) == 0
-
-
-equalDuration : Duration -> Duration -> Bool
-equalDuration (Quantity.Quantity this) (Quantity.Quantity that) =
-    (this - that) == 0
-
-
-{-| The number of frames, and the offset that's needed to preserve the framerate.
-
-Offset
-
--}
-numberOfFrames : Float -> Absolute -> Absolute -> Absolute -> ( Float, Int )
-numberOfFrames fps lastFrameTime startAt endAt =
-    let
-        millisecondsPerFrame =
-            1000 / fps
-
-        totalDurationInMs =
-            Duration.inMilliseconds (duration startAt endAt)
-
-        framesSinceLastFrame =
-            max 0 (Duration.inMilliseconds (duration lastFrameTime startAt))
-                / millisecondsPerFrame
-
-        offset =
-            1 - (framesSinceLastFrame - toFloat (floor framesSinceLastFrame))
-    in
-    ( offset * millisecondsPerFrame
-    , max 1 (round (totalDurationInMs / millisecondsPerFrame))
-    )

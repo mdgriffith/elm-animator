@@ -1,21 +1,18 @@
 module InternalAnim.Css.Props exposing
     ( Id, ids, hash, default, defaultPosition, groups
-    , isTransformId, isTranslateId, isRotateId, isScaleId
+    , isTranslateId, isScaleId
     , Format, format, float, int, px, turns
-    , roundFloat, floatToString
     , isGroup
-    , VectorSlot(..), colorHash, groupToCompoundId, name, noId, toStr, translateX, transparent, vectorSlotToId, vectorToString, zero
+    , VectorSlot(..), colorHash, groupToCompoundId, noId, transparent, vectorSlotToId, vectorToString
     )
 
 {-|
 
 @docs Id, ids, hash, default, defaultPosition, groups
 
-@docs isTransformId, isTranslateId, isRotateId, isScaleId
+@docs isTranslateId, isScaleId
 
 @docs Format, format, float, int, px, turns
-
-@docs roundFloat, floatToString
 
 @docs translateToString, isGroup
 
@@ -139,11 +136,8 @@ hashFormat form num =
         Px ->
             String.fromInt (round num) ++ "px"
 
-        Turns vec ->
+        Turns _ ->
             String.fromInt (round num)
-
-        TranslateX ->
-            "translateX(" ++ String.fromInt (round num) ++ "px)"
 
 
 format : Format -> Float -> String
@@ -162,15 +156,11 @@ format form num =
             -- Number here is 1/1000 of a turn
             vectorToCssString vec ++ " " ++ String.fromFloat (num / 1000) ++ "turn"
 
-        TranslateX ->
-            "translateX(" ++ String.fromInt (round num) ++ "px)"
-
 
 type Format
     = AsFloat
     | AsInt
     | Px
-    | TranslateX
     | Turns Vector
 
 
@@ -192,11 +182,6 @@ int =
 px : Format
 px =
     Px
-
-
-translateX : Format
-translateX =
-    TranslateX
 
 
 {-| We make this huge because we want it last.
@@ -249,12 +234,24 @@ isGroup groupId id =
             False
 
 
+groups : { scaling : Id, translation : Id }
 groups =
     { scaling = 20
     , translation = 10
     }
 
 
+ids :
+    { x : Id
+    , y : Id
+    , z : Id
+    , rotation : Id
+    , scale : Id
+    , scaleX : Id
+    , scaleY : Id
+    , scaleZ : Id
+    , opacity : Id
+    }
 ids =
     { x = 0
     , y = 1
@@ -268,28 +265,13 @@ ids =
     }
 
 
-firstTransform : Id
-firstTransform =
-    ids.x
-
-
 type alias Id =
     Int
-
-
-isTransformId : Id -> Bool
-isTransformId id =
-    id < 12
 
 
 isTranslateId : Id -> Bool
 isTranslateId id =
     id < 3
-
-
-isRotateId : Id -> Bool
-isRotateId id =
-    id == 3
 
 
 isScaleId : Id -> Bool
@@ -380,60 +362,6 @@ hashId id =
 
         _ ->
             "unknown"
-
-
-name : Id -> String
-name id =
-    case id of
-        13 ->
-            "opacity"
-
-        14 ->
-            "background-color"
-
-        _ ->
-            "unknown"
-
-
-toStr : Id -> (Float -> String)
-toStr id =
-    case id of
-        0 ->
-            \f ->
-                "translateX(" ++ String.fromFloat f ++ "px)"
-
-        1 ->
-            \f ->
-                "translateY(" ++ String.fromFloat f ++ "px)"
-
-        2 ->
-            \f ->
-                "translateZ(" ++ String.fromFloat f ++ "px)"
-
-        3 ->
-            \f ->
-                "rotate(" ++ String.fromFloat f ++ "rad)"
-
-        4 ->
-            \f ->
-                "scale(" ++ String.fromFloat f ++ ")"
-
-        5 ->
-            \f ->
-                "scaleX(" ++ String.fromFloat f ++ ")"
-
-        6 ->
-            \f ->
-                "scaleY(" ++ String.fromFloat f ++ ")"
-
-        13 ->
-            -- opacity
-            \f ->
-                String.fromFloat f
-
-        _ ->
-            \f ->
-                String.fromFloat f
 
 
 defaultPosition : Id -> Float

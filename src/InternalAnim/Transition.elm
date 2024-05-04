@@ -1,10 +1,10 @@
 module InternalAnim.Transition exposing
     ( Transition(..)
     , linear, standard, wobble, bezier
-    , initialVelocity, atX
-    , split, before
     , hash, keyframes
-    , atX2, isStandard, takeAfter, withVelocities
+    , atX
+    , isStandard
+    , takeAfter, withVelocities
     )
 
 {-|
@@ -13,11 +13,13 @@ module InternalAnim.Transition exposing
 
 @docs linear, standard, wobble, bezier
 
-@docs initialVelocity, atX
-
-@docs split, before
-
 @docs hash, keyframes
+
+@docs atX
+
+@docs isStandard
+
+@docs takeAfter, withVelocities
 
 Current bezier formats for elm-animator
 
@@ -62,11 +64,7 @@ Goals:
 
 import Bezier
 import Bezier.Spring as Spring
-import InternalAnim.Duration as Duration
 import InternalAnim.Hash as Hash
-import InternalAnim.Quantity as Quantity
-import InternalAnim.Time as Time
-import InternalAnim.Units as Units
 
 
 {-| A transition are all the bezier curves between A and B that we want to transition through.
@@ -197,76 +195,15 @@ isStandard trans =
             False
 
 
-type alias TimeDomain =
-    { start : PointInTime
-    , end : PointInTime
-    }
-
-
-type alias PointInTime =
-    { x : Time.Absolute
-    , y : Units.Pixels
-    }
-
-
 {-| -}
 atX :
-    Float
-    -> TimeDomain
-    -> Units.PixelsPerSecond
-    -> Units.PixelsPerSecond
-    -> Transition
-    ->
-        { position : Units.Pixels
-        , velocity : Units.PixelsPerSecond
-        }
-atX progress domain introVelocity exitVelocity transition =
-    case transition of
-        Transition spline ->
-            if domain.start.x == domain.end.x then
-                { position = domain.end.y
-                , velocity =
-                    exitVelocity
-                }
-
-            else
-                spline
-                    |> inTimeDomain domain introVelocity exitVelocity
-                    |> posVel (toTimeProgress domain progress)
-
-        Wobble wob ->
-            let
-                totalX =
-                    Time.inMilliseconds domain.end.x - Time.inMilliseconds domain.start.x
-
-                params =
-                    Spring.new
-                        { wobble = wob.wobble
-                        , quickness = wob.quickness
-                        , settleMax = totalX
-                        }
-            in
-            Spring.at
-                { spring = params
-                , initial =
-                    { position = Units.inPixels domain.start.y
-                    , velocity = Units.inPixelsPerMs introVelocity
-                    }
-                , target = Units.inPixels domain.end.y
-                }
-                (totalX * progress)
-                |> wrapUnits
-
-
-{-| -}
-atX2 :
     Float
     -> Transition
     ->
         { position : Bezier.Point
         , velocity : Bezier.Point
         }
-atX2 progress transition =
+atX progress transition =
     case transition of
         Transition spline ->
             let
@@ -327,146 +264,6 @@ withVelocities intro exit transition =
                 }
 
 
-toTimeProgress :
-    TimeDomain
-    -> Float
-    -> Float
-toTimeProgress domain factor =
-    let
-        start =
-            Time.inMilliseconds domain.start.x
-
-        end =
-            Time.inMilliseconds domain.end.x
-    in
-    ((end - start) * factor) + start
-
-
-wrapUnits state =
-    { position =
-        Units.pixels state.position
-    , velocity =
-        Units.pixelsPerSecond (state.velocity * 1000)
-    }
-
-
-posVel :
-    Float
-    -> Bezier.Spline
-    ->
-        { position : Units.Pixels
-        , velocity : Units.PixelsPerSecond
-        }
-posVel progress spline =
-    let
-        current =
-            Bezier.atX progress spline
-
-        firstDeriv =
-            Bezier.firstDerivative spline current.t
-    in
-    { position =
-        Units.pixels current.point.y
-    , velocity =
-        Units.pixelsPerSecond ((firstDeriv.y / firstDeriv.x) * 1000)
-    }
-
-
-zeroVelocity : Float
-zeroVelocity =
-    0
-
-
-initialVelocity : Transition -> Float
-initialVelocity transition =
-    case transition of
-        Transition spline ->
-            let
-                firstDeriv =
-                    -- at t == 0, the first derivative vector will always be 0,0
-                    -- so we cheat in slightly.
-                    Bezier.firstDerivative spline 0.001
-            in
-            if firstDeriv.x == 0 then
-                zeroVelocity
-
-            else
-                firstDeriv.y / firstDeriv.x
-
-        Wobble wob ->
-            zeroVelocity
-
-
-type alias Domain =
-    { start : Bezier.Point
-    , end : Bezier.Point
-    }
-
-
-third : Float
-third =
-    1 / 3
-
-
-negativeThird : Float
-negativeThird =
-    -1 / 3
-
-
-{-| Note, we only rotate the control point to match the desired velocity.
-
-However, there is the question of the magnitude of the control point.
-
-I _think_ the magnitude is roughly equivalent to momentum.
-
-It's possible that we override the built-in control points when there is a non-0 intro/exit Velocity.
-
-Maybe it's a constant like 1/3 or something....
-
--}
-toDomain : Domain -> Float -> Float -> Bezier.Spline -> Bezier.Spline
-toDomain domain introVelocity exitVelocity spline =
-    let
-        { two, three } =
-            toBezierPoints spline
-
-        totalX =
-            domain.end.x - domain.start.x
-
-        totalY =
-            domain.end.y - domain.start.y
-
-        ctrl1 =
-            let
-                angle =
-                    atan2 introVelocity 1
-            in
-            { x =
-                (totalX * two.x) + domain.start.x
-            , y =
-                (totalY * two.y) + domain.start.y
-            }
-                |> rotateAround angle domain.start
-
-        ctrl2 =
-            let
-                angle =
-                    atan2 exitVelocity 1
-            in
-            { x =
-                (totalX * three.x) + domain.start.x
-            , y =
-                (totalY * three.y) + domain.start.y
-            }
-                |> rotateAround angle domain.end
-    in
-    Bezier.fromPoints
-        domain.start
-        ctrl1
-        ctrl2
-        domain.end
-
-
 toBezierPoints : Bezier.Spline -> { one : Bezier.Point, two : Bezier.Point, three : Bezier.Point, four : Bezier.Point }
 toBezierPoints spline =
     { one = Bezier.first spline
@@ -474,136 +271,6 @@ toBezierPoints spline =
     , three = Bezier.controlTwo spline
     , four = Bezier.last spline
     }
-
-
-inTimeDomain : TimeDomain -> Units.PixelsPerSecond -> Units.PixelsPerSecond -> Bezier.Spline -> Bezier.Spline
-inTimeDomain domain introVelocity exitVelocity spline =
-    let
-        { one, two, three, four } =
-            toBezierPoints spline
-
-        totalX =
-            Time.inMilliseconds domain.end.x - Time.inMilliseconds domain.start.x
-
-        totalY =
-            Units.inPixels domain.end.y - Units.inPixels domain.start.y
-
-        ctrl1 =
-            let
-                angle =
-                    atan2 (Units.inPixelsPerMs introVelocity) 1
-            in
-            { x =
-                (totalX * two.x) + Time.inMilliseconds domain.start.x
-            , y =
-                (totalY * two.y) + Units.inPixels domain.start.y
-            }
-                |> rotateAroundTimePoint angle domain.start
-
-        ctrl2 =
-            let
-                angle =
-                    atan2 (Units.inPixelsPerMs exitVelocity) 1
-            in
-            { x =
-                (totalX * three.x) + Time.inMilliseconds domain.start.x
-            , y =
-                (totalY * three.y) + Units.inPixels domain.start.y
-            }
-                |> rotateAroundTimePoint angle domain.end
-    in
-    Bezier.fromPoints
-        { x = Time.inMilliseconds domain.start.x
-        , y = Units.inPixels domain.start.y
-        }
-        ctrl1
-        ctrl2
-        { x = Time.inMilliseconds domain.end.x
-        , y = Units.inPixels domain.end.y
-        }
-
-
-{-| -}
-rotateAroundTimePoint : Float -> PointInTime -> Bezier.Point -> Bezier.Point
-rotateAroundTimePoint radians center point =
-    let
-        centerX =
-            Time.inMilliseconds center.x
-
-        centerY =
-            Units.inPixels center.y
-    in
-    { x = cos radians * (point.x - centerX) - sin radians * (point.y - centerY) + centerX
-    , y = sin radians * (point.x - centerX) + cos radians * (point.y - centerY) + centerY
-    }
-
-
-{-| -}
-rotateAround : Float -> Bezier.Point -> Bezier.Point -> Bezier.Point
-rotateAround radians center point =
-    { x = cos radians * (point.x - center.x) - sin radians * (point.y - center.y) + center.x
-    , y = sin radians * (point.x - center.x) + cos radians * (point.y - center.y) + center.y
-    }
-
-
-translateBy : Bezier.Point -> Bezier.Point -> Bezier.Point
-translateBy one two =
-    { x = one.x + two.x
-    , y = one.y + two.y
-    }
-
-
-scaleBy : Float -> Bezier.Point -> Bezier.Point
-scaleBy k v =
-    { x = k * v.x
-    , y = k * v.y
-    }
-
-
-scaleAbout : Bezier.Point -> Float -> Bezier.Point -> Bezier.Point
-scaleAbout p0 k p =
-    { x = p0.x + k * (p.x - p0.x)
-    , y = p0.y + k * (p.y - p0.y)
-    }
-
-
-{-| We are vector v and want the component in the direction d.
--}
-componentIn : Bezier.Point -> Bezier.Point -> Float
-componentIn d v =
-    v.x * d.x + v.y * d.y
-
-
-zeroPoint : Bezier.Point
-zeroPoint =
-    { x = 0
-    , y = 0
-    }
-
-
-scaleTo : Float -> Bezier.Point -> Bezier.Point
-scaleTo q v =
-    let
-        largestComponent =
-            max (abs v.x) (abs v.y)
-    in
-    if largestComponent == 0 then
-        zeroPoint
-
-    else
-        let
-            scaledX =
-                v.x / largestComponent
-
-            scaledY =
-                v.y / largestComponent
-
-            scaledLength =
-                sqrt (scaledX * scaledX + scaledY * scaledY)
-        in
-        { x = q * scaledX / scaledLength
-        , y = q * scaledY / scaledLength
-        }
 
 
 {-| -}
@@ -786,20 +453,6 @@ keyframeListFromNonNormalizedBezier steps toString str =
                 (str
                     ++ keyframeFromSpline (percent * 100) value identity normalizedSpline
                 )
-
-
-{-| -}
-before : Float -> Transition -> Transition
-before t transition =
-    transition
-
-
-{-| -}
-split : Float -> Transition -> { before : Transition, after : Transition }
-split t transition =
-    { before = transition
-    , after = transition
-    }
 
 
 takeAfter : Float -> Transition -> Transition

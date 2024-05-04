@@ -1,35 +1,40 @@
 module InternalAnim.Timeline exposing
-    ( Timeline(..), TimelineDetails, Occurring(..), getEvents
+    ( Timeline(..), TimelineDetails, Occurring(..)
     , Schedule(..), Event(..)
-    , needsUpdate, update, updateWith
-    , startTime, endTime, getEvent, extendEventDwell, hasDwell, isResting
+    , update, updateWith
+    , startTime, endTime, getEvent, extendEventDwell
     , addToDwell
-    , sendPing
     , current, arrivedAt, arrived, previous, upcoming
+    , progress
     , Line(..), Timetable(..)
-    , foldpAll, captureTimeline
-    , ActualDuration(..), Animator(..), Description(..), Frame(..), Frames(..), FramesSummary, Interp, LookAhead, Period(..), Previous(..), Resting(..), Summary, SummaryEvent(..), Transition, atTime, combineRunning, dwellingTime, gc, getCurrentTime, hasChanged, justInitialized, linesAreActive, periodDuration, progress
+    , foldpAll
+    , gc, atTime, dwellingTime, getCurrentTime, linesAreActive
+    , Transition
     )
 
 {-|
 
-@docs Timeline, TimelineDetails, Occurring, getEvents
+@docs Timeline, TimelineDetails, Occurring
 
 @docs Schedule, Event
 
-@docs needsUpdate, update, updateWith
+@docs update, updateWith
 
-@docs startTime, endTime, getEvent, extendEventDwell, hasDwell, isResting
+@docs startTime, endTime, getEvent, extendEventDwell
 
 @docs addToDwell
 
-@docs sendPing
-
 @docs current, arrivedAt, arrived, previous, upcoming
+
+@docs progress
 
 @docs Line, Timetable
 
-@docs foldpAll, captureTimeline
+@docs foldpAll
+
+@docs gc, atTime, dwellingTime, getCurrentTime, linesAreActive
+
+@docs Transition
 
 -}
 
@@ -48,21 +53,6 @@ type Schedule event
 {-| -}
 type Event event
     = Event Time.Duration event (Maybe Time.Duration)
-
-
-type Period
-    = Loop Time.Duration
-    | Repeat Int Time.Duration
-
-
-periodDuration : Period -> Time.Duration
-periodDuration per =
-    case per of
-        Loop dur ->
-            dur
-
-        Repeat i dur ->
-            dur
 
 
 getScheduledEvent : Event event -> event
@@ -121,29 +111,6 @@ type Occurring event
 {- TYPES FOR INTERPOLATION -}
 
 
-{-| First, let's cover what the type parameters are
-
-Examples:
-
-    The symbolic state of the timeline entry.
-    state -> MenuOpen
-
-    The description of how to animate that symbolic state
-    anchor ->
-        = Osc Personality Period (Float -> Float)
-        | Pos Personality Float
-
-    The actual value that's moving
-    motion -> { x:34, y: 34 }
-
--}
-type alias Interp state anchor motion =
-    { start : anchor -> motion
-    , visit : Visit state anchor motion
-    , transition : Lerp anchor motion
-    }
-
-
 type alias Transition state anchor motion =
     (state -> anchor)
     -- previous event
@@ -167,74 +134,6 @@ type alias Transition state anchor motion =
     -> motion
 
 
-type alias Visit state anchor motion =
-    (state -> anchor)
-    -> Occurring state
-    -> Time.Absolute
-    -> Maybe (LookAhead anchor)
-    -> motion
-    -> motion
-
-
-type alias LookAhead state =
-    { anchor : state
-    , time : Time.Absolute
-    , resting : Bool
-    }
-
-
-mapLookAhead : (a -> b) -> LookAhead a -> LookAhead b
-mapLookAhead fn look =
-    { anchor = fn look.anchor
-    , time = look.time
-    , resting = look.resting
-    }
-
-
-type alias Lerp anchor motion =
-    Time.Absolute
-    -> anchor
-    -> anchor
-    -> Time.Absolute
-    -> Time.Absolute
-    -> Maybe (LookAhead anchor)
-    -> motion
-    -> motion
-
-
-type Previous event
-    = Previous (Occurring event)
-    | PreviouslyInterrupted Time.Absolute
-
-
-mapTable : (Occurring a -> Occurring b) -> Timetable a -> Timetable b
-mapTable fn (Timetable lines) =
-    Timetable (List.map (mapLine fn) lines)
-
-
-mapLine : (Occurring a -> Occurring b) -> Line a -> Line b
-mapLine fn (Line t startEvent els) =
-    Line t (fn startEvent) (List.map fn els)
-
-
-mapLineWith : (Occurring a -> state -> ( Occurring b, state )) -> state -> Line a -> ( Line b, state )
-mapLineWith fn initial (Line start startingEvent remaining) =
-    let
-        onLine occur ( events, state ) =
-            let
-                ( newOccur, newState ) =
-                    fn occur state
-            in
-            ( newOccur :: events, newState )
-
-        ( newStartingEvent, startingState ) =
-            fn startingEvent initial
-    in
-    case List.foldl onLine ( [], startingState ) remaining of
-        ( reversedEvents, newState ) ->
-            ( Line start newStartingEvent (List.reverse reversedEvents), newState )
-
-
 getEvent : Occurring event -> event
 getEvent (Occurring ev _ _) =
     ev
@@ -249,16 +148,6 @@ extendEventDwell extendBy ((Event at ev maybeDwell) as thisEvent) =
         Event at ev (addToDwell extendBy maybeDwell)
 
 
-hasDwell : Occurring event -> Bool
-hasDwell (Occurring _ (Quantity.Quantity start) (Quantity.Quantity end)) =
-    (start - end) /= 0
-
-
-isResting : Occurring event -> Bool
-isResting (Occurring _ (Quantity.Quantity start) (Quantity.Quantity end)) =
-    (end - start) == 0
-
-
 startTime : Occurring event -> Time.Absolute
 startTime (Occurring _ time _) =
     time
@@ -267,26 +156,6 @@ startTime (Occurring _ time _) =
 endTime : Occurring event -> Time.Absolute
 endTime (Occurring _ _ end) =
     end
-
-
-type Description event
-    = DescribeStartTransition Time.Posix
-    | DescribeEvent Time.Posix event
-    | DescribeInterruption
-        { interruption : Time.Posix
-        , target : event
-        , newTarget : event
-        , newTargetTime : Time.Posix
-        }
-
-
-getEvents : Timeline event -> List (List ( Time.Posix, event ))
-getEvents (Timeline timeline) =
-    case timeline.events of
-        Timetable lines ->
-            lines
-                |> List.map (\(Line _ start ev) -> start :: ev)
-                |> List.map (List.map (\(Occurring evt time _) -> ( Time.toPosix time, evt )))
 
 
 atTime : Time.Posix -> Timeline event -> Timeline event
@@ -334,11 +203,6 @@ updateWith withGC possiblyNow (Timeline timeline) =
 clean : Bool -> TimelineDetails event -> TimelineDetails event
 clean runGC details =
     let
-        events =
-            case details.events of
-                Timetable evs ->
-                    evs
-
         running =
             case details.events of
                 Timetable lines ->
@@ -349,6 +213,12 @@ clean runGC details =
             running
         , events =
             if runGC then
+                let
+                    events =
+                        case details.events of
+                            Timetable evs ->
+                                evs
+                in
                 Timetable (garbageCollectOldEvents details.now [] events)
 
             else
@@ -597,7 +467,7 @@ scaleEvent scale (Event dur event maybeDur) =
 
 -}
 scheduleMatchesExisting : Schedule event -> Line event -> Bool
-scheduleMatchesExisting (Schedule scheduleDelay event schedulUpcoming) (Line lineStart lineStartEvent lineUpcoming) =
+scheduleMatchesExisting (Schedule _ event schedulUpcoming) (Line _ lineStartEvent lineUpcoming) =
     let
         equalStartEvent =
             scheduledEventEqual event lineStartEvent
@@ -619,7 +489,7 @@ scheduleMatchesExisting (Schedule scheduleDelay event schedulUpcoming) (Line lin
 
 
 scheduledEventEqual : Event event -> Occurring event -> Bool
-scheduledEventEqual (Event dur schedEvent maybeDwell) (Occurring occurEvent occurStart occurEnd) =
+scheduledEventEqual (Event _ schedEvent _) (Occurring occurEvent _ _) =
     schedEvent == occurEvent
 
 
@@ -685,17 +555,17 @@ interrupt timeline scheduled =
 
 interruptLines : Time.Absolute -> Schedule event -> List (Line event) -> List (Line event) -> Maybe (List (Line event))
 interruptLines now scheduled pastLines lines =
-    let
-        startInterruption =
-            case scheduled of
-                Schedule scheduleDelay _ _ ->
-                    Time.advanceBy scheduleDelay now
-    in
     case lines of
         [] ->
             Nothing
 
         startLine :: remaining ->
+            let
+                startInterruption =
+                    case scheduled of
+                        Schedule scheduleDelay _ _ ->
+                            Time.advanceBy scheduleDelay now
+            in
             if interruptionHappensLater startInterruption remaining then
                 interruptLines now scheduled (startLine :: pastLines) remaining
 
@@ -731,14 +601,14 @@ interruptionHappensLater startInterruption remaining =
 
 interruptLine : Time.Absolute -> Schedule event -> Line event -> List (Line event) -> Maybe (List (Line event))
 interruptLine now scheduled line future =
-    let
-        startInterruption =
-            case scheduled of
-                Schedule scheduleDelay _ _ ->
-                    Time.advanceBy scheduleDelay now
-    in
     case line of
         Line start startEvent trailing ->
+            let
+                startInterruption =
+                    case scheduled of
+                        Schedule scheduleDelay _ _ ->
+                            Time.advanceBy scheduleDelay now
+            in
             if Time.thisAfterOrEqualThat startInterruption start then
                 -- this line starts before the interruption
                 case future of
@@ -803,18 +673,19 @@ getTransitionAt interruptionTime prev trailing =
 
 
 interruptAtExactly : Time.Absolute -> Schedule event -> LastTwoEvents event -> Line event
-interruptAtExactly now scheduled ((LastTwoEvents penultimateTime penultimate lastEventTime lastEvent) as last) =
+interruptAtExactly now scheduled (LastTwoEvents penultimateTime penultimate lastEventTime _) =
     case scheduled of
         Schedule delay_ startingEvent reverseQueued ->
             let
-                amountProgress =
-                    Time.progress penultimateTime
-                        lastEventTime
-                        (Time.advanceBy delay_ now)
-
                 newStartingEvent =
                     -- we apply the discount if we are returning to a state
                     if penultimate == getScheduledEvent startingEvent then
+                        let
+                            amountProgress =
+                                Time.progress penultimateTime
+                                    lastEventTime
+                                    (Time.advanceBy delay_ now)
+                        in
                         startingEvent
                             |> adjustScheduledDuration (Quantity.multiplyBy amountProgress)
 
@@ -1008,33 +879,6 @@ addToDwell duration maybeDwell =
                 Just (Quantity.plus duration existing)
 
 
-rescale : Time.Absolute -> Float -> List (Line event) -> List (Line event)
-rescale now scale lines =
-    if scale == 1 then
-        lines
-
-    else
-        List.map (rescaleLine now scale) lines
-
-
-rescaleLine : Time.Absolute -> Float -> Line event -> Line event
-rescaleLine now scale (Line lineStart firstEvent remain) =
-    Line
-        (rescaleTime now scale lineStart)
-        (rescaleEvent now scale firstEvent)
-        (List.map (rescaleEvent now scale) remain)
-
-
-rescaleTime : Time.Absolute -> Float -> Time.Absolute -> Time.Absolute
-rescaleTime (Quantity.Quantity now) scale (Quantity.Quantity time) =
-    Time.millis (now + ((time - now) * scale))
-
-
-rescaleEvent : Time.Absolute -> Float -> Occurring event -> Occurring event
-rescaleEvent now scale (Occurring event start end) =
-    Occurring event (rescaleTime now scale start) (rescaleTime now scale end)
-
-
 foldpAll :
     (state -> anchor)
     -> (anchor -> motion)
@@ -1052,7 +896,7 @@ foldpAll lookup toStart transitionTo (Timeline timelineDetails) =
                 [] ->
                     start
 
-                (Line lineStart firstEvent remain) :: _ ->
+                (Line lineStart _ _) :: _ ->
                     visitAll2
                         lookup
                         transitionTo
@@ -1238,176 +1082,6 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                             new
 
 
-type alias FramesSummary motion =
-    { frames : List (Frame motion)
-    , duration : Time.Duration
-    , dwell :
-        Maybe
-            { period : Period
-            , frames : List (Frame motion)
-            }
-    }
-
-
-type Frame motion
-    = Frame Float motion
-
-
-type alias Summary event =
-    { events : List (SummaryEvent event)
-    , now : Time.Absolute
-    , startTime : Time.Absolute
-    }
-
-
-type SummaryEvent event
-    = EventSummary event Time.Absolute ActualDuration
-    | InterruptionSummary
-        { target : event
-        , targetTime : Time.Absolute
-        , interruptedAt : Time.Absolute
-        , newTarget : event
-        , newTargetTime : Time.Absolute
-        , newTargetDuration : ActualDuration
-        }
-
-
-type ActualDuration
-    = OpenDuration
-    | KnownDuration Time.Duration
-
-
-{-| -}
-type Frames item
-    = Single item
-    | Hold Int item
-    | Walk item (List (Frames item))
-    | WithRest (Resting item) (Frames item)
-
-
-{-| -}
-type Resting item
-    = Cycle Period (List (Frames item))
-
-
-captureTimeline :
-    (state -> anchor)
-    -> Timeline state
-    -> Summary anchor
-captureTimeline lookup (Timeline timelineDetails) =
-    case timelineDetails.events of
-        Timetable timetable ->
-            case timetable of
-                [] ->
-                    -- I believe this case is fleeting because as soon as we have a real time,
-                    -- we add a line to the timetable.
-                    -- However, maybe it is awkwardly rendered once?
-                    { events =
-                        [ EventSummary
-                            (lookup timelineDetails.initial)
-                            timelineDetails.now
-                            OpenDuration
-                        ]
-                    , now = timelineDetails.now
-                    , startTime = timelineDetails.now
-                    }
-
-                (Line start startEv remain) :: remainingLines ->
-                    let
-                        events =
-                            captureTimelineHelper lookup
-                                (startEv :: remain)
-                                remainingLines
-                                []
-                    in
-                    { events = List.reverse events
-                    , now = timelineDetails.now
-                    , startTime = start
-                    }
-
-
-{-| Summarize all the events on the current timeline.
-
-Note, this does not take into account time adjustments!
-
-Essentially this is only used for sprite animation, which currently dont have leaveLate or arriveEarly.
-
--}
-captureTimelineHelper :
-    (state -> anchor)
-    -> List (Occurring state)
-    -> List (Line state)
-    -> List (SummaryEvent anchor)
-    -> List (SummaryEvent anchor)
-captureTimelineHelper lookup events futureLines summary =
-    -- futureStart starts a new line.
-    -- if an interruption occurs, we want to interpolate to the point of the interruption
-    -- then transition over to the new line.
-    case events of
-        [] ->
-            case futureLines of
-                [] ->
-                    summary
-
-                (Line futureStart futureStartEv futureRemain) :: restOfFuture ->
-                    captureTimelineHelper lookup (futureStartEv :: futureRemain) restOfFuture summary
-
-        (Occurring event start eventEnd) :: remain ->
-            case futureLines of
-                [] ->
-                    case remain of
-                        [] ->
-                            let
-                                newEvent =
-                                    EventSummary (lookup event) start OpenDuration
-                            in
-                            newEvent :: summary
-
-                        _ ->
-                            let
-                                newEvent =
-                                    EventSummary (lookup event) start (KnownDuration (Time.duration start eventEnd))
-                            in
-                            captureTimelineHelper lookup remain futureLines (newEvent :: summary)
-
-                (Line futureStart futureStartEv futureRemain) :: restOfFuture ->
-                    if Time.thisBeforeOrEqualThat futureStart start then
-                        -- interruption
-                        let
-                            newEvent =
-                                InterruptionSummary
-                                    { target = lookup event
-                                    , targetTime = start
-                                    , interruptedAt = futureStart
-                                    , newTarget = lookup (getEvent futureStartEv)
-                                    , newTargetTime = startTime futureStartEv
-                                    , newTargetDuration =
-                                        case futureRemain of
-                                            [] ->
-                                                case restOfFuture of
-                                                    [] ->
-                                                        OpenDuration
-
-                                                    _ ->
-                                                        KnownDuration (Time.duration start eventEnd)
-
-                                            _ ->
-                                                KnownDuration (Time.duration start eventEnd)
-                                    }
-                        in
-                        captureTimelineHelper lookup futureRemain restOfFuture (newEvent :: summary)
-
-                    else
-                        -- queue up new events
-                        let
-                            newEvent =
-                                EventSummary (lookup event)
-                                    start
-                                    (KnownDuration (Time.duration start eventEnd))
-                        in
-                        captureTimelineHelper lookup remain futureLines (newEvent :: summary)
-
-
 
 {- BOOKKEEPING -}
 
@@ -1418,10 +1092,10 @@ type Status
 
 
 status : Timeline event -> Status
-status ((Timeline details) as timeline) =
+status timeline =
     foldpAll identity
         (\_ -> Dwelling Time.zeroDuration)
-        (\lookup prev target now start end future state ->
+        (\_ _ _ now start end _ _ ->
             if Time.thisAfterThat now end then
                 Dwelling (Time.duration now end)
 
@@ -1466,7 +1140,7 @@ arrived : Timeline event -> event
 arrived ((Timeline details) as timeline) =
     foldpAll identity
         (\_ -> details.initial)
-        (\lookup prev target now start end future state ->
+        (\_ _ target now _ end _ state ->
             -- This is the current event when
             --      we have started toward an event or arrived at it.
             -- A tricky aspect is that css timelines are only updated on transition
@@ -1484,7 +1158,7 @@ current : Timeline event -> event
 current ((Timeline details) as timeline) =
     foldpAll identity
         (\_ -> details.initial)
-        (\lookup prev target now start end future state ->
+        (\_ _ target now start end future state ->
             -- This is the current event when
             --      we have started toward an event or arrived at it.
             -- A tricky aspect is that css timelines are only updated on transition
@@ -1508,7 +1182,7 @@ previous : Timeline event -> event
 previous ((Timeline details) as timeline) =
     foldpAll identity
         (\_ -> details.initial)
-        (\lookup prev target now start end future state ->
+        (\_ _ target now _ _ future state ->
             if Time.thisAfterThat now (endTime target) then
                 case future of
                     [] ->
@@ -1527,7 +1201,7 @@ arrivedAt : (event -> Bool) -> Time.Posix -> Timeline event -> Bool
 arrivedAt matches newTime ((Timeline details) as tl) =
     foldpAll identity
         (\_ -> False)
-        (\lookup prev target now start end future state ->
+        (\_ _ target _ _ end _ state ->
             state
                 || (matches (getEvent target)
                         && Time.thisBeforeOrEqualThat details.now end
@@ -1553,7 +1227,7 @@ matchesEvent matches (Event _ event _) =
 
 
 anyScheduled : (event -> Bool) -> Schedule event -> Bool
-anyScheduled matches (Schedule dur startEvent remainingEvents) =
+anyScheduled matches (Schedule _ startEvent remainingEvents) =
     if matchesEvent matches startEvent then
         True
 
@@ -1576,149 +1250,10 @@ upcoming matches ((Timeline details) as tl) =
     else
         foldpAll identity
             (\_ -> False)
-            (\lookup prev target now start end future state ->
+            (\_ _ target now _ end _ state ->
                 state
                     || (matches (getEvent target)
                             && Time.thisBeforeThat now end
                        )
             )
             tl
-
-
-
-{- ANIMATOR -}
-{- The animator checks to see if any timelines are running and also has the ability to update the animation state.
-
-
-   Different animators can do different things
-
-
-      - Normal -> always on
-      - Inline -> on when moving (require anotation of dwelling events)
-      - CSS    -> single update when timeline is updated
-
-
--}
-
-
-{-| -}
-type Animator model
-    = Animator (model -> Running) (Time.Posix -> model -> model)
-
-
-type alias Running =
-    { running : Bool
-    , ping : Maybe { delay : Float, target : Time.Posix }
-    }
-
-
-combineRunning : Running -> Running -> Running
-combineRunning one two =
-    { running = one.running || two.running
-    , ping =
-        case two.ping of
-            Nothing ->
-                one.ping
-
-            Just twoPing ->
-                case one.ping of
-                    Nothing ->
-                        Just twoPing
-
-                    Just onePing ->
-                        if onePing.delay < twoPing.delay then
-                            Just onePing
-
-                        else
-                            Just twoPing
-    }
-
-
-sendPing : Timeline event -> Maybe { delay : Float, target : Time.Posix }
-sendPing ((Timeline details) as timeline) =
-    Maybe.andThen (encodeStamp details.now) (findNextTransitionTime timeline)
-
-
-findNextTransitionTime : Timeline event -> Maybe Time.Absolute
-findNextTransitionTime ((Timeline details) as timeline) =
-    foldpAll identity
-        (\_ -> Nothing)
-        (\lookup prev target now start end future state ->
-            if Time.thisBeforeThat now end && (startTime target == end) then
-                Just (startTime target)
-
-            else
-                state
-        )
-        timeline
-
-
-{-| This is to account for a bug in `Time.every` where it uses the provided delay time as a key to keep track of a time.
-
-To get around this, we encode the current time as a really small part of the given time.
-
--}
-encodeStamp : Time.Absolute -> Time.Absolute -> Maybe { delay : Float, target : Time.Posix }
-encodeStamp now target =
-    let
-        millis =
-            Time.inMilliseconds target - nowInMillis
-
-        nowInMillis =
-            Time.inMilliseconds now
-
-        nowTail =
-            nowInMillis / 1000000
-
-        pingDelay =
-            millis + (1 / nowTail)
-    in
-    if pingDelay <= 0 then
-        Nothing
-
-    else
-        Just
-            { delay = pingDelay
-            , target =
-                Time.millisToPosix (round (Time.inMilliseconds target + 1))
-            }
-
-
-{-| -}
-needsUpdate : Timeline event -> Bool
-needsUpdate ((Timeline timeline) as tl) =
-    case timeline.queued of
-        Nothing ->
-            case timeline.interruption of
-                [] ->
-                    timeline.running
-
-                _ ->
-                    True
-
-        Just _ ->
-            True
-
-
-{-| -}
-hasChanged : Timeline event -> Bool
-hasChanged (Timeline timeline) =
-    case timeline.queued of
-        Nothing ->
-            case timeline.interruption of
-                [] ->
-                    False
-
-                _ ->
-                    True
-
-        Just _ ->
-            True
-
-
-{-| -}
-justInitialized : Timeline event -> Bool
-justInitialized (Timeline timeline) =
-    case timeline.now of
-        Quantity.Quantity qty ->
-            qty == 0

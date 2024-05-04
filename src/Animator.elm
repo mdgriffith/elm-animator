@@ -119,16 +119,6 @@ opacity o =
 
 
 {-| -}
-xAsSingleProp : Float -> Attribute
-xAsSingleProp o =
-    Css.Prop
-        InternalAnim.Css.Props.ids.opacity
-        "transform"
-        (Move.to o)
-        InternalAnim.Css.Props.translateX
-
-
-{-| -}
 scale : Float -> Attribute
 scale s =
     Css.Prop
@@ -189,6 +179,7 @@ rotationAround axis n =
         (InternalAnim.Css.Props.turns axis)
 
 
+zAxis : { x : Float, y : Float, z : Float }
 zAxis =
     { x = 0, y = 0, z = 1 }
 
@@ -261,21 +252,6 @@ ms =
     Duration.milliseconds
 
 
-{-| When transitioning to this state, start with a little extra velocity!
-
-This takes a number from 0-1.
-
--}
-withImpulse : Float -> Attribute -> Attribute
-withImpulse impulse prop =
-    case prop of
-        Css.Prop id name move format ->
-            Css.Prop id name (Move.withVelocities impulse 0 move) format
-
-        Css.ColorProp name move ->
-            Css.ColorProp name (Move.withVelocities impulse 0 move)
-
-
 {-| -}
 delay : Duration -> Animation -> Animation
 delay dur (Animation now attrs) =
@@ -340,7 +316,7 @@ keyframes steps =
                         [] ->
                             []
 
-                        (Step dur props) :: _ ->
+                        (Step _ props) :: _ ->
                             props
                 , now = imminent
                 , delay = Time.zeroDuration
@@ -508,12 +484,12 @@ formatColorSteps steps prop pastSteps =
                 Nothing ->
                     List.reverse pastSteps
 
-                Just (Css.Prop id name _ format) ->
+                Just (Css.Prop _ _ _ _) ->
                     formatColorSteps next
                         prop
                         pastSteps
 
-                Just (Css.ColorProp name (Move.Pos trans value _)) ->
+                Just (Css.ColorProp _ (Move.Pos trans value _)) ->
                     formatColorSteps next
                         prop
                         (Move.stepWith dur trans value :: pastSteps)
@@ -534,12 +510,12 @@ formatSteps steps prop pastSteps =
                 Nothing ->
                     List.reverse pastSteps
 
-                Just (Css.Prop id name (Move.Pos trans value _) format) ->
+                Just (Css.Prop _ _ (Move.Pos trans value _) _) ->
                     formatSteps next
                         prop
                         (Move.stepWith dur trans value :: pastSteps)
 
-                Just (Css.ColorProp name movement) ->
+                Just (Css.ColorProp _ _) ->
                     formatSteps next
                         prop
                         pastSteps
@@ -683,7 +659,7 @@ pinging dur =
         ]
 
 
-{-| Animate an element on a specific timeline. Check out [`Animator.Timeline`](#Animator/Timeline) for more details.
+{-| Animate an element on a specific timeline. Check out [`Animator.Timeline`](https://package.elm-lang.org/packages/mdgriffith/elm-animator/latest/Animator-Timeline) for more details.
 
 This will
 

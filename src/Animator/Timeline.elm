@@ -6,6 +6,7 @@ module Animator.Timeline exposing
     , Step, wait, transitionTo
     , scale, delay
     , current, previous, upcoming, upcomingWith, arrived, arrivedAt, arrivedAtWith
+    , Duration
     )
 
 {-|

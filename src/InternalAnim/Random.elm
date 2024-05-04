@@ -3,6 +3,7 @@ module InternalAnim.Random exposing (random)
 {-| -}
 
 
+fract : Float -> Float
 fract x =
     x - toFloat (floor x)
 
@@ -20,4 +21,4 @@ random seed low high =
         0
 
     else
-        (fract (sin seed * 100000.0) + 1.5707) / pi
+        low + (((fract (sin seed * 100000.0) + 1.5707) / pi) * (high - low))

@@ -4,12 +4,7 @@ module InternalAnim.Quantity exposing
     , equalWithin
     , greaterThan
     , greaterThanOrEqualTo
-    , greaterThanOrEqualToZero
-    , greaterThanZero
-    , lessThan
     , lessThanOrEqualTo
-    , lessThanOrEqualToZero
-    , lessThanZero
     , max
     , minus
     , multiplyBy
@@ -39,12 +34,6 @@ minus (Quantity y) (Quantity x) =
 
 
 {-| -}
-lessThan : Quantity number units -> Quantity number units -> Bool
-lessThan (Quantity y) (Quantity x) =
-    x < y
-
-
-{-| -}
 greaterThan : Quantity number units -> Quantity number units -> Bool
 greaterThan (Quantity y) (Quantity x) =
     x > y
@@ -60,30 +49,6 @@ lessThanOrEqualTo (Quantity y) (Quantity x) =
 greaterThanOrEqualTo : Quantity number units -> Quantity number units -> Bool
 greaterThanOrEqualTo (Quantity y) (Quantity x) =
     x >= y
-
-
-{-| -}
-lessThanZero : Quantity number units -> Bool
-lessThanZero (Quantity x) =
-    x < 0
-
-
-{-| -}
-greaterThanZero : Quantity number units -> Bool
-greaterThanZero (Quantity x) =
-    x > 0
-
-
-{-| -}
-lessThanOrEqualToZero : Quantity number units -> Bool
-lessThanOrEqualToZero (Quantity x) =
-    x <= 0
-
-
-{-| -}
-greaterThanOrEqualToZero : Quantity number units -> Bool
-greaterThanOrEqualToZero (Quantity x) =
-    x >= 0
 
 
 max : Quantity number units -> Quantity number units -> Quantity number units

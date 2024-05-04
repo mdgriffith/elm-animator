@@ -1,15 +1,14 @@
 module InternalAnim.Move exposing
     ( Move(..), to, toWith
     , State, init
-    , lerpColor, lerpFloat, lerpTransform, lerpVector
+    , lerpColor, lerpFloat, lerpVector
     , Sequence(..)
-    , Step(..), step, stepWith, set
+    , Step(..), stepWith
     , sequences
     , addSequence, cssForSections
     , withTransition, withVelocities
-    , at, atX, transitionTo
-    , denormalize, normalizeOver, toReal
-    , floatToString, initialSequenceVelocity, move
+    , at, transitionTo
+    , move
     )
 
 {-|
@@ -18,10 +17,10 @@ module InternalAnim.Move exposing
 
 @docs State, init
 
-@docs lerpColor, lerpFloat, lerpTransform, lerpVector
+@docs lerpColor, lerpFloat, lerpVector
 
 @docs Sequence
-@docs Step, step, stepWith, set
+@docs Step, stepWith
 
 @docs sequences, goto
 
@@ -29,9 +28,7 @@ module InternalAnim.Move exposing
 
 @docs withTransition, withVelocities
 
-@docs at, atX, transitionTo
-
-@docs denormalize, normalizeOver, toReal
+@docs at, transitionTo
 
 -}
 
@@ -121,6 +118,7 @@ toWith t v =
     Pos t v []
 
 
+move : value -> Move value
 move =
     Pos
 
@@ -140,27 +138,12 @@ withSequenceDelay delay (Sequence i _ dur steps) =
     Sequence i delay dur steps
 
 
-set : value -> Step value
-set =
-    Step zeroDuration Transition.standard
-
-
-step : Duration.Duration -> value -> Step value
-step dur value =
-    Step dur Transition.standard value
-
-
 stepWith : Duration.Duration -> Transition.Transition -> value -> Step value
 stepWith =
     Step
 
 
 {--}
-zeroVelocity : Units.PixelsPerSecond
-zeroVelocity =
-    Units.pixelsPerSecond 0
-
-
 type alias State =
     { position : Units.Pixels
     , velocity : Units.PixelsPerSecond
@@ -183,14 +166,6 @@ addDelayToSequence delay seqs captured =
                 (push (seq |> withSequenceDelay delay)
                     captured
                 )
-
-
-type alias Transform =
-    { x : Float
-    , y : Float
-    , scale : Float
-    , rotation : Float
-    }
 
 
 lerpFloat : Float -> Float -> Float -> Float
@@ -237,30 +212,6 @@ lerpVector t one two =
     }
 
 
-lerpTransform : Float -> Transform -> Transform -> Transform
-lerpTransform t one two =
-    { x =
-        lerpFloat t one.x two.x
-    , y =
-        lerpFloat t one.y two.y
-    , scale =
-        lerpFloat t one.scale two.scale
-    , rotation =
-        lerpFloat t one.rotation two.rotation
-    }
-
-
-atX :
-    Float
-    -> Move Float
-    ->
-        { position : Bezier.Point
-        , velocity : Bezier.Point
-        }
-atX progress (Pos trans value dwell) =
-    Transition.atX2 progress trans
-
-
 at :
     Float
     -> Time.Absolute
@@ -273,7 +224,7 @@ at progress startTime targetTime (Pos transition targetPosition dwell) startingS
         startPosition =
             Units.inPixels startingState.position
     in
-    Transition.atX2 progress transition
+    Transition.atX progress transition
         |> denormalize startTime
             targetTime
             startPosition
@@ -313,7 +264,7 @@ transitionTo progress startTime targetTime (Pos trans targetPosition dwell) star
             else
                 Transition.withVelocities introVelocity 0 trans
     in
-    Transition.atX2 progress transition
+    Transition.atX progress transition
         |> denormalize startTime
             targetTime
             startPosition
@@ -389,26 +340,6 @@ scaleXYBy { x, y } point =
     { x = point.x * x, y = point.y * y }
 
 
-{-|
-
-    Map a value to 0:1 given a range it should be in.
-
--}
-normalizeOver : Float -> Float -> Float -> Float
-normalizeOver start end current =
-    let
-        total =
-            abs (end - start)
-    in
-    if total == 0 then
-        0
-
-    else
-        ((current - start) / total)
-            |> max 0
-            |> min 1
-
-
 {-| The opposite of `normalizeOver`.
 
 I guess this is denormalization? Though i was always confused by that term :/
@@ -481,162 +412,160 @@ sequences :
     -> List (Sequence value)
     -> List (Sequence value)
 sequences startTime targetTime now stopTime movement existingSequence =
-    let
-        durationToNow =
-            Time.duration startTime now
-    in
     if Time.equal now stopTime && not (Time.equal targetTime stopTime) then
         -- We've probably been interrupted
         []
 
-    else if Time.thisAfterOrEqualThat startTime now then
-        -- We've definitely started, so we want to report the full sequence
-        -- most common case will be startTime == now
-        case movement of
-            Pos trans value [] ->
-                let
-                    transitionDuration =
-                        Time.duration startTime targetTime
-
-                    seq =
-                        Sequence 1
-                            durationToNow
-                            transitionDuration
-                            [ Step transitionDuration trans value
-                            ]
-                in
-                push seq existingSequence
-
-            Pos trans value [ Sequence 1 delay dur steps ] ->
-                let
-                    stepDuration =
-                        Time.duration startTime targetTime
-
-                    transitionDuration =
-                        stepDuration
-                            |> Time.expand dur
-
-                    transitionSequence =
-                        Sequence 1
-                            (Time.expand durationToNow delay)
-                            transitionDuration
-                            (Step stepDuration trans value
-                                :: steps
-                            )
-                in
-                push transitionSequence
-                    existingSequence
-
-            Pos trans value dwell ->
-                let
-                    transitionDuration =
-                        Time.duration startTime targetTime
-
-                    transitionSequence =
-                        Sequence 1
-                            durationToNow
-                            transitionDuration
-                            [ Step transitionDuration trans value
-                            ]
-                in
-                if Time.isZeroDuration transitionDuration && not (List.isEmpty dwell) then
-                    existingSequence
-                        |> append (addDelayToSequence durationToNow dwell [])
-
-                else
-                    existingSequence
-                        |> push transitionSequence
-                        |> append (addDelayToSequence (Time.expand durationToNow transitionDuration) dwell [])
-
-    else if after startTime stopTime now movement then
-        -- we've completely passed this state, no splines are returned
-        []
-
     else
-        -- now is during the new sequence
-        -- so let's compose the new sequence and then split it at the new time
-        -- we also know that existingSequence should be [] here
-        case movement of
-            Pos trans value [] ->
-                let
-                    splitTime =
-                        Time.progress startTime targetTime now
-
-                    transitionDuration =
-                        Time.duration startTime targetTime
-
-                    newSequence =
-                        Sequence 1 Quantity.zero transitionDuration [ Step transitionDuration trans value ]
-                            |> takeAfter durationToNow
-                in
-                case newSequence.following of
-                    Nothing ->
-                        [ newSequence.base ]
-
-                    Just following ->
-                        [ newSequence.base ]
-                            |> push
-                                (following
-                                    |> withSequenceDelay (getSequenceDuration newSequence.base)
-                                )
-
-            Pos trans value [ Sequence 1 delay dur steps ] ->
-                let
-                    stepDuration =
-                        Time.duration startTime targetTime
-
-                    transitionDuration =
-                        stepDuration
-                            |> Time.expand dur
-
-                    new =
-                        Sequence 1 Quantity.zero transitionDuration (Step stepDuration trans value :: steps)
-                            |> takeAfter durationToNow
-                in
-                case new.following of
-                    Nothing ->
-                        [ new.base
-                        ]
-
-                    Just following ->
-                        [ new.base ]
-                            |> push
-                                (following |> withSequenceDelay (getSequenceDuration new.base))
-
-            Pos trans value dwell ->
-                let
-                    transitionDuration =
-                        Time.duration startTime targetTime
-                in
-                if Time.thisAfterThat now targetTime then
-                    takeAfterSequenceList durationToNow dwell
-
-                else
+        let
+            durationToNow =
+                Time.duration startTime now
+        in
+        if Time.thisAfterOrEqualThat startTime now then
+            -- We've definitely started, so we want to report the full sequence
+            -- most common case will be startTime == now
+            case movement of
+                Pos trans value [] ->
                     let
-                        new =
+                        transitionDuration =
+                            Time.duration startTime targetTime
+
+                        seq =
+                            Sequence 1
+                                durationToNow
+                                transitionDuration
+                                [ Step transitionDuration trans value
+                                ]
+                    in
+                    push seq existingSequence
+
+                Pos trans value [ Sequence 1 delay dur steps ] ->
+                    let
+                        stepDuration =
+                            Time.duration startTime targetTime
+
+                        transitionDuration =
+                            stepDuration
+                                |> Time.expand dur
+
+                        transitionSequence =
+                            Sequence 1
+                                (Time.expand durationToNow delay)
+                                transitionDuration
+                                (Step stepDuration trans value
+                                    :: steps
+                                )
+                    in
+                    push transitionSequence
+                        existingSequence
+
+                Pos trans value dwell ->
+                    let
+                        transitionDuration =
+                            Time.duration startTime targetTime
+                    in
+                    if Time.isZeroDuration transitionDuration && not (List.isEmpty dwell) then
+                        existingSequence
+                            |> append (addDelayToSequence durationToNow dwell [])
+
+                    else
+                        let
+                            transitionSequence =
+                                Sequence 1
+                                    durationToNow
+                                    transitionDuration
+                                    [ Step transitionDuration trans value
+                                    ]
+                        in
+                        existingSequence
+                            |> push transitionSequence
+                            |> append (addDelayToSequence (Time.expand durationToNow transitionDuration) dwell [])
+
+        else if after startTime stopTime now movement then
+            -- we've completely passed this state, no splines are returned
+            []
+
+        else
+            -- now is during the new sequence
+            -- so let's compose the new sequence and then split it at the new time
+            -- we also know that existingSequence should be [] here
+            case movement of
+                Pos trans value [] ->
+                    let
+                        transitionDuration =
+                            Time.duration startTime targetTime
+
+                        newSequence =
                             Sequence 1 Quantity.zero transitionDuration [ Step transitionDuration trans value ]
+                                |> takeAfter durationToNow
+                    in
+                    case newSequence.following of
+                        Nothing ->
+                            [ newSequence.base ]
+
+                        Just following ->
+                            [ newSequence.base ]
+                                |> push
+                                    (following
+                                        |> withSequenceDelay (getSequenceDuration newSequence.base)
+                                    )
+
+                Pos trans value [ Sequence 1 _ dur steps ] ->
+                    let
+                        stepDuration =
+                            Time.duration startTime targetTime
+
+                        transitionDuration =
+                            stepDuration
+                                |> Time.expand dur
+
+                        new =
+                            Sequence 1 Quantity.zero transitionDuration (Step stepDuration trans value :: steps)
                                 |> takeAfter durationToNow
                     in
                     case new.following of
                         Nothing ->
-                            new.base
-                                :: addDelayToSequence (getSequenceDuration new.base) dwell []
+                            [ new.base
+                            ]
 
                         Just following ->
-                            let
-                                delayToFollowing =
-                                    getSequenceDuration new.base
-                            in
                             [ new.base ]
-                                |> push (following |> withSequenceDelay delayToFollowing)
-                                |> append
-                                    (addDelayToSequence
-                                        (Time.expand (getSequenceDuration following)
-                                            delayToFollowing
+                                |> push
+                                    (following |> withSequenceDelay (getSequenceDuration new.base))
+
+                Pos trans value dwell ->
+                    if Time.thisAfterThat now targetTime then
+                        takeAfterSequenceList durationToNow dwell
+
+                    else
+                        let
+                            transitionDuration =
+                                Time.duration startTime targetTime
+
+                            new =
+                                Sequence 1 Quantity.zero transitionDuration [ Step transitionDuration trans value ]
+                                    |> takeAfter durationToNow
+                        in
+                        case new.following of
+                            Nothing ->
+                                new.base
+                                    :: addDelayToSequence (getSequenceDuration new.base) dwell []
+
+                            Just following ->
+                                let
+                                    delayToFollowing =
+                                        getSequenceDuration new.base
+                                in
+                                [ new.base ]
+                                    |> push (following |> withSequenceDelay delayToFollowing)
+                                    |> append
+                                        (addDelayToSequence
+                                            (Time.expand (getSequenceDuration following)
+                                                delayToFollowing
+                                            )
+                                            dwell
+                                            []
                                         )
-                                        dwell
-                                        []
-                                    )
 
 
 takeAfterSequenceList :
@@ -648,7 +577,7 @@ takeAfterSequenceList durationToNow seqs =
         [] ->
             []
 
-        ((Sequence n delay duration steps) as top) :: remain ->
+        ((Sequence n _ duration _) as top) :: remain ->
             let
                 floatN =
                     toFloat n
@@ -824,7 +753,7 @@ afterSequenceList durationTillNow seq remaining =
             [] ->
                 True
 
-            ((Sequence n delay duration steps) as top) :: rest ->
+            ((Sequence n _ duration _) as top) :: rest ->
                 let
                     durationOfUnrolledSeq =
                         duration |> Quantity.multiplyBy (toFloat n)
@@ -838,6 +767,7 @@ afterSequenceList durationTillNow seq remaining =
         False
 
 
+afterSequence : Duration.Duration -> Sequence value -> Bool
 afterSequence durationTillNow (Sequence n delay duration steps) =
     let
         floatN =
@@ -861,21 +791,6 @@ zeroDuration =
 
 
 {- CSS KEYFRAMES -}
-
-
-initialSequenceVelocity : Sequence value -> Units.PixelsPerSecond
-initialSequenceVelocity seq =
-    case seq of
-        Sequence 0 _ _ _ ->
-            zeroVelocity
-
-        Sequence _ _ _ [] ->
-            zeroVelocity
-
-        Sequence n _ _ ((Step dur trans _) :: _) ->
-            Transition.initialVelocity trans
-                |> (*) 1000
-                |> Units.pixelsPerSecond
 
 
 hash : Time.Absolute -> String -> Sequence value -> (value -> String) -> String
@@ -914,16 +829,6 @@ stepHash steps toString hashed =
                 )
 
 
-roundFloat : Float -> Float
-roundFloat f =
-    toFloat (round (f * 100)) / 100
-
-
-floatToString : Float -> String
-floatToString f =
-    String.fromFloat (roundFloat f)
-
-
 hashDuration : String -> Duration.Duration -> String
 hashDuration prefix dur =
     let
@@ -937,38 +842,6 @@ hashDuration prefix dur =
         prefix
             ++ String.fromInt
                 (round (Duration.inSeconds dur))
-
-
-lastPosOr : value -> Sequence value -> value
-lastPosOr x (Sequence _ _ _ steps) =
-    case steps of
-        [] ->
-            x
-
-        _ ->
-            lastPosOrHelper x steps
-
-
-lastPosOrHelper : value -> List (Step value) -> value
-lastPosOrHelper x steps =
-    case steps of
-        [] ->
-            x
-
-        (Step _ _ v) :: [] ->
-            v
-
-        (Step _ _ _) :: (Step _ _ v) :: [] ->
-            v
-
-        (Step _ _ _) :: (Step _ _ _) :: (Step _ _ v) :: [] ->
-            v
-
-        (Step _ _ _) :: (Step _ _ _) :: (Step _ _ _) :: (Step _ _ v) :: [] ->
-            v
-
-        (Step _ _ _) :: (Step _ _ _) :: (Step _ _ _) :: (Step _ _ v) :: remain ->
-            lastPosOrHelper v remain
 
 
 type alias CssAnim =
@@ -1005,7 +878,7 @@ cssForSections now startPos name lerp toString toHashString sections anim =
         [] ->
             anim
 
-        [ (Sequence 1 delay dur [ Step stepDur (Transition.Transition spline) v ]) as seq ] ->
+        [ (Sequence 1 delay _ [ Step stepDur (Transition.Transition spline) v ]) as seq ] ->
             -- NOTE, we're not using the above `dur` because it's the total duration of the sequence
             -- and therefore equal to stepDur in this case
             { anim
@@ -1156,7 +1029,7 @@ initialProps name toString startPos (Sequence _ _ _ steps) =
         [] ->
             []
 
-        (Step dur transition val) :: _ ->
+        (Step dur _ val) :: _ ->
             if Duration.isZero dur then
                 [ ( name, toString val ) ]
 
@@ -1217,16 +1090,6 @@ keyframeHelper name lerp startPos sequenceDuration currentDur steps rendered =
                 nextCurrent
                 remaining
                 (rendered ++ frames)
-
-
-emptyAnim : CssAnim
-emptyAnim =
-    { hash = ""
-    , animation = ""
-    , transition = ""
-    , keyframes = ""
-    , props = []
-    }
 
 
 combine : CssAnim -> CssAnim -> CssAnim

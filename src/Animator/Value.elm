@@ -93,11 +93,8 @@ movement : Timeline state -> (state -> Movement) -> { position : Float, velocity
 movement timeline lookup =
     Timeline.foldpAll lookup
         Move.init
-        (\_ prev target now startTransition interruptedOrEnd future state ->
+        (\_ _ target now startTransition interruptedOrEnd future state ->
             let
-                arrived =
-                    Timeline.startTime target
-
                 isHappening =
                     Time.thisAfterOrEqualThat now startTransition
                         || (List.isEmpty future
@@ -106,6 +103,9 @@ movement timeline lookup =
             in
             if isHappening then
                 let
+                    arrived =
+                        Timeline.startTime target
+
                     progress =
                         Time.progress startTransition arrived now
 
