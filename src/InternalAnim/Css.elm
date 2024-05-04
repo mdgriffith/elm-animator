@@ -202,7 +202,7 @@ toInitialProps props rendered =
         [] ->
             rendered
 
-        (Prop id name _ format) :: remaining ->
+        (Prop id name movement format) :: remaining ->
             toInitialProps remaining
                 (if Props.isTranslateId id then
                     case rendered.translation of
@@ -214,14 +214,22 @@ toInitialProps props rendered =
                                     , name = name
                                     , format = format
                                     , sections = []
-                                    , state = initVector 0
+                                    , state = Props.initVectorState id (Move.init movement)
                                     }
                             , scale = rendered.scale
                             }
 
-                        Just _ ->
+                        Just translation ->
                             -- we've already initialized the transform
-                            rendered
+                            -- add the new prop to the list
+                            { props = rendered.props
+                            , translation =
+                                Just
+                                    { translation
+                                        | state = Props.updateVectorById id (Move.init movement) translation.state
+                                    }
+                            , scale = rendered.scale
+                            }
 
                  else if Props.isScaleId id then
                     case rendered.scale of
@@ -234,13 +242,20 @@ toInitialProps props rendered =
                                     , name = name
                                     , format = format
                                     , sections = []
-                                    , state = initVector 1
+                                    , state = Props.initVectorState id (Move.init movement)
                                     }
                             }
 
-                        Just _ ->
+                        Just scale ->
                             -- we've already initialized the transform
-                            rendered
+                            { props = rendered.props
+                            , scale =
+                                Just
+                                    { scale
+                                        | state = Props.updateVectorById id (Move.init movement) scale.state
+                                    }
+                            , translation = rendered.translation
+                            }
 
                  else
                     let

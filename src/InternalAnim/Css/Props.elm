@@ -1,6 +1,6 @@
 module InternalAnim.Css.Props exposing
     ( Id, ids, hash, default, defaultPosition, groups
-    , isTranslateId, isScaleId
+    , isTranslateId, isScaleId, initVector, initVectorState, updateVectorById
     , Format, format, float, int, px, turns
     , isGroup
     , VectorSlot(..), colorHash, groupToCompoundId, noId, transparent, vectorSlotToId, vectorToString
@@ -10,7 +10,7 @@ module InternalAnim.Css.Props exposing
 
 @docs Id, ids, hash, default, defaultPosition, groups
 
-@docs isTranslateId, isScaleId
+@docs isTranslateId, isScaleId, initVector, initVectorState, updateVectorById
 
 @docs Format, format, float, int, px, turns
 
@@ -63,6 +63,105 @@ type alias Vector =
     , y : Float
     , z : Float
     }
+
+
+type alias VectorState =
+    { x : Move.State
+    , y : Move.State
+    , z : Move.State
+    }
+
+
+updateVectorById : Id -> val -> { x : val, y : val, z : val } -> { x : val, y : val, z : val }
+updateVectorById id val vec =
+    case id of
+        0 ->
+            { vec | x = val }
+
+        1 ->
+            { vec | y = val }
+
+        2 ->
+            { vec | z = val }
+
+        4 ->
+            { x = val, y = val, z = val }
+
+        5 ->
+            { vec | x = val }
+
+        6 ->
+            { vec | y = val }
+
+        7 ->
+            { vec | z = val }
+
+        _ ->
+            vec
+
+
+initVectorState : Id -> Move.State -> VectorState
+initVectorState id state =
+    case id of
+        0 ->
+            { x = state, y = Move.toState 0, z = Move.toState 0 }
+
+        1 ->
+            { x = Move.toState 0, y = state, z = Move.toState 0 }
+
+        2 ->
+            { x = Move.toState 0, y = Move.toState 0, z = state }
+
+        4 ->
+            -- Scale all
+            { x = state, y = state, z = state }
+
+        5 ->
+            -- scale x
+            { x = state, y = Move.toState 1, z = Move.toState 1 }
+
+        6 ->
+            -- scale y
+            { x = Move.toState 1, y = state, z = Move.toState 1 }
+
+        7 ->
+            -- scale z
+            { x = Move.toState 1, y = Move.toState 1, z = state }
+
+        _ ->
+            { x = Move.toState 0, y = Move.toState 0, z = Move.toState 0 }
+
+
+initVector : Id -> Float -> Vector
+initVector id val =
+    case id of
+        0 ->
+            { x = val, y = 0, z = 0 }
+
+        1 ->
+            { x = 0, y = val, z = 0 }
+
+        2 ->
+            { x = 0, y = 0, z = val }
+
+        4 ->
+            -- Scale all
+            { x = val, y = val, z = val }
+
+        5 ->
+            -- scale x
+            { x = val, y = 1, z = 1 }
+
+        6 ->
+            -- scale y
+            { x = 1, y = val, z = 1 }
+
+        7 ->
+            -- scale z
+            { x = 1, y = 1, z = val }
+
+        _ ->
+            { x = 0, y = 0, z = 0 }
 
 
 {-| Giving the scaling group, return the property that sets all scaling/

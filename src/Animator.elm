@@ -294,7 +294,6 @@ keyframes steps =
             Time.absolute (Time.millisToPosix 1)
 
         firstEventTime =
-            -- Time.absolute (Time.millisToPosix 2)
             imminent
 
         ( firstOccurring, remaining ) =

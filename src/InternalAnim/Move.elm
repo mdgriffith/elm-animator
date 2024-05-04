@@ -8,14 +8,14 @@ module InternalAnim.Move exposing
     , addSequence, cssForSections
     , withTransition, withVelocities
     , at, transitionTo
-    , move
+    , move, toState
     )
 
 {-|
 
 @docs Move, to, toWith
 
-@docs State, init
+@docs State, init, fromFloat
 
 @docs lerpColor, lerpFloat, lerpVector
 
@@ -52,6 +52,14 @@ init movement =
         case movement of
             Pos _ x _ ->
                 Units.pixels x
+    , velocity = Units.pixelsPerSecond 0
+    }
+
+
+toState : Float -> State
+toState x =
+    { position =
+        Units.pixels x
     , velocity = Units.pixelsPerSecond 0
     }
 
