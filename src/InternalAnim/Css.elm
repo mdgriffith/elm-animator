@@ -699,7 +699,7 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                     rendered.sections
                         , state =
                             rendered.state
-                                |> Move.transitionTo progress
+                                |> Move.at progress
                                     startTime
                                     targetTime
                                     targetProp
@@ -747,11 +747,6 @@ toPropCurves2 lookup prev target now startTime endTime future cursor =
                                 getCommonTransformTransition
                                     targetProps
                                     Transition.standard
-                                    |> Transition.withVelocities fastestVelocity
-                                        -- If we do any transition smoothing
-                                        -- we'll need to normalize this velocity too
-                                        --Estimation.velocityAtTarget lookupState target future
-                                        0
 
                             else
                                 getCommonTransformTransition

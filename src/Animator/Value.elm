@@ -112,7 +112,7 @@ movement timeline lookup =
                     targetMovement =
                         lookup (Timeline.getEvent target)
                 in
-                Move.transitionTo progress
+                Move.at progress
                     startTransition
                     arrived
                     targetMovement
