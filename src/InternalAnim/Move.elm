@@ -7,7 +7,7 @@ module InternalAnim.Move exposing
     , sequences
     , addSequence, cssForSections
     , withTransition, withVelocities
-    , at, transitionTo
+    , at
     , move, toState
     )
 
@@ -28,7 +28,7 @@ module InternalAnim.Move exposing
 
 @docs withTransition, withVelocities
 
-@docs at, transitionTo
+@docs at
 
 -}
 
@@ -237,66 +237,6 @@ at progress startTime targetTime (Pos transition targetPosition dwell) startingS
             targetTime
             startPosition
             targetPosition
-
-
-{-| This is the same as `at`, but with velocity transitions built in.
--}
-transitionTo :
-    Float
-    -> Time.Absolute
-    -> Time.Absolute
-    -> Move Float
-    -> State
-    -> State
-transitionTo progress startTime targetTime (Pos trans targetPosition dwell) startingState =
-    let
-        startPosition =
-            Units.inPixels startingState.position
-
-        introVelocity =
-            normalizeVelocity
-                startTime
-                targetTime
-                startPosition
-                targetPosition
-                startingState.velocity
-
-        -- exitVelocity =
-        -- If we do any transition smoothing
-        -- we'll need to normalize this velocity too
-        --Estimation.velocityAtTarget lookupState target future
-        transition =
-            if introVelocity == 0 then
-                trans
-
-            else
-                Transition.withVelocities introVelocity 0 trans
-    in
-    Transition.atX progress transition
-        |> denormalize startTime
-            targetTime
-            startPosition
-            targetPosition
-
-
-normalizeVelocity :
-    Time.Absolute
-    -> Time.Absolute
-    -> Float
-    -> Float
-    -> Units.PixelsPerSecond
-    -> Float
-normalizeVelocity startTime targetTime startPosition targetPosition velocity =
-    let
-        pixelsPerSecond =
-            Units.inPixelsPerSecond velocity
-    in
-    if pixelsPerSecond == 0 then
-        0
-
-    else
-        (pixelsPerSecond * Duration.inSeconds (Time.duration startTime targetTime))
-            / (targetPosition - startPosition)
 
 
 {-|
