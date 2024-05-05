@@ -6,7 +6,7 @@ module Animator.Timeline exposing
     , Step, wait, transitionTo
     , scale, delay
     , current, previous, upcoming, upcomingWith, arrived, arrivedAt, arrivedAtWith
-    , Duration
+    , Duration, hasChanges
     )
 
 {-|
@@ -157,6 +157,16 @@ scale : Float -> Timeline state -> Timeline state
 scale factor (Timeline.Timeline details) =
     Timeline.Timeline
         { details | scale = min 5 (max 0.1 factor) }
+
+
+{-| The proportion (number between 0 and 1) of progress between the last state and the new one.
+
+Once we arrive at a new state, this value will be 1 until we start another transition.
+
+-}
+progress : Timeline state -> Float
+progress =
+    Timeline.progress
 
 
 {-| Get the current `state` of the timeline.
@@ -310,7 +320,7 @@ to duration ev timeline =
 {-| Interrupt what's currently happening with a new list.
 -}
 interrupt : List (Step state) -> Timeline state -> Timeline state
-interrupt steps (Timeline.Timeline tl) =
+interrupt steps ((Timeline.Timeline tl) as fullTimeline) =
     Timeline.Timeline
         { tl
             | running = True
@@ -323,12 +333,45 @@ interrupt steps (Timeline.Timeline tl) =
                         -- **NOTE** - if we recieve a new interruption, we throw away the existing one!
                         -- This was leading to issues when the same event was added to the `interrupted` queue
                         -- multiple times in before being scheduled.
-                        -- So, I imagine it does make sense to dedup these
-                        -- But does it ALWAYS make sense to replace the currently scheduled interruption?
-                        [ List.foldl stepsToEvents schedule otherSteps ]
+                        -- Also
+                        -- If we're returning to a previous state while enroute to a new state,
+                        -- we can "discount" the duration to return.
+                        let
+                            discountedSchedule =
+                                if Duration.isZero (scheduleDelay schedule) && previous fullTimeline == currentScheduleTarget schedule then
+                                    let
+                                        transitionProgress =
+                                            Timeline.transitionProgress fullTimeline
+                                    in
+                                    schedule
+                                        |> scaleScheduleDurationBy (Maybe.withDefault 1 <| List.maximum transitionProgress)
+
+                                else
+                                    schedule
+                        in
+                        [ List.foldl stepsToEvents discountedSchedule otherSteps ]
         }
 
 
+scaleScheduleDurationBy : Float -> Timeline.Schedule state -> Timeline.Schedule state
+scaleScheduleDurationBy factor (Timeline.Schedule currentScheduleDelay (Timeline.Event dur checkpoint dwell) events) =
+    Timeline.Schedule
+        currentScheduleDelay
+        (Timeline.Event (Duration.scale factor dur) checkpoint dwell)
+        events
+
+
+scheduleDelay : Timeline.Schedule state -> Time.Duration
+scheduleDelay (Timeline.Schedule d _ _) =
+    d
+
+
+currentScheduleTarget : Timeline.Schedule state -> state
+currentScheduleTarget (Timeline.Schedule _ (Timeline.Event _ target _) _) =
+    target
+
+
+{-| -}
 initializeSchedule : Time.Duration -> List (Step state) -> Maybe ( Schedule state, List (Step state) )
 initializeSchedule waiting steps =
     case steps of
@@ -413,3 +456,14 @@ update =
 isRunning : Timeline state -> Bool
 isRunning (Timeline.Timeline tl) =
     tl.running
+
+
+{-| -}
+hasChanges : Timeline state -> Bool
+hasChanges (Timeline.Timeline tl) =
+    case tl.queued of
+        Nothing ->
+            not (List.isEmpty tl.interruption)
+
+        Just _ ->
+            True
