@@ -10,6 +10,7 @@ module InternalAnim.Timeline exposing
     , foldpAll
     , gc, atTime, dwellingTime, getCurrentTime, linesAreActive
     , Transition
+    , transitionProgress
     )
 
 {-|
@@ -78,6 +79,8 @@ type alias TimelineDetails event =
     , events : Timetable event
     , queued : Maybe (Schedule event)
     , interruption : List (Schedule event)
+
+    -- Running means that there are ongoing events
     , running : Bool
     }
 
@@ -1088,19 +1091,44 @@ visitAll2 toAnchor transitionTo details prev queue future state =
 
 type Status
     = Dwelling Time.Duration
-    | Transitioning Float
+    | Transitioning
+        { progress : Float
+        , transitionProgress : List Float
+        }
 
 
 status : Timeline event -> Status
 status timeline =
     foldpAll identity
         (\_ -> Dwelling Time.zeroDuration)
-        (\_ _ _ now start end _ _ ->
-            if Time.thisAfterThat now end then
-                Dwelling (Time.duration now end)
+        (\_ prev target now start end theFuture found ->
+            -- Some notes because I have this loaded in my brain now.
+            -- end: either the endtime of `target event` or the interruption time
+            -- We generally care about progress towards the start time of the target
+            -- so we don't want to use `end` necessarily.
+            let
+                startTimeTarget =
+                    startTime target
+            in
+            if Time.thisAfterThat now startTimeTarget then
+                Dwelling (Time.duration now startTimeTarget)
 
             else
-                Transitioning (Time.progress start end now)
+                case found of
+                    Transitioning trans ->
+                        Transitioning
+                            { progress =
+                                Time.progress start startTimeTarget now
+                            , transitionProgress =
+                                trans.progress :: trans.transitionProgress
+                            }
+
+                    Dwelling _ ->
+                        Transitioning
+                            { progress =
+                                Time.progress start startTimeTarget now
+                            , transitionProgress = []
+                            }
         )
         timeline
 
@@ -1118,7 +1146,17 @@ progress timeline =
             1
 
         Transitioning t ->
-            t
+            t.progress
+
+
+transitionProgress : Timeline state -> List Float
+transitionProgress timeline =
+    case status timeline of
+        Dwelling _ ->
+            []
+
+        Transitioning t ->
+            t.progress :: t.transitionProgress
 
 
 {-| The number of milliseconds that has occurred since we came to rest at the most recent state.
