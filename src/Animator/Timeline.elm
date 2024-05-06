@@ -333,42 +333,8 @@ interrupt steps ((Timeline.Timeline tl) as fullTimeline) =
                         -- **NOTE** - if we recieve a new interruption, we throw away the existing one!
                         -- This was leading to issues when the same event was added to the `interrupted` queue
                         -- multiple times in before being scheduled.
-                        -- Also
-                        -- If we're returning to a previous state while enroute to a new state,
-                        -- we can "discount" the duration to return.
-                        let
-                            discountedSchedule =
-                                if Duration.isZero (scheduleDelay schedule) && previous fullTimeline == currentScheduleTarget schedule then
-                                    let
-                                        transitionProgress =
-                                            Timeline.transitionProgress fullTimeline
-                                    in
-                                    schedule
-                                        |> scaleScheduleDurationBy (Maybe.withDefault 1 <| List.maximum transitionProgress)
-
-                                else
-                                    schedule
-                        in
-                        [ List.foldl stepsToEvents discountedSchedule otherSteps ]
+                        [ List.foldl stepsToEvents schedule otherSteps ]
         }
-
-
-scaleScheduleDurationBy : Float -> Timeline.Schedule state -> Timeline.Schedule state
-scaleScheduleDurationBy factor (Timeline.Schedule currentScheduleDelay (Timeline.Event dur checkpoint dwell) events) =
-    Timeline.Schedule
-        currentScheduleDelay
-        (Timeline.Event (Duration.scale factor dur) checkpoint dwell)
-        events
-
-
-scheduleDelay : Timeline.Schedule state -> Time.Duration
-scheduleDelay (Timeline.Schedule d _ _) =
-    d
-
-
-currentScheduleTarget : Timeline.Schedule state -> state
-currentScheduleTarget (Timeline.Schedule _ (Timeline.Event _ target _) _) =
-    target
 
 
 {-| -}

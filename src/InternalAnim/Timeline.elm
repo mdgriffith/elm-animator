@@ -61,6 +61,16 @@ getScheduledEvent (Event _ ev _) =
     ev
 
 
+currentScheduleTarget : Schedule event -> event
+currentScheduleTarget (Schedule _ (Event _ target _) _) =
+    target
+
+
+scheduleDelay : Schedule state -> Time.Duration
+scheduleDelay (Schedule d _ _) =
+    d
+
+
 adjustScheduledDuration : (Time.Duration -> Time.Duration) -> Event event -> Event event
 adjustScheduledDuration fn (Event dur ev maybeDwell) =
     Event (fn dur) ev maybeDwell
@@ -502,18 +512,38 @@ scheduledEventEqual (Event _ schedEvent _) (Occurring occurEvent _ _) =
 
 applyInterruptions : TimelineDetails event -> TimelineDetails event
 applyInterruptions timeline =
-    case timeline.interruption of
+    -- Note, the foldl is reversing the interruptions, which is intentional
+    -- we reverse the interruptions so that they're applied as First-in-First-Out.
+    -- If we do Last-in-First-Out we run into issues.
+    -- Imagine mouse events coming in where there is movement and then an end.
+    -- It means `timeline.interruptions` would be the following
+    -- [End, Move, Move, Move]
+    -- We have to reverse the list so they're processed as [Move, Move, Move, End]
+    let
+        discountInterruption schedule discounted =
+            -- If we're returning to a previous state while enroute to a new state,
+            -- we can "discount" the duration to return.
+            if Duration.isZero (scheduleDelay schedule) && previous (Timeline timeline) == currentScheduleTarget schedule then
+                let
+                    maxProgress =
+                        transitionProgress (Timeline timeline)
+                            |> List.maximum
+                            |> Maybe.withDefault 1
+                in
+                (schedule
+                    |> scaleScheduleDurationBy maxProgress
+                )
+                    :: discounted
+
+            else
+                schedule :: discounted
+    in
+    case List.foldl discountInterruption [] timeline.interruption of
         [] ->
             timeline
 
-        _ ->
-            -- Note, we reverse the interruptions so that they're applied as First-in-First-Out.
-            -- If we do Last-in-First-Out we run into issues.
-            -- Imagine mouse events coming in where there is movement and then an end.
-            -- It means `timeline.interruptions` would be the following
-            -- [End, Move, Move, Move]
-            -- We have to reverse the list so they're processed as [Move, Move, Move, End]
-            applyInterruptionHelper (List.reverse timeline.interruption)
+        interruptions ->
+            applyInterruptionHelper interruptions
                 { timeline | interruption = [] }
 
 
@@ -535,6 +565,14 @@ applyInterruptionHelper interrupts timeline =
                             interrupt timeline
                                 (scaleSchedule timeline.scale inter)
                 }
+
+
+scaleScheduleDurationBy : Float -> Schedule state -> Schedule state
+scaleScheduleDurationBy factor (Schedule currentScheduleDelay (Event dur checkpoint dwell) events) =
+    Schedule
+        currentScheduleDelay
+        (Event (Duration.scale factor dur) checkpoint dwell)
+        events
 
 
 {-| Interrupt a current timetable with a new list of events.
@@ -565,9 +603,7 @@ interruptLines now scheduled pastLines lines =
         startLine :: remaining ->
             let
                 startInterruption =
-                    case scheduled of
-                        Schedule scheduleDelay _ _ ->
-                            Time.advanceBy scheduleDelay now
+                    Time.advanceBy (scheduleDelay scheduled) now
             in
             if interruptionHappensLater startInterruption remaining then
                 interruptLines now scheduled (startLine :: pastLines) remaining
@@ -608,9 +644,7 @@ interruptLine now scheduled line future =
         Line start startEvent trailing ->
             let
                 startInterruption =
-                    case scheduled of
-                        Schedule scheduleDelay _ _ ->
-                            Time.advanceBy scheduleDelay now
+                    Time.advanceBy (scheduleDelay scheduled) now
             in
             if Time.thisAfterOrEqualThat startInterruption start then
                 -- this line starts before the interruption
@@ -804,7 +838,7 @@ createLine now (Schedule delay (Event dur startEvent maybeDwell) reverseQueued) 
 
 -}
 addEventsToLine : Time.Absolute -> Schedule events -> Line events -> List (Line events) -> List (Line events)
-addEventsToLine now ((Schedule scheduleDelay _ _) as scheduled) (Line startLineAt startingEvent events) lines =
+addEventsToLine now scheduled (Line startLineAt startingEvent events) lines =
     case List.reverse events of
         [] ->
             let
@@ -821,7 +855,7 @@ addEventsToLine now ((Schedule scheduleDelay _ _) as scheduled) (Line startLineA
                         Occurring ev eventStart _ ->
                             -- if the scheduled events are way after the current event
                             -- extend that events dwell until the start of the scheduled stuff
-                            Occurring ev eventStart (Time.advanceBy scheduleDelay startNewEventsAt)
+                            Occurring ev eventStart (Time.advanceBy (scheduleDelay scheduled) startNewEventsAt)
             in
             Line startLineAt startingEventWithDwell [] :: newLine :: lines
 
@@ -842,7 +876,7 @@ addEventsToLine now ((Schedule scheduleDelay _ _) as scheduled) (Line startLineA
                         lastEventTime
                         -- createLine handles applying the schedule scheduleDelay
                         -- but we need to apply it here manually
-                        (Time.advanceBy scheduleDelay startNewEventsAt)
+                        (Time.advanceBy (scheduleDelay scheduled) startNewEventsAt)
             in
             Line startLineAt
                 startingEvent
