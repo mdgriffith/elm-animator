@@ -791,7 +791,6 @@ div (Animation now renderedProps) attrs children =
     let
         rendered =
             Css.toCss now renderedProps
-                |> Debug.log "CSS"
     in
     Html.div
         (List.map (\( key, val ) -> Attr.style key val) rendered.props ++ attrs)
