@@ -10,7 +10,7 @@ module InternalAnim.Timeline exposing
     , foldpAll
     , gc, atTime, dwellingTime, getCurrentTime, linesAreActive
     , Transition
-    , transitionProgress
+    , getUpdatedAt, transitionProgress
     )
 
 {-|
@@ -83,7 +83,12 @@ type Timeline event
 
 type alias TimelineDetails event =
     { initial : event
+
+    -- The current wall time
     , now : Time.Absolute
+
+    -- The last time we updated the timeline
+    , updatedAt : Time.Absolute
     , delay : Time.Duration
     , scale : Float
     , events : Timetable event
@@ -106,11 +111,10 @@ type Timetable event
     = Timetable (List (Line event))
 
 
-{-| -}
-type
-    Line event
-    --   maybe previous event, starting time, starting event, subsequent events
-    -- The maybe previous event is only used to calculate time adjustments for arriveEarly and leaveLate
+{-| -- maybe previous event, starting time, starting event, subsequent events
+-- The maybe previous event is only used to calculate time adjustments for arriveEarly and leaveLate
+-}
+type Line event
     = Line Time.Absolute (Occurring event) (List (Occurring event))
 
 
@@ -176,15 +180,14 @@ atTime now (Timeline timeline) =
     Timeline { timeline | now = Time.absolute now }
 
 
+getUpdatedAt : Timeline event -> Time.Absolute
+getUpdatedAt (Timeline details) =
+    details.updatedAt
+
+
 getCurrentTime : Timeline event -> Time.Absolute
 getCurrentTime (Timeline timeline) =
     Time.rollbackBy timeline.delay timeline.now
-
-
-cutoff : Time.Absolute
-cutoff =
-    --Time.millis 1618490321242
-    Time.millis 0
 
 
 update : Time.Posix -> Timeline event -> Timeline event
@@ -202,7 +205,6 @@ updateWith withGC possiblyNow (Timeline timeline) =
         -- to allow scrubbing a timeline.
         now =
             Quantity.max (Time.absolute possiblyNow) timeline.now
-                |> Quantity.minus cutoff
     in
     { timeline | now = now }
         |> applyQueued
@@ -265,7 +267,7 @@ garbageCollectOldEvents now droppable lines =
         [] ->
             List.reverse droppable
 
-        (Line startAt startingEvent events) :: remaining ->
+        ((Line startAt startingEvent events) as topLine) :: remaining ->
             if Time.thisAfterThat startAt now then
                 -- this line hasn't happened yet
                 List.reverse droppable ++ lines
@@ -290,10 +292,10 @@ garbageCollectOldEvents now droppable lines =
                                 Time.thisAfterThat now interruptionTime
                 in
                 if interrupted then
-                    garbageCollectOldEvents now (Line startAt startingEvent events :: droppable) remaining
+                    garbageCollectOldEvents now (topLine :: droppable) remaining
 
                 else
-                    case hewLine now (startingEvent :: events) of
+                    case hewLine startAt now Nothing (startingEvent :: events) of
                         NothingCaptured ->
                             List.reverse droppable ++ lines
 
@@ -306,13 +308,8 @@ type HewStatus event
     | NothingCaptured
 
 
-hewLine : Time.Absolute -> List (Occurring event) -> HewStatus event
-hewLine now events =
-    hewlineHelper now Nothing events
-
-
-hewlineHelper : Time.Absolute -> Maybe (Occurring event) -> List (Occurring event) -> HewStatus event
-hewlineHelper now maybePrevious events =
+hewLine : Time.Absolute -> Time.Absolute -> Maybe (Occurring event) -> List (Occurring event) -> HewStatus event
+hewLine lineOriginalStartingTime now maybePrevious events =
     case events of
         [] ->
             NothingCaptured
@@ -321,13 +318,13 @@ hewlineHelper now maybePrevious events =
             if dwellingAt now top then
                 case maybePrevious of
                     Nothing ->
-                        Captured (Line (startTime top) top remaining)
+                        NothingCaptured
 
                     Just prev ->
-                        Captured (Line (startTime prev) prev (top :: remaining))
+                        Captured (Line lineOriginalStartingTime prev (top :: remaining))
 
             else if Time.thisAfterThat now (endTime top) then
-                hewlineHelper now (Just top) remaining
+                hewLine lineOriginalStartingTime now (Just top) remaining
 
             else
                 NothingCaptured
@@ -446,6 +443,7 @@ applyQueued timeline =
                             |> scaleSchedule timeline.scale
                             |> enqueue timeline timeline.now
                 , queued = Nothing
+                , updatedAt = timeline.now
             }
 
 
@@ -544,7 +542,10 @@ applyInterruptions timeline =
 
         interruptions ->
             applyInterruptionHelper interruptions
-                { timeline | interruption = [] }
+                { timeline
+                    | interruption = []
+                    , updatedAt = timeline.now
+                }
 
 
 applyInterruptionHelper : List (Schedule event) -> TimelineDetails event -> TimelineDetails event
@@ -650,20 +651,14 @@ interruptLine now scheduled line future =
                 -- this line starts before the interruption
                 case future of
                     [] ->
-                        case getTransitionAt startInterruption startEvent trailing of
-                            Nothing ->
-                                if beforeLineEnd startInterruption line then
-                                    Just
-                                        [ createLine now scheduled
-                                        ]
+                        if beforeLineEnd startInterruption line then
+                            Just
+                                [ createLine now scheduled
+                                ]
 
-                                else
-                                    -- we'll just queue up this new line instead
-                                    Nothing
-
-                            Just last2Events ->
-                                Just
-                                    [ interruptAtExactly now scheduled last2Events ]
+                        else
+                            -- we'll just queue up this new line instead
+                            Nothing
 
                     (Line nextStart next nextEvents) :: futureRemaining ->
                         -- we need to find the target event we're currently enroute to.
@@ -675,14 +670,7 @@ interruptLine now scheduled line future =
                         then
                             Just
                                 (Line nextStart next nextEvents
-                                    :: interruptAtExactly now
-                                        scheduled
-                                        (LastTwoEvents
-                                            (endTime startEvent)
-                                            (getEvent startEvent)
-                                            (startTime next)
-                                            (getEvent next)
-                                        )
+                                    :: createLine now scheduled
                                     :: futureRemaining
                                 )
 
@@ -691,50 +679,6 @@ interruptLine now scheduled line future =
 
             else
                 Nothing
-
-
-{-| This will provide the two events we are currently between.
--}
-getTransitionAt : Time.Absolute -> Occurring event -> List (Occurring event) -> Maybe (LastTwoEvents event)
-getTransitionAt interruptionTime prev trailing =
-    case trailing of
-        [] ->
-            Nothing
-
-        next :: remain ->
-            if Time.thisAfterOrEqualThat interruptionTime (endTime prev) && Time.thisBeforeThat interruptionTime (startTime next) then
-                Just (LastTwoEvents (endTime prev) (getEvent prev) (startTime next) (getEvent next))
-
-            else
-                getTransitionAt interruptionTime next remain
-
-
-interruptAtExactly : Time.Absolute -> Schedule event -> LastTwoEvents event -> Line event
-interruptAtExactly now scheduled (LastTwoEvents penultimateTime penultimate lastEventTime _) =
-    case scheduled of
-        Schedule delay_ startingEvent reverseQueued ->
-            let
-                newStartingEvent =
-                    -- we apply the discount if we are returning to a state
-                    if penultimate == getScheduledEvent startingEvent then
-                        let
-                            amountProgress =
-                                Time.progress penultimateTime
-                                    lastEventTime
-                                    (Time.advanceBy delay_ now)
-                        in
-                        startingEvent
-                            |> adjustScheduledDuration (Quantity.multiplyBy amountProgress)
-
-                    else
-                        startingEvent
-            in
-            createLine now
-                (Schedule delay_ newStartingEvent reverseQueued)
-
-
-type LastTwoEvents event
-    = LastTwoEvents Time.Absolute event Time.Absolute event
 
 
 {-| Queue a list of events to be played after everything.
@@ -917,12 +861,13 @@ addToDwell duration maybeDwell =
 
 
 foldpAll :
-    (state -> anchor)
+    Time.Absolute
+    -> (state -> anchor)
     -> (anchor -> motion)
     -> Transition state anchor motion
     -> Timeline state
     -> motion
-foldpAll lookup toStart transitionTo (Timeline timelineDetails) =
+foldpAll now lookup toStart transitionTo (Timeline timelineDetails) =
     case timelineDetails.events of
         Timetable timetable ->
             let
@@ -934,7 +879,7 @@ foldpAll lookup toStart transitionTo (Timeline timelineDetails) =
                     start
 
                 (Line lineStart _ _) :: _ ->
-                    visitAll2
+                    visitAll now
                         lookup
                         transitionTo
                         timelineDetails
@@ -945,8 +890,9 @@ foldpAll lookup toStart transitionTo (Timeline timelineDetails) =
 
 
 {-| -}
-visitAll2 :
-    (state -> anchor)
+visitAll :
+    Time.Absolute
+    -> (state -> anchor)
     -> Transition state anchor motion
     -> TimelineDetails state
     -> Occurring state
@@ -954,7 +900,7 @@ visitAll2 :
     -> List (Line state)
     -> motion
     -> motion
-visitAll2 toAnchor transitionTo details prev queue future state =
+visitAll now toAnchor transitionTo details prev queue future state =
     -- queue: the upcoming events on this Line
     case queue of
         [] ->
@@ -972,12 +918,12 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                                     toAnchor
                                     prev
                                     futureEvent
-                                    details.now
+                                    now
                                     futureStart
                                     (startTime futureEvent)
                                     futureRemain
                     in
-                    visitAll2
+                    visitAll now
                         toAnchor
                         transitionTo
                         details
@@ -996,7 +942,7 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                                         toAnchor
                                         prev
                                         futureEvent
-                                        details.now
+                                        now
                                         --v transition start time
                                         futureStart
                                         --v transition end time
@@ -1005,12 +951,12 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                                     |> transitionTo toAnchor
                                         prev
                                         nextEvent
-                                        details.now
+                                        now
                                         nextStart
                                         (endTime nextEvent)
                                         nextRemain
                         in
-                        visitAll2
+                        visitAll now
                             toAnchor
                             transitionTo
                             details
@@ -1027,12 +973,12 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                                         toAnchor
                                         prev
                                         futureEvent
-                                        details.now
+                                        now
                                         (endTime prev)
                                         (endTime futureEvent)
                                         futureRemain
                         in
-                        visitAll2
+                        visitAll now
                             toAnchor
                             transitionTo
                             details
@@ -1049,13 +995,13 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                             transitionTo toAnchor
                                 prev
                                 top
-                                details.now
+                                now
                                 (endTime prev)
                                 (startTime top)
                                 remain
                                 state
                     in
-                    visitAll2
+                    visitAll now
                         toAnchor
                         transitionTo
                         details
@@ -1076,19 +1022,19 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                                     |> transitionTo toAnchor
                                         prev
                                         top
-                                        details.now
+                                        now
                                         (endTime prev)
                                         futureStart
                                         remain
                                     |> transitionTo toAnchor
                                         prev
                                         futureEvent
-                                        details.now
+                                        now
                                         futureStart
                                         (endTime futureEvent)
                                         futureRemain
                         in
-                        visitAll2
+                        visitAll now
                             toAnchor
                             transitionTo
                             details
@@ -1103,13 +1049,13 @@ visitAll2 toAnchor transitionTo details prev queue future state =
                                 transitionTo toAnchor
                                     prev
                                     top
-                                    details.now
+                                    now
                                     (endTime prev)
                                     (endTime top)
                                     remain
                                     state
                         in
-                        visitAll2
+                        visitAll now
                             toAnchor
                             transitionTo
                             details
@@ -1133,7 +1079,8 @@ type Status
 
 status : Timeline event -> Status
 status timeline =
-    foldpAll identity
+    foldpAll (getCurrentTime timeline)
+        identity
         (\_ -> Dwelling Time.zeroDuration)
         (\_ prev target now start end theFuture found ->
             -- Some notes because I have this loaded in my brain now.
@@ -1210,7 +1157,8 @@ dwellingTime timeline =
 
 arrived : Timeline event -> event
 arrived ((Timeline details) as timeline) =
-    foldpAll identity
+    foldpAll (getCurrentTime timeline)
+        identity
         (\_ -> details.initial)
         (\_ _ target now _ end _ state ->
             -- This is the current event when
@@ -1228,7 +1176,8 @@ arrived ((Timeline details) as timeline) =
 
 current : Timeline event -> event
 current ((Timeline details) as timeline) =
-    foldpAll identity
+    foldpAll (getCurrentTime timeline)
+        identity
         (\_ -> details.initial)
         (\_ _ target now start end future state ->
             -- This is the current event when
@@ -1252,7 +1201,8 @@ current ((Timeline details) as timeline) =
 
 previous : Timeline event -> event
 previous ((Timeline details) as timeline) =
-    foldpAll identity
+    foldpAll (getCurrentTime timeline)
+        identity
         (\_ -> details.initial)
         (\_ _ target now _ _ future state ->
             if Time.thisAfterThat now (endTime target) then
@@ -1271,7 +1221,8 @@ previous ((Timeline details) as timeline) =
 
 arrivedAt : (event -> Bool) -> Time.Posix -> Timeline event -> Bool
 arrivedAt matches newTime ((Timeline details) as tl) =
-    foldpAll identity
+    foldpAll (getCurrentTime tl)
+        identity
         (\_ -> False)
         (\_ _ target _ _ end _ state ->
             state
@@ -1320,7 +1271,8 @@ upcoming matches ((Timeline details) as tl) =
         True
 
     else
-        foldpAll identity
+        foldpAll (getCurrentTime tl)
+            identity
             (\_ -> False)
             (\_ _ target now _ end _ state ->
                 state

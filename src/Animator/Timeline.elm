@@ -1,12 +1,12 @@
 module Animator.Timeline exposing
     ( Timeline, init
     , to
-    , update, isRunning
+    , update, isRunning, hasChanges
     , interrupt, queue
     , Step, wait, transitionTo
     , scale, delay
     , current, previous, upcoming, upcomingWith, arrived, arrivedAt, arrivedAtWith
-    , Duration, hasChanges
+    , Duration
     )
 
 {-|
@@ -28,7 +28,7 @@ In order to do that we need to specify both —
 
 @docs to
 
-@docs update, isRunning
+@docs update, isRunning, hasChanges
 
 
 # Interruptions and Queueing
@@ -106,9 +106,14 @@ You could replace that with an `Animator.Timeline Bool`
 -}
 init : state -> Timeline state
 init first =
+    let
+        epoch =
+            Time.absolute (Time.millisToPosix 0)
+    in
     Timeline.Timeline
         { initial = first
-        , now = Time.absolute (Time.millisToPosix 0)
+        , now = epoch
+        , updatedAt = epoch
         , delay = Duration.milliseconds 0
         , scale = 1
         , events =

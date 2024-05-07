@@ -8,7 +8,7 @@ module Animator.Value exposing
 
 This module is for you!
 
-You'll need to track a `Timeline` in your model and update it using `AnimationFrame`.
+You'll need to track a `Timeline` in your model and update it using `Browser.Events.animationFrame`.
 
 @docs color
 
@@ -39,7 +39,8 @@ type alias Movement =
 {-| -}
 color : Timeline state -> (state -> Color) -> Color
 color timeline lookup =
-    Timeline.foldpAll lookup
+    Timeline.foldpAll (Timeline.getCurrentTime timeline)
+        lookup
         identity
         (\_ prev target now startTime endTime future state ->
             let
@@ -91,7 +92,8 @@ velocity timeline lookup =
 {-| -}
 movement : Timeline state -> (state -> Movement) -> { position : Float, velocity : Float }
 movement timeline lookup =
-    Timeline.foldpAll lookup
+    Timeline.foldpAll (Timeline.getCurrentTime timeline)
+        lookup
         Move.init
         (\_ _ target now startTransition interruptedOrEnd future state ->
             let

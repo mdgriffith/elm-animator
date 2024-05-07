@@ -318,6 +318,7 @@ keyframes steps =
                         (Step _ props) :: _ ->
                             props
                 , now = imminent
+                , updatedAt = imminent
                 , delay = Time.zeroDuration
                 , scale = 1
                 , events =
@@ -344,7 +345,7 @@ keyframes steps =
                 }
     in
     Animation
-        (Timeline.getCurrentTime timeline)
+        (Timeline.getUpdatedAt timeline)
         (Css.propsToRenderedProps timeline identity)
 
 
@@ -692,7 +693,7 @@ Anim.div
 onTimeline : Timeline state -> (state -> List Attribute) -> Animation
 onTimeline timeline toProps =
     Animation
-        (Timeline.getCurrentTime timeline)
+        (Timeline.getUpdatedAt timeline)
         (Css.propsToRenderedProps timeline toProps)
 
 
@@ -718,7 +719,7 @@ onTimelineWith timeline toPropsAndSteps =
                 |> List.map (addSequenceSteps 1 fullDuration steps)
     in
     Animation
-        (Timeline.getCurrentTime timeline)
+        (Timeline.getUpdatedAt timeline)
         (Css.propsToRenderedProps timeline toProps)
 
 
@@ -755,6 +756,7 @@ transition transitionDuration props =
             Timeline.Timeline
                 { initial = []
                 , now = imminent
+                , updatedAt = Time.absolute (Time.millisToPosix 0)
                 , delay = Time.zeroDuration
                 , scale = 1
                 , events =
@@ -769,7 +771,7 @@ transition transitionDuration props =
                 , running = True
                 }
     in
-    Animation (Timeline.getCurrentTime timeline)
+    Animation (Timeline.getUpdatedAt timeline)
         (Css.propsToRenderedProps timeline identity)
 
 
@@ -789,6 +791,7 @@ div (Animation now renderedProps) attrs children =
     let
         rendered =
             Css.toCss now renderedProps
+                |> Debug.log "CSS"
     in
     Html.div
         (List.map (\( key, val ) -> Attr.style key val) rendered.props ++ attrs)
@@ -841,7 +844,7 @@ css timeline toPropsAndSteps =
                 |> List.map (addSequenceSteps 1 fullDuration steps)
     in
     Css.toCss
-        (Timeline.getCurrentTime timeline)
+        (Timeline.getUpdatedAt timeline)
         (Css.propsToRenderedProps timeline toProps)
 
 

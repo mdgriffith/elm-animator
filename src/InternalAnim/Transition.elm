@@ -216,7 +216,6 @@ atX progress transition =
             }
 
         Wobble wob ->
-            -- IS THIS RIGHT?
             let
                 totalX =
                     1
