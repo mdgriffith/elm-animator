@@ -14,7 +14,6 @@ import Time
 
 
 suite =
-    -- only <|
     describe "Animation"
         [ test "A simple animation to opacity generates a transition" <|
             \_ ->
@@ -80,6 +79,7 @@ suite =
                         InternalAnim.Timeline.Timeline
                             { initial = []
                             , now = imminent
+                            , updatedAt = imminent
                             , delay = Time.zeroDuration
                             , scale = 1
                             , events =

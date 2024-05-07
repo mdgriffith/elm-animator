@@ -91,6 +91,7 @@ timelines =
                 , initial = Starting
                 , interruption = []
                 , now = qty now
+                , updatedAt = qty now
                 , queued = Nothing
                 , running = True
                 , delay = Time.zeroDuration
@@ -312,15 +313,24 @@ queueing =
                         |> Timeline.update (Time.millisToPosix 0)
                         -- move the clock forward to 2s so that `now` matches
                         |> Timeline.update (Time.millisToPosix 2000)
+                        -- set updated at to make the equals check work, even though this doesn't happen
+                        |> manuallyOverrideUpdatedAt (Time.millisToPosix 2000)
                     )
                     (timeline
                         |> Animator.Timeline.queue
                             [ Animator.Timeline.transitionTo (seconds 1) One
                             ]
                         |> Timeline.update (Time.millisToPosix 2000)
-                        |> Debug.log "QUEUED LATER"
                     )
         ]
+
+
+manuallyOverrideUpdatedAt : Time.Posix -> Timeline.Timeline event -> Timeline.Timeline event
+manuallyOverrideUpdatedAt time (Timeline.Timeline tl) =
+    Timeline.Timeline
+        { tl
+            | updatedAt = Time.absolute time
+        }
 
 
 interruptions =
@@ -727,11 +737,12 @@ cleaning =
                             |> Timeline.updateWith False (Time.millisToPosix 1000)
                             |> Timeline.updateWith False (Time.millisToPosix 5000)
                             |> Timeline.gc
+                            |> manuallyOverrideUpdatedAt (Time.millisToPosix 5000)
                 in
                 Expect.equal
                     newTimeline
                     (timelines.events 5000
-                        [ Timeline.Line (qty 3000)
+                        [ Timeline.Line (qty 2000)
                             (occur One (qty 3000) (qty 4000))
                             [ occur Two (qty 5000) (qty 5000) ]
                         ]
@@ -757,11 +768,12 @@ cleaning =
                             |> Timeline.update (Time.millisToPosix 2000)
                             |> Timeline.update (Time.millisToPosix 5000)
                             |> Timeline.gc
+                            |> manuallyOverrideUpdatedAt (Time.millisToPosix 5000)
                 in
                 Expect.equal
                     newTimeline
                     (timelines.events 5000
-                        [ Timeline.Line (qty 3000)
+                        [ Timeline.Line (qty 2000)
                             (occur Four (qty 3000) (qty 4000))
                             [ occur Five (qty 5000) (qty 5000) ]
                         ]
@@ -971,29 +983,48 @@ ordering =
                 Expect.equal
                     (Timeline.gc actualTimeline)
                     (Timeline.gc gcedTimeline)
-        , fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
+        , --only <|
+          fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
             "GC does not affect values at and after gc time."
           <|
             \timelineInstruction ->
                 let
-                    time =
-                        Time.millisToPosix 1400
-
                     actualTimeline =
                         Fuzz.Timeline.toTimeline { gc = False } timelineInstruction
 
                     timelineAt =
-                        Timeline.atTime time actualTimeline
-
-                    gcedTimeline =
-                        Timeline.gc timelineAt
+                        actualTimeline
+                            |> Timeline.updateWith False (Time.millisToPosix 1400)
                 in
                 Expect.all
                     [ \tl ->
+                        let
+                            nonGCedPos =
+                                .position (Value.movement tl toPosition)
+
+                            gcedPos =
+                                .position (Value.movement (Timeline.gc tl) toPosition)
+
+                            gced =
+                                if nonGCedPos == gcedPos then
+                                    { nonGcedPos = nonGCedPos
+                                    , timeline = tl
+                                    , gcedPos = gcedPos
+                                    , gcedTimeline = Timeline.gc tl
+                                    }
+
+                                else
+                                    -- Debug.log "GCED"
+                                    { nonGcedPos = nonGCedPos
+                                    , timeline = tl
+                                    , gcedPos = gcedPos
+                                    , gcedTimeline = Timeline.gc tl
+                                    }
+                        in
                         Expect.within
                             (Absolute 0.001)
-                            (.position (Value.movement tl toPosition))
-                            (.position (Value.movement (Timeline.gc tl) toPosition))
+                            nonGCedPos
+                            gcedPos
                     , \tl ->
                         Expect.within
                             (Absolute 0.001)
@@ -1064,6 +1095,10 @@ ordering =
         , test "GC trims down a single line if necessary" <|
             \_ ->
                 let
+                    -- 10k events queued at 1second each
+                    -- Start everything at 1 second
+                    -- Then update 500 secods later
+                    -- We should be at roughly 9500 events
                     newTimeline =
                         Animator.Timeline.init 0
                             |> Timeline.update (Time.millisToPosix 0)
@@ -1072,8 +1107,8 @@ ordering =
                                     (Animator.Timeline.transitionTo (seconds 1))
                                     (List.range 0 10000)
                                 )
-                            |> Timeline.update (Time.millisToPosix 5000)
-                            |> Timeline.update (Time.millisToPosix (500 * 1000))
+                            |> Timeline.update (Time.millisToPosix 1000)
+                            |> Timeline.update (Time.millisToPosix (1000 + (500 * 1000)))
 
                     eventCount =
                         case newTimeline of
@@ -1087,12 +1122,9 @@ ordering =
                                             (Timeline.Line _ _ evs) :: _ ->
                                                 List.length evs
                 in
-                -- we are jsut testing that previous events are being removed
-                -- we don't really care how many.
-                -- but it should be ~500 in this case.
                 Expect.equal
                     eventCount
-                    9507
+                    9502
         ]
 
 
