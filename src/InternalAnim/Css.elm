@@ -3,6 +3,7 @@ module InternalAnim.Css exposing
     , RenderedProp(..)
     , match
     , propsToRenderedProps
+    , renderedPropHasSequence
     , toCss
     )
 
@@ -117,11 +118,16 @@ type alias Css =
     }
 
 
-toCss : Time.Absolute -> List RenderedProp -> Css
-toCss now renderedProps =
+toCss :
+    { now : Time.Absolute
+    , attrs : List RenderedProp
+    , allowTransitions : Move.AllowTransitions
+    }
+    -> Css
+toCss { allowTransitions, now, attrs } =
     let
         cssDetails =
-            props2Css now renderedProps emptyAnim
+            props2Css allowTransitions now attrs emptyAnim
     in
     { hash = cssDetails.hash
     , keyframes = cssDetails.keyframes
@@ -410,14 +416,15 @@ addInitialProps props rendered =
                 new
 
 
-props2Css : Time.Absolute -> List RenderedProp -> CssAnim -> CssAnim
-props2Css now renderedProps anim =
+props2Css : Move.AllowTransitions -> Time.Absolute -> List RenderedProp -> CssAnim -> CssAnim
+props2Css allowTransitions now renderedProps anim =
     case renderedProps of
         [] ->
             anim
 
         (RenderedProp details) :: remain ->
-            props2Css now
+            props2Css allowTransitions
+                now
                 remain
                 (case details.sections of
                     [] ->
@@ -440,6 +447,7 @@ props2Css now renderedProps anim =
 
                     _ ->
                         Move.cssForSections now
+                            allowTransitions
                             (Units.inPixels details.state.position)
                             details.name
                             (\t one two ->
@@ -456,7 +464,8 @@ props2Css now renderedProps anim =
                 )
 
         (RenderedColorProp details) :: remain ->
-            props2Css now
+            props2Css allowTransitions
+                now
                 remain
                 (case details.sections of
                     [] ->
@@ -471,6 +480,7 @@ props2Css now renderedProps anim =
 
                     _ ->
                         Move.cssForSections now
+                            allowTransitions
                             details.color
                             details.name
                             (\t one two ->
@@ -487,7 +497,8 @@ props2Css now renderedProps anim =
                 )
 
         (VectorProp details) :: remain ->
-            props2Css now
+            props2Css allowTransitions
+                now
                 remain
                 (case details.sections of
                     [] ->
@@ -502,6 +513,7 @@ props2Css now renderedProps anim =
 
                     _ ->
                         Move.cssForSections now
+                            allowTransitions
                             (vectorStateToVector details.state)
                             details.name
                             (\t one two ->
@@ -1145,6 +1157,34 @@ type RenderedProp
       -- This is for translation and scaling
       -- Rotation is a RenderedProp
     | VectorProp VectorDetails
+
+
+renderedPropHasSequence : RenderedProp -> Bool
+renderedPropHasSequence renderedProp =
+    case renderedProp of
+        RenderedProp details ->
+            case details.sections of
+                [] ->
+                    False
+
+                _ ->
+                    True
+
+        RenderedColorProp details ->
+            case details.sections of
+                [] ->
+                    False
+
+                _ ->
+                    True
+
+        VectorProp details ->
+            case details.sections of
+                [] ->
+                    False
+
+                _ ->
+                    True
 
 
 type alias Vector =

@@ -346,13 +346,7 @@ keyframes interpolate startPercent endPercent transition =
 -}
 kf : Float -> String -> Bezier.Spline -> String
 kf percent prop spline =
-    if percent == 0 then
-        String.fromInt (floor percent)
-            ++ "% {animation-timing-function:"
-            ++ Bezier.toCss spline
-            ++ ";}"
-
-    else if percent == 100 then
+    if percent == 100 then
         String.fromInt (floor percent)
             ++ "% {"
             ++ prop
@@ -369,13 +363,7 @@ kf percent prop spline =
 
 keyframeFromSpline : Float -> value -> (value -> String) -> Bezier.Spline -> String
 keyframeFromSpline percent start toString spline =
-    if percent == 0 then
-        String.fromInt (floor percent)
-            ++ "% {animation-timing-function:"
-            ++ Bezier.toCss spline
-            ++ ";}"
-
-    else if percent == 100 then
+    if percent == 100 then
         String.fromInt (floor percent)
             ++ "% {"
             ++ toString start

@@ -4,10 +4,11 @@ module InternalAnim.Move exposing
     , lerpColor, lerpFloat, lerpVector
     , Sequence(..)
     , Step(..), stepWith
-    , sequences
-    , addSequence, cssForSections
+    , sequences, hasSequence
+    , addSequence, cssForSections, AllowTransitions(..)
     , withTransition, withVelocities
     , at
+    , denormalize
     , move, toState
     )
 
@@ -22,13 +23,15 @@ module InternalAnim.Move exposing
 @docs Sequence
 @docs Step, stepWith
 
-@docs sequences, goto
+@docs sequences, goto, hasSequence
 
-@docs addSequence, cssForSections
+@docs addSequence, cssForSections, AllowTransitions
 
 @docs withTransition, withVelocities
 
 @docs at
+
+@docs denormalize
 
 -}
 
@@ -39,6 +42,18 @@ import InternalAnim.Quantity as Quantity
 import InternalAnim.Time as Time
 import InternalAnim.Transition as Transition
 import InternalAnim.Units as Units
+
+
+{-| If this is a simple transition, then we can render it as a browser transition.
+
+Otherwise, if it has sequences, then it needs to be rendered as a CSS animation.
+
+Value animations don't care.
+
+-}
+hasSequence : Move value -> Bool
+hasSequence (Pos _ _ seq) =
+    not (List.isEmpty seq)
 
 
 {-| -}
@@ -103,10 +118,12 @@ We need to know:
 Also, each `value` needs all information about how to get to the next `value`
 which is the opposite of what elm-animator does.
 
--}
-type
-    Sequence value
     --         repeat, delay,        duration
+
+
+
+-}
+type Sequence value
     = Sequence Int Duration.Duration Duration.Duration (List (Step value))
 
 
@@ -801,6 +818,11 @@ type alias CssAnim =
     }
 
 
+type AllowTransitions
+    = AllowTransitions
+    | DisallowTransitions
+
+
 {-|
 
     - For the first curve of the first step of the first sequence
@@ -813,6 +835,7 @@ type alias CssAnim =
 -}
 cssForSections :
     Time.Absolute
+    -> AllowTransitions
     -> value
     -> String
     -> (Float -> value -> value -> String)
@@ -821,38 +844,48 @@ cssForSections :
     -> List (Sequence value)
     -> CssAnim
     -> CssAnim
-cssForSections now startPos name lerp toString toHashString sections anim =
+cssForSections now allowTransitions startPos name lerp toString toHashString sections anim =
     case sections of
         [] ->
             anim
 
         [ (Sequence 1 delay _ [ Step stepDur (Transition.Transition spline) v ]) as seq ] ->
-            -- NOTE, we're not using the above `dur` because it's the total duration of the sequence
-            -- and therefore equal to stepDur in this case
-            { anim
-                | hash =
-                    case anim.hash of
-                        "" ->
-                            hash now name seq toHashString
+            case allowTransitions of
+                AllowTransitions ->
+                    -- NOTE, we're not using the above `dur` because it's the total duration of the sequence
+                    -- and therefore equal to stepDur in this case
+                    { anim
+                        | hash =
+                            case anim.hash of
+                                "" ->
+                                    hash now name seq toHashString
 
-                        _ ->
-                            anim.hash ++ hash now name seq toHashString
-                , transition =
-                    case anim.transition of
-                        "" ->
-                            renderTransition name delay stepDur spline
+                                _ ->
+                                    anim.hash ++ hash now name seq toHashString
+                        , transition =
+                            case anim.transition of
+                                "" ->
+                                    renderTransition name delay stepDur spline
 
-                        _ ->
-                            renderTransition name delay stepDur spline ++ ", " ++ anim.transition
-                , props =
-                    ( name, toString v )
-                        :: anim.props
-            }
+                                _ ->
+                                    renderTransition name delay stepDur spline ++ ", " ++ anim.transition
+                        , props =
+                            ( name, toString v )
+                                :: anim.props
+                    }
+
+                DisallowTransitions ->
+                    toCssKeyframes
+                        now
+                        startPos
+                        name
+                        lerp
+                        toString
+                        toHashString
+                        sections
+                        anim
 
         _ ->
-            -- -- most common situation
-            -- -- Renders the first step as a transition
-            -- -- and all subsequent steps as css keyframes
             toCssKeyframes
                 now
                 startPos
@@ -952,10 +985,10 @@ css now startPos name lerp toString toHashString seq =
     { hash = animationName
     , transition = ""
     , animation =
-        (durationStr ++ " ")
+        durationStr
             -- we specify an easing function here because it we have to
             -- , but it is overridden by the one in keyframes
-            ++ "linear "
+            ++ " linear "
             ++ delayStr
             ++ " "
             ++ n

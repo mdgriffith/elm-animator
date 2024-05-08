@@ -254,13 +254,21 @@ ms =
 
 {-| -}
 delay : Duration -> Animation -> Animation
-delay dur (Animation now attrs) =
-    Animation (Time.rollbackBy dur now) attrs
+delay dur (Animation { now, attrs, allowTransitions }) =
+    Animation
+        { allowTransitions = allowTransitions
+        , now = Time.rollbackBy dur now
+        , attrs = attrs
+        }
 
 
 {-| -}
 type Animation
-    = Animation Time.Absolute (List Css.RenderedProp)
+    = Animation
+        { now : Time.Absolute
+        , attrs : List Css.RenderedProp
+        , allowTransitions : Move.AllowTransitions
+        }
 
 
 {-| -}
@@ -345,8 +353,10 @@ keyframes steps =
                 }
     in
     Animation
-        (Timeline.getUpdatedAt timeline)
-        (Css.propsToRenderedProps timeline identity)
+        { allowTransitions = Move.DisallowTransitions
+        , now = Timeline.getUpdatedAt timeline
+        , attrs = Css.propsToRenderedProps timeline identity
+        }
 
 
 toOccurring : Time.Absolute -> Step -> ( Time.Absolute, Timeline.Occurring (List Attribute) )
@@ -693,8 +703,10 @@ Anim.div
 onTimeline : Timeline state -> (state -> List Attribute) -> Animation
 onTimeline timeline toProps =
     Animation
-        (Timeline.getUpdatedAt timeline)
-        (Css.propsToRenderedProps timeline toProps)
+        { allowTransitions = Move.DisallowTransitions
+        , now = Timeline.getUpdatedAt timeline
+        , attrs = Css.propsToRenderedProps timeline toProps
+        }
 
 
 {-| -}
@@ -719,8 +731,10 @@ onTimelineWith timeline toPropsAndSteps =
                 |> List.map (addSequenceSteps 1 fullDuration steps)
     in
     Animation
-        (Timeline.getUpdatedAt timeline)
-        (Css.propsToRenderedProps timeline toProps)
+        { allowTransitions = Move.DisallowTransitions
+        , now = Timeline.getUpdatedAt timeline
+        , attrs = Css.propsToRenderedProps timeline toProps
+        }
 
 
 {-|
@@ -770,15 +784,21 @@ transition transitionDuration props =
                 , interruption = []
                 , running = True
                 }
+
+        renderedProps =
+            Css.propsToRenderedProps timeline identity
     in
-    Animation (Timeline.getUpdatedAt timeline)
-        (Css.propsToRenderedProps timeline identity)
+    Animation
+        { now = Timeline.getUpdatedAt timeline
+        , allowTransitions = Move.AllowTransitions
+        , attrs = renderedProps
+        }
 
 
 {-| -}
 toCss : Animation -> Css
-toCss (Animation now renderedProps) =
-    Css.toCss now renderedProps
+toCss (Animation anim) =
+    Css.toCss anim
 
 
 {-| -}
@@ -787,10 +807,10 @@ div :
     -> List (Html.Attribute msg)
     -> List (Html msg)
     -> Html msg
-div (Animation now renderedProps) attrs children =
+div (Animation anim) attrs children =
     let
         rendered =
-            Css.toCss now renderedProps
+            Css.toCss anim
     in
     Html.div
         (List.map (\( key, val ) -> Attr.style key val) rendered.props ++ attrs)
@@ -806,10 +826,10 @@ node :
     -> List (Html.Attribute msg)
     -> List (Html msg)
     -> Html msg
-node name (Animation now renderedProps) attrs children =
+node name (Animation anim) attrs children =
     let
         rendered =
-            Css.toCss now renderedProps
+            Css.toCss anim
     in
     Html.node name
         (List.map (\( key, val ) -> Attr.style key val) rendered.props ++ attrs)
@@ -843,8 +863,10 @@ css timeline toPropsAndSteps =
                 |> List.map (addSequenceSteps 1 fullDuration steps)
     in
     Css.toCss
-        (Timeline.getUpdatedAt timeline)
-        (Css.propsToRenderedProps timeline toProps)
+        { allowTransitions = Move.DisallowTransitions
+        , now = Timeline.getUpdatedAt timeline
+        , attrs = Css.propsToRenderedProps timeline toProps
+        }
 
 
 {-| -}
