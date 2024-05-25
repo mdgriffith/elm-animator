@@ -24,14 +24,6 @@ type Bits bits
     = Bits Int
 
 
-
--- flip : Int -> Bool -> Bits bits -> Bits bits
--- flip offset on (Bits b) =
---     b
---         |> store offset 1 (bool on)
---         |> Bits
-
-
 store4Float : Float -> Float -> Float -> Float -> Bits bits
 store4Float one two three four =
     Bitwise.and top8 (round one)

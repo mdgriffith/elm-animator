@@ -363,6 +363,11 @@ We are not continuing to another state, so we will report all of our splines.
     if now is after -> return nothing
     else if during -> split & rerepeat and return top
 
+Start Time - When the transition starts
+Target time -
+Now - The current time
+Stop time -
+
 -}
 sequences :
     -- start

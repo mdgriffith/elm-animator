@@ -105,7 +105,7 @@ propsToRenderedProps timeline lookup =
     Timeline.foldpAll (Timeline.getUpdatedAt timeline)
         lookup
         (\_ -> present)
-        toPropCurves2
+        toPropCurves
         timeline
 
 
@@ -598,8 +598,8 @@ normalizeVelocity startTime targetTime startPosition targetPosition velocity =
 
 
 {-| -}
-toPropCurves2 : Timeline.Transition state (List Prop) (List RenderedProp)
-toPropCurves2 lookup prev target now startTime endTime future cursor =
+toPropCurves : Timeline.Transition state (List Prop) (List RenderedProp)
+toPropCurves lookup prev target now startTime endTime future cursor =
     let
         targetTime =
             Timeline.startTime target
