@@ -1160,12 +1160,15 @@ arrived ((Timeline details) as timeline) =
     foldpAll (getCurrentTime timeline)
         identity
         (\_ -> details.initial)
-        (\_ _ target now _ end _ state ->
-            -- This is the current event when
-            --      we have started toward an event or arrived at it.
-            -- A tricky aspect is that css timelines are only updated on transition
-            -- This means that now == start must be current, or else current will be wrong for the whole transition.
-            if Time.thisAfterOrEqualThat now end && (startTime target == end) then
+        (\_ _ target now _ endTransition _ state ->
+            -- Arrived value is the last value that we've successfully arrived at
+            if
+                Time.thisAfterOrEqualThat now endTransition
+                    && (-- the endTransition is either the endtime of `target event` or the interruption time
+                        -- If we were interrupted, we never made it to this event.
+                        endTime target == endTransition
+                       )
+            then
                 getEvent target
 
             else
@@ -1179,18 +1182,18 @@ current ((Timeline details) as timeline) =
     foldpAll (getCurrentTime timeline)
         identity
         (\_ -> details.initial)
-        (\_ _ target now start end future state ->
+        (\_ _ target now start endTransition future state ->
             -- This is the current event when
             --      we have started toward an event or arrived at it.
             -- A tricky aspect is that css timelines are only updated on transition
             -- This means that now == start must be current, or else current will be wrong for the whole transition.
             if
-                Time.thisBeforeOrEqualThat now end
+                Time.thisBeforeOrEqualThat now endTransition
                     && Time.thisAfterOrEqualThat now start
             then
                 getEvent target
 
-            else if List.isEmpty future && Time.thisAfterThat now end then
+            else if List.isEmpty future && Time.thisAfterThat now endTransition then
                 getEvent target
 
             else
@@ -1199,6 +1202,17 @@ current ((Timeline details) as timeline) =
         timeline
 
 
+{-|
+
+```ascii
+                       Starting transitioning to C
+                    |  |
+          A---------B--B-------C
+               ^    ^ ^  ^
+previous:      A    A A  B
+```
+
+-}
 previous : Timeline event -> event
 previous ((Timeline details) as timeline) =
     foldpAll (getCurrentTime timeline)
