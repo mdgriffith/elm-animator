@@ -932,7 +932,7 @@ visitAll now toAnchor transitionTo details prev queue future state =
                         []
                         new
 
-                (Line futureStart futureEvent futureRemain) :: (((Line nextStart nextEvent nextRemain) :: restOfFuture) as allFuture) ->
+                (Line futureStart futureEvent futureRemain) :: (((Line nextStart nextEvent nextRemain) :: _) as allFuture) ->
                     if Time.thisBeforeThat nextStart (endTime futureEvent) then
                         -- we've been interrupted!
                         let
@@ -948,13 +948,6 @@ visitAll now toAnchor transitionTo details prev queue future state =
                                         --v transition end time
                                         nextStart
                                         futureRemain
-                                    |> transitionTo toAnchor
-                                        prev
-                                        nextEvent
-                                        now
-                                        nextStart
-                                        (endTime nextEvent)
-                                        nextRemain
                         in
                         visitAll now
                             toAnchor
@@ -962,7 +955,7 @@ visitAll now toAnchor transitionTo details prev queue future state =
                             details
                             nextEvent
                             nextRemain
-                            restOfFuture
+                            allFuture
                             new
 
                     else
@@ -975,7 +968,7 @@ visitAll now toAnchor transitionTo details prev queue future state =
                                         futureEvent
                                         now
                                         (endTime prev)
-                                        (endTime futureEvent)
+                                        nextStart
                                         futureRemain
                         in
                         visitAll now
@@ -1217,20 +1210,54 @@ previous : Timeline event -> event
 previous ((Timeline details) as timeline) =
     foldpAll (getCurrentTime timeline)
         identity
-        (\_ -> details.initial)
-        (\_ _ target now _ _ future state ->
-            if Time.thisAfterThat now (endTime target) then
-                case future of
-                    [] ->
+        (\_ -> ( details.initial, NoIntention ))
+        (\_ _ target now start endTransition future (( lastVisited, maybeLeadingVisited ) as state) ->
+            let
+                completedEvent =
+                    Time.thisAfterThat now (endTime target) && (endTime target == endTransition)
+
+                atEvent =
+                    Time.equal now (endTime target) && Time.equal now endTransition
+
+                result =
+                    if completedEvent || atEvent then
+                        -- completed or at target
+                        case maybeLeadingVisited of
+                            NoIntention ->
+                                ( lastVisited, Completed (getEvent target) )
+
+                            Completed leadingVisited ->
+                                ( leadingVisited, Completed (getEvent target) )
+
+                            EnRoute leadingVisited ->
+                                ( leadingVisited, Completed (getEvent target) )
+
+                    else if Time.thisAfterThat now start && Time.thisBeforeThat now (endTime target) then
+                        -- enroute
+                        case maybeLeadingVisited of
+                            NoIntention ->
+                                ( lastVisited, EnRoute (getEvent target) )
+
+                            Completed leadingVisited ->
+                                ( leadingVisited, EnRoute (getEvent target) )
+
+                            EnRoute _ ->
+                                -- We were going to one place, now we're going to another
+                                ( lastVisited, EnRoute (getEvent target) )
+
+                    else
                         state
-
-                    _ ->
-                        getEvent target
-
-            else
-                state
+            in
+            result
         )
         timeline
+        |> Tuple.first
+
+
+type Intention a
+    = NoIntention
+    | EnRoute a
+    | Completed a
 
 
 arrivedAt : (event -> Bool) -> Time.Posix -> Timeline event -> Bool
