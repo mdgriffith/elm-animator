@@ -64,7 +64,10 @@ Goals:
 
 import Bezier
 import Bezier.Spring as Spring
+import InternalAnim.Duration as Duration
 import InternalAnim.Hash as Hash
+import InternalAnim.Time as Time
+import InternalAnim.Units as Units
 
 
 {-| A transition are all the bezier curves between A and B that we want to transition through.
@@ -195,57 +198,106 @@ isStandard trans =
             False
 
 
+{-| The opposite of `normalizeOver`.
+
+I guess this is denormalization? Though i was always confused by that term :/
+
+-}
+toReal : Float -> Float -> Float -> Float
+toReal start end t =
+    start + (t * (end - start))
+
+
 {-| -}
 atX :
     Float
+    -> Time.Absolute
+    -> Time.Absolute
     -> Transition
     ->
-        { position : Bezier.Point
-        , velocity : Bezier.Point
+        { position : Units.Pixels
+        , velocity : Units.PixelsPerSecond
         }
-atX progress transition =
+    -> Float
+    ->
+        { position : Units.Pixels
+        , velocity : Units.PixelsPerSecond
+        }
+atX progress startTime targetTime transition current target =
     case transition of
         Transition spline ->
             let
                 pos =
                     Bezier.atX progress spline
+
+                startingPosition =
+                    Units.inPixels current.position
             in
-            { position = pos.point
+            { position =
+                Units.pixels
+                    (toReal
+                        startingPosition
+                        target
+                        pos.point.y
+                    )
             , velocity =
-                Bezier.firstDerivative spline pos.t
+                let
+                    normalizedVelocity =
+                        Bezier.firstDerivative spline pos.t
+
+                    scaledX =
+                        normalizedVelocity.x
+                            * Duration.inSeconds
+                                (Time.duration startTime targetTime)
+
+                    scaledY =
+                        normalizedVelocity.y
+                            * (target - startingPosition)
+                in
+                if scaledX == 0 || isNaN scaledX then
+                    Units.pixelsPerSecond 0
+
+                else
+                    Units.pixelsPerSecond (scaledY / scaledX)
             }
 
         Wobble wob ->
             let
-                totalX =
-                    1
-
                 params =
                     Spring.new
                         { wobble = wob.wobble
                         , quickness = wob.quickness
-                        , settleMax = totalX
+                        , settleMax = totalDuration
                         }
+
+                totalDuration =
+                    Duration.inMilliseconds (Time.duration startTime targetTime)
+
+                durationMilliseconds =
+                    Duration.inMilliseconds (Time.duration startTime targetTime) * progress
+
+                currentVelocity =
+                    Units.inPixelsPerSecond current.velocity
 
                 sprung =
                     Spring.at
                         { spring = params
                         , initial =
-                            { position = 0
-                            , velocity = wob.introVelocity
+                            { position = Units.inPixels current.position
+                            , velocity =
+                                if progress == 0 then
+                                    wob.introVelocity
+
+                                else
+                                    currentVelocity
                             }
-                        , target = totalX * progress
+                        , target = target
                         }
-                        1
+                        durationMilliseconds
             in
-            { position =
-                { x = progress
-                , y = sprung.position
-                }
+            { position = Units.pixels sprung.position
             , velocity =
-                { x = progress
-                , y = sprung.velocity
-                }
+                Units.pixelsPerSecond sprung.velocity
             }
 
 
@@ -411,7 +463,10 @@ keyframeListFromNonNormalizedBezier steps toString str =
                     Bezier.normalize top
 
                 finalPercent =
-                    (Bezier.last top |> .x) / 1000
+                    (Bezier.last top
+                        |> .x
+                    )
+                        / 1000
 
                 finalValue =
                     Bezier.last top

@@ -8,7 +8,6 @@ module InternalAnim.Move exposing
     , addSequence, cssForSections, AllowTransitions(..)
     , withTransition, withVelocities
     , at
-    , denormalize
     , move, toState
     )
 
@@ -30,8 +29,6 @@ module InternalAnim.Move exposing
 @docs withTransition, withVelocities
 
 @docs at
-
-@docs denormalize
 
 -}
 
@@ -244,75 +241,8 @@ at :
     -> Move Float
     -> State
     -> State
-at progress startTime targetTime (Pos transition targetPosition dwell) startingState =
-    let
-        startPosition =
-            Units.inPixels startingState.position
-    in
-    Transition.atX progress transition
-        |> denormalize startTime
-            targetTime
-            startPosition
-            targetPosition
-
-
-{-|
-
-    Go from 0-1:0-1
-
-    To startPot-endPos,startTime-endTime
-
--}
-denormalize :
-    Time.Absolute
-    -> Time.Absolute
-    -> Float
-    -> Float
-    ->
-        { position : Bezier.Point
-        , velocity : Bezier.Point
-        }
-    -> State
-denormalize startTime targetTime startPosition targetPosition state =
-    { position =
-        Units.pixels
-            (toReal
-                startPosition
-                targetPosition
-                state.position.y
-            )
-    , velocity =
-        let
-            scaled =
-                state.velocity
-                    |> scaleXYBy
-                        { x =
-                            Duration.inSeconds
-                                (Time.duration startTime targetTime)
-                        , y = targetPosition - startPosition
-                        }
-        in
-        if scaled.x == 0 then
-            Units.pixelsPerSecond 0
-
-        else
-            Units.pixelsPerSecond (scaled.y / scaled.x)
-    }
-
-
-scaleXYBy : { x : Float, y : Float } -> Bezier.Point -> Bezier.Point
-scaleXYBy { x, y } point =
-    { x = point.x * x, y = point.y * y }
-
-
-{-| The opposite of `normalizeOver`.
-
-I guess this is denormalization? Though i was always confused by that term :/
-
--}
-toReal : Float -> Float -> Float -> Float
-toReal start end t =
-    start + (t * (end - start))
+at progress startTime targetTime (Pos transition targetPosition dwell) current =
+    Transition.atX progress startTime targetTime transition current targetPosition
 
 
 {-| Adds a new sequence to the top of the sequence stack.
