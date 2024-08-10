@@ -161,7 +161,7 @@ getInitial timeline lookup =
                 (\props ->
                     toInitialProps props { props = [], translation = Nothing, scale = Nothing }
                 )
-                (\get _ target _ _ _ _ cursor ->
+                (\get target _ _ _ _ cursor ->
                     addInitialProps (get (Timeline.getEvent target)) cursor
                 )
                 timeline
@@ -599,7 +599,7 @@ normalizeVelocity startTime targetTime startPosition targetPosition velocity =
 
 {-| -}
 toPropCurves : Timeline.Transition state (List Prop) (List RenderedProp)
-toPropCurves lookup prev target now startTime endTime future cursor =
+toPropCurves lookup target now startTime endTime future cursor =
     let
         targetTime =
             Timeline.startTime target
@@ -610,18 +610,7 @@ toPropCurves lookup prev target now startTime endTime future cursor =
         finished =
             -- we only want to ignore this event if it's both finished
             -- and not immediately preceding an event that is still upcoming
-            --case future of
-            --    [] ->
-            --        False
-            --
-            --    next :: _ ->
-            -- Time.thisAfterOrEqualThat now (Timeline.endTime target)
-            --&& not (Time.thisBeforeThat now (Timeline.startTime next))
-            ---------
-            --  Time.thisAfterOrEqualThat now (Timeline.endTime target)
             Time.thisAfterThat now (Timeline.endTime target)
-
-        -- || Time.equal now ()
     in
     List.map
         (\prop ->
@@ -673,36 +662,7 @@ toPropCurves lookup prev target now startTime endTime future cursor =
                             else
                                 let
                                     finalProp =
-                                        -- this is the check for being a transition
-                                        if not (Time.equal (Timeline.endTime prev) startTime) then
-                                            -- adjust the transition by taking into account
-                                            -- the intro and exit velocity
-                                            -- but only if this is an interruption
-                                            let
-                                                startPosition =
-                                                    Units.inPixels rendered.state.position
-
-                                                targetPosition =
-                                                    case targetProp of
-                                                        Move.Pos _ x _ ->
-                                                            x
-                                            in
-                                            targetProp
-                                                |> Move.withVelocities
-                                                    (normalizeVelocity
-                                                        startTime
-                                                        targetTime
-                                                        startPosition
-                                                        targetPosition
-                                                        rendered.state.velocity
-                                                    )
-                                                    -- If we do any transition smoothing
-                                                    -- we'll need to normalize this velocity too
-                                                    --Estimation.velocityAtTarget lookupState target future
-                                                    0
-
-                                        else
-                                            targetProp
+                                        targetProp
                                 in
                                 Move.sequences
                                     startTime
@@ -734,38 +694,9 @@ toPropCurves lookup prev target now startTime endTime future cursor =
                                 |> List.filter (isGroupProp details.group)
 
                         commonTransition =
-                            if not (Time.equal (Timeline.endTime prev) startTime) then
-                                let
-                                    fastestVelocity =
-                                        firstNonZero
-                                            [ normalizeVelocity
-                                                startTime
-                                                targetTime
-                                                (Units.inPixels details.state.x.position)
-                                                targets.x
-                                                details.state.x.velocity
-                                            , normalizeVelocity
-                                                startTime
-                                                targetTime
-                                                (Units.inPixels details.state.y.position)
-                                                targets.y
-                                                details.state.y.velocity
-                                            , normalizeVelocity
-                                                startTime
-                                                targetTime
-                                                (Units.inPixels details.state.z.position)
-                                                targets.z
-                                                details.state.z.velocity
-                                            ]
-                                in
-                                getCommonTransformTransition
-                                    targetProps
-                                    Transition.standard
-
-                            else
-                                getCommonTransformTransition
-                                    targetProps
-                                    Transition.standard
+                            getCommonTransformTransition
+                                targetProps
+                                Transition.standard
 
                         targets =
                             { x =

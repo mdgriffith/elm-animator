@@ -36,20 +36,44 @@ type alias Movement =
     Move.Move Float
 
 
+type ColorResult
+    = Unprocessed Color
+    | Processed Color
+
+
+getColor : ColorResult -> Color
+getColor result =
+    case result of
+        Unprocessed clr ->
+            clr
+
+        Processed clr ->
+            clr
+
+
+captureIfUnprocessed : Color -> ColorResult -> ColorResult
+captureIfUnprocessed clr result =
+    case result of
+        Unprocessed _ ->
+            Unprocessed clr
+
+        Processed _ ->
+            result
+
+
 {-| -}
 color : Timeline state -> (state -> Color) -> Color
 color timeline lookup =
     Timeline.foldpAll (Timeline.getCurrentTime timeline)
-        lookup
+        (\event -> Unprocessed (lookup event))
         identity
-        (\_ prev target now startTime endTime future state ->
+        (\_ target now startTime endTime future state ->
             let
                 isHappening =
                     (Time.thisAfterOrEqualThat now startTime
                         && Time.thisBeforeOrEqualThat now endTime
                     )
-                        || List.isEmpty future
-                        && Time.thisAfterThat now endTime
+                        || (List.isEmpty future && Time.thisAfterThat now endTime)
             in
             if isHappening then
                 let
@@ -59,14 +83,16 @@ color timeline lookup =
                     progress =
                         Time.progress startTime targetTime now
                 in
-                Move.lerpColor progress
-                    (lookup (Timeline.getEvent prev))
-                    (lookup (Timeline.getEvent target))
+                Processed <|
+                    Move.lerpColor progress
+                        (getColor state)
+                        (lookup (Timeline.getEvent target))
 
             else
-                state
+                captureIfUnprocessed (lookup (Timeline.getEvent target)) state
         )
         timeline
+        |> getColor
 
 
 {-| -}
@@ -95,7 +121,7 @@ movement timeline lookup =
     Timeline.foldpAll (Timeline.getCurrentTime timeline)
         lookup
         Move.init
-        (\_ _ target now startTransition interruptedOrEnd future state ->
+        (\_ target now startTransition interruptedOrEnd future state ->
             let
                 isHappening =
                     Time.thisAfterOrEqualThat now startTransition

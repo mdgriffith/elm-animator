@@ -8,7 +8,7 @@ module InternalAnim.Timeline exposing
     , progress
     , Line(..), Timetable(..)
     , foldpAll
-    , gc, atTime, dwellingTime, getCurrentTime, linesAreActive
+    , gc, atTime, dwellingTime, getCurrentTime
     , Transition
     , getUpdatedAt, transitionProgress
     )
@@ -33,7 +33,7 @@ module InternalAnim.Timeline exposing
 
 @docs foldpAll
 
-@docs gc, atTime, dwellingTime, getCurrentTime, linesAreActive
+@docs gc, atTime, dwellingTime, getCurrentTime
 
 @docs Transition
 
@@ -56,11 +56,6 @@ type Event event
     = Event Time.Duration event (Maybe Time.Duration)
 
 
-getScheduledEvent : Event event -> event
-getScheduledEvent (Event _ ev _) =
-    ev
-
-
 currentScheduleTarget : Schedule event -> event
 currentScheduleTarget (Schedule _ (Event _ target _) _) =
     target
@@ -69,11 +64,6 @@ currentScheduleTarget (Schedule _ (Event _ target _) _) =
 scheduleDelay : Schedule state -> Time.Duration
 scheduleDelay (Schedule d _ _) =
     d
-
-
-adjustScheduledDuration : (Time.Duration -> Time.Duration) -> Event event -> Event event
-adjustScheduledDuration fn (Event dur ev maybeDwell) =
-    Event (fn dur) ev maybeDwell
 
 
 {-| -}
@@ -130,8 +120,6 @@ type Occurring event
 
 type alias Transition state anchor motion =
     (state -> anchor)
-    -- previous event
-    -> Occurring state
     -- target event
     -> Occurring state
     -- now
@@ -916,7 +904,6 @@ visitAll now toAnchor transitionTo details prev queue future state =
                             state
                                 |> transitionTo
                                     toAnchor
-                                    prev
                                     futureEvent
                                     now
                                     futureStart
@@ -940,7 +927,6 @@ visitAll now toAnchor transitionTo details prev queue future state =
                                 state
                                     |> transitionTo
                                         toAnchor
-                                        prev
                                         futureEvent
                                         now
                                         --v transition start time
@@ -964,7 +950,6 @@ visitAll now toAnchor transitionTo details prev queue future state =
                                 state
                                     |> transitionTo
                                         toAnchor
-                                        prev
                                         futureEvent
                                         now
                                         (endTime prev)
@@ -986,7 +971,6 @@ visitAll now toAnchor transitionTo details prev queue future state =
                     let
                         new =
                             transitionTo toAnchor
-                                prev
                                 top
                                 now
                                 (endTime prev)
@@ -1013,14 +997,12 @@ visitAll now toAnchor transitionTo details prev queue future state =
                             new =
                                 state
                                     |> transitionTo toAnchor
-                                        prev
                                         top
                                         now
                                         (endTime prev)
                                         futureStart
                                         remain
                                     |> transitionTo toAnchor
-                                        prev
                                         futureEvent
                                         now
                                         futureStart
@@ -1040,7 +1022,6 @@ visitAll now toAnchor transitionTo details prev queue future state =
                         let
                             new =
                                 transitionTo toAnchor
-                                    prev
                                     top
                                     now
                                     (endTime prev)
@@ -1075,7 +1056,7 @@ status timeline =
     foldpAll (getCurrentTime timeline)
         identity
         (\_ -> Dwelling Time.zeroDuration)
-        (\_ prev target now start end theFuture found ->
+        (\_ target now start end theFuture found ->
             -- Some notes because I have this loaded in my brain now.
             -- end: either the endtime of `target event` or the interruption time
             -- We generally care about progress towards the start time of the target
@@ -1153,7 +1134,7 @@ arrived ((Timeline details) as timeline) =
     foldpAll (getCurrentTime timeline)
         identity
         (\_ -> details.initial)
-        (\_ _ target now _ endTransition _ state ->
+        (\_ target now _ endTransition _ state ->
             -- Arrived value is the last value that we've successfully arrived at
             if
                 Time.thisAfterOrEqualThat now endTransition
@@ -1175,7 +1156,7 @@ current ((Timeline details) as timeline) =
     foldpAll (getCurrentTime timeline)
         identity
         (\_ -> details.initial)
-        (\_ _ target now start endTransition future state ->
+        (\_ target now start endTransition future state ->
             -- This is the current event when
             --      we have started toward an event or arrived at it.
             -- A tricky aspect is that css timelines are only updated on transition
@@ -1211,7 +1192,7 @@ previous ((Timeline details) as timeline) =
     foldpAll (getCurrentTime timeline)
         identity
         (\_ -> ( details.initial, NoIntention ))
-        (\_ _ target now start endTransition future (( lastVisited, maybeLeadingVisited ) as state) ->
+        (\_ target now start endTransition future (( lastVisited, maybeLeadingVisited ) as state) ->
             let
                 completedEvent =
                     Time.thisAfterThat now (endTime target) && (endTime target == endTransition)
@@ -1265,7 +1246,7 @@ arrivedAt matches newTime ((Timeline details) as tl) =
     foldpAll (getCurrentTime tl)
         identity
         (\_ -> False)
-        (\_ _ target _ _ end _ state ->
+        (\_ target _ _ end _ state ->
             state
                 || (matches (getEvent target)
                         && Time.thisBeforeOrEqualThat details.now end
@@ -1315,7 +1296,7 @@ upcoming matches ((Timeline details) as tl) =
         foldpAll (getCurrentTime tl)
             identity
             (\_ -> False)
-            (\_ _ target now _ end _ state ->
+            (\_ target now _ end _ state ->
                 state
                     || (matches (getEvent target)
                             && Time.thisBeforeThat now end

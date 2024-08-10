@@ -4,9 +4,9 @@ module Animator.Timeline exposing
     , update, isRunning, hasChanges
     , interrupt, queue
     , Step, wait, transitionTo
-    , scale, delay
+    , scale, delay, Duration
     , current, previous, upcoming, upcomingWith, arrived, arrivedAt, arrivedAtWith
-    , Duration
+    , progress
     )
 
 {-|
@@ -53,7 +53,7 @@ In some more **advanced** cases you might want to define a _series_ of states to
 
 @docs Step, wait, transitionTo
 
-@docs scale, delay
+@docs scale, delay, Duration
 
 
 # Reading the timeline
@@ -63,6 +63,8 @@ You might be wondering, 'How do we get our value "out" of a `Timeline`?'
 Well, we can ask the `Timeline` all sorts of questions.
 
 @docs current, previous, upcoming, upcomingWith, arrived, arrivedAt, arrivedAtWith
+
+@docs progress
 
 -}
 
@@ -325,7 +327,7 @@ to duration ev timeline =
 {-| Interrupt what's currently happening with a new list.
 -}
 interrupt : List (Step state) -> Timeline state -> Timeline state
-interrupt steps ((Timeline.Timeline tl) as fullTimeline) =
+interrupt steps (Timeline.Timeline tl) =
     Timeline.Timeline
         { tl
             | running = True
