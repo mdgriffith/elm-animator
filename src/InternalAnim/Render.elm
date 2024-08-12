@@ -323,13 +323,27 @@ movementToAnims delay duration name format startMotion target =
 
         targetValue =
             Move.toValue target
-
-        animName =
-            name ++ "-" ++ Transition.hash transition ++ "-" ++ Props.hashFormat format targetValue
     in
-    [ { animationName = animName
-      , animationProp = ToString.animation duration delay 1 animName
-      , keyframes =
+    if startMotion.position == targetValue then
+        -- Todo, it's possible that we could have a spring transition that ultimately doesn't move, but bobbles around a little bit.
+        []
+
+    else
+        let
+            animName =
+                name ++ "-" ++ Transition.hash transition ++ "-" ++ Props.hashFormat format targetValue
+
+            dwellAnimations =
+                Move.toDwellSequence target
+                    |> List.foldl
+                        (\seq gathered ->
+                            sequenceToAnimation name format seq :: gathered
+                        )
+                        []
+        in
+        { animationName = animName
+        , animationProp = ToString.animation duration delay 1 animName
+        , keyframes =
             ToString.keyframes animName
                 (transitionToKeyframes duration
                     name
@@ -338,8 +352,8 @@ movementToAnims delay duration name format startMotion target =
                     transition
                     targetValue
                 )
-      }
-    ]
+        }
+            :: dwellAnimations
 
 
 {-|
