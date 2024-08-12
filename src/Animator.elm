@@ -6,7 +6,7 @@ module Animator exposing
     , scale, scaleX, scaleY, scaleZ
     , color, px, int, float
     , withTransition, withStepTransition
-    , Duration, ms, delay
+    , Duration, ms
     , spinning, pulsing, bouncing, pinging
     , Step, set, wait, step
     , keyframes, loop, loopFor, sequence
@@ -31,7 +31,7 @@ module Animator exposing
 
 @docs withTransition, withStepTransition
 
-@docs Duration, ms, delay
+@docs Duration, ms
 
 
 # Premade
@@ -98,6 +98,7 @@ import InternalAnim.Css.Props
 import InternalAnim.Duration as Duration
 import InternalAnim.Move as Move
 import InternalAnim.Quantity as Quantity
+import InternalAnim.Render as Render
 import InternalAnim.Time as Time
 import InternalAnim.Timeline as Timeline
 import Time
@@ -187,11 +188,14 @@ zAxis =
 {-| -}
 x : Float -> Attribute
 x n =
-    Css.Prop
-        InternalAnim.Css.Props.ids.x
-        "translate"
-        (Move.to n)
-        InternalAnim.Css.Props.float
+    -- Css.Prop
+    --     -- InternalAnim.Css.Props.ids.x
+    --     InternalAnim.Css.Props.noId
+    --     -- "translate"
+    --     "translateX"
+    --     (Move.to n)
+    --     InternalAnim.Css.Props.float
+    px "translate" n
 
 
 {-| -}
@@ -250,16 +254,6 @@ type alias Duration =
 ms : Float -> Duration
 ms =
     Duration.milliseconds
-
-
-{-| -}
-delay : Duration -> Animation -> Animation
-delay dur (Animation { now, attrs, allowTransitions }) =
-    Animation
-        { allowTransitions = allowTransitions
-        , now = Time.rollbackBy dur now
-        , attrs = attrs
-        }
 
 
 {-| -}
@@ -702,6 +696,13 @@ Anim.div
 -}
 onTimeline : Timeline state -> (state -> List Attribute) -> Animation
 onTimeline timeline toProps =
+    let
+        rendered =
+            Render.keyframes timeline toProps
+
+        _ =
+            Debug.log "rendered" rendered
+    in
     Animation
         { allowTransitions = Move.DisallowTransitions
         , now = Timeline.getUpdatedAt timeline
