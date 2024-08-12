@@ -1,5 +1,6 @@
 module InternalAnim.Move exposing
     ( Move(..), to, toWith
+    , toValue, toTransition, toDwellSequence
     , State, init
     , lerpColor, lerpFloat, lerpVector
     , Sequence(..)
@@ -8,12 +9,14 @@ module InternalAnim.Move exposing
     , addSequence, cssForSections, AllowTransitions(..)
     , withTransition, withVelocities
     , at
-    , move, toState
+    , hash, move, toState
     )
 
 {-|
 
 @docs Move, to, toWith
+
+@docs toValue, toTransition, toDwellSequence
 
 @docs State, init, fromFloat
 
@@ -58,6 +61,47 @@ type Move value
     = Pos Transition.Transition value (List (Sequence value))
 
 
+toDwellSequence : Move value -> List (Sequence value)
+toDwellSequence (Pos _ _ dwell) =
+    dwell
+
+
+toValue : Move value -> value
+toValue (Pos _ value _) =
+    value
+
+
+toTransition : Move value -> Transition.Transition
+toTransition (Pos trans _ _) =
+    trans
+
+
+{-| A sequence is something that can be easily
+
+1.  rendered into a CSS keyframes
+2.  combined with another sequence
+
+We need to know:
+
+1.  the full duration of the sequence so we can easily designate % for keyframe steps
+2.  the exact durations for each step
+
+Also, each `value` needs all information about how to get to the next `value`
+which is the opposite of what elm-animator does.
+
+    --         repeat, delay,        duration
+
+
+
+-}
+type Sequence value
+    = Sequence Int Duration.Duration Duration.Duration (List (Step value))
+
+
+type Step value
+    = Step Duration.Duration Transition.Transition value
+
+
 init : Move Float -> State
 init movement =
     { position =
@@ -100,32 +144,6 @@ withTransition trans (Pos _ value sequence) =
         trans
         value
         sequence
-
-
-{-| A sequence is something that can be easily
-
-1.  rendered into a CSS keyframes
-2.  combined with another sequence
-
-We need to know:
-
-1.  the full duration of the sequence so we can easily designate % for keyframe steps
-2.  the exact durations for each step
-
-Also, each `value` needs all information about how to get to the next `value`
-which is the opposite of what elm-animator does.
-
-    --         repeat, delay,        duration
-
-
-
--}
-type Sequence value
-    = Sequence Int Duration.Duration Duration.Duration (List (Step value))
-
-
-type Step value
-    = Step Duration.Duration Transition.Transition value
 
 
 {-| -}
