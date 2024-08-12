@@ -274,7 +274,7 @@ atX progress startTime targetTime transition current target =
                     Duration.inMilliseconds (Time.duration startTime targetTime)
 
                 durationMilliseconds =
-                    Duration.inMilliseconds (Time.duration startTime targetTime) * progress
+                    totalDuration * progress
 
                 currentVelocity =
                     Units.inPixelsPerSecond current.velocity
