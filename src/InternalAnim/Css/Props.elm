@@ -2,6 +2,7 @@ module InternalAnim.Css.Props exposing
     ( Id, ids, hash, default, defaultPosition, groups
     , isTranslateId, isScaleId, initVector, initVectorState, updateVectorById
     , Format, format, float, int, px, turns
+    , hashFormat
     , isGroup
     , VectorSlot(..), colorHash, groupToCompoundId, noId, transparent, vectorSlotToId, vectorToString
     )
@@ -13,6 +14,8 @@ module InternalAnim.Css.Props exposing
 @docs isTranslateId, isScaleId, initVector, initVectorState, updateVectorById
 
 @docs Format, format, float, int, px, turns
+
+@docs hashFormat
 
 @docs translateToString, isGroup
 
