@@ -1,4 +1,4 @@
-module InternalAnim.Render exposing (keyframes)
+module InternalAnim.Render exposing (Key, Keyframes, keyframes, toInitialProp)
 
 {-| -}
 
@@ -36,7 +36,24 @@ type Key
     = TranslateKey
     | ScaleKey
     | ColorKey String
-    | PropKey Int String Motion
+      --      id  name   current initialState
+    | PropKey Int String Motion Props.Format Float
+
+
+toInitialProp : Key -> ( String, String )
+toInitialProp key =
+    case key of
+        TranslateKey ->
+            ( "translate", "0% 0" )
+
+        ScaleKey ->
+            ( "scale", "1" )
+
+        ColorKey name ->
+            ( name, "rgba(0,0,0,0)" )
+
+        PropKey _ name _ format value ->
+            ( name, Props.format format value )
 
 
 {--}
@@ -46,7 +63,10 @@ type alias Motion =
     }
 
 
-keyframes : Timeline.Timeline state -> (state -> List Css.Prop) -> List ( Key, List Keyframes )
+keyframes :
+    Timeline.Timeline state
+    -> (state -> List Css.Prop)
+    -> List ( Key, List Keyframes )
 keyframes timeline lookup =
     let
         present =
@@ -129,6 +149,8 @@ toInitialProps prop rendered =
                             { position = Move.toValue movement
                             , velocity = 0
                             }
+                            format
+                            (Move.toValue movement)
                         )
                         rendered.props
                 , translate = rendered.translate
@@ -179,6 +201,8 @@ addInitialProp prop rendered =
                             { position = Props.defaultPosition id
                             , velocity = 0
                             }
+                            format
+                            (Props.defaultPosition id)
                         )
                         rendered.props
                 , translate = rendered.translate
@@ -242,6 +266,20 @@ toKeyframes lookup target now startTime endTime future renderedProps =
 
         progress =
             Time.progress startTime targetTime now
+
+        hasStartedOrUpcoming =
+            Time.thisAfterOrEqualThat startTime now
+
+        _ =
+            Debug.log "Passing"
+                { startTime = Time.inMilliseconds startTime
+                , endTime = Time.inMilliseconds endTime
+                , target = target
+                , hasStarted = Time.thisAfterOrEqualThat startTime now
+                , hasPassed =
+                    --  Move.after startTime endTime now movement
+                    Time.thisAfterOrEqualThat now endTime
+                }
     in
     List.map
         (\( key, keyFrameList ) ->
@@ -280,12 +318,16 @@ toKeyframes lookup target now startTime endTime future renderedProps =
                             , keyFrameList
                             )
 
-                PropKey targetId name startingValue ->
+                PropKey targetId name startingValue format default ->
                     case getProp targetId name props of
-                        Just ( prop, format ) ->
+                        Just prop ->
                             let
                                 newAnims =
-                                    movementToAnims delay duration name format startingValue prop
+                                    if hasStartedOrUpcoming then
+                                        movementToAnims now delay duration name format startingValue prop
+
+                                    else
+                                        []
 
                                 newMotion =
                                     Transition.atX
@@ -304,6 +346,8 @@ toKeyframes lookup target now startTime endTime future renderedProps =
                                 { position = Units.inPixels newMotion.position
                                 , velocity = Units.inPixelsPerSecond newMotion.velocity
                                 }
+                                format
+                                default
                             , newAnims ++ keyFrameList
                             )
 
@@ -315,8 +359,29 @@ toKeyframes lookup target now startTime endTime future renderedProps =
         renderedProps
 
 
-movementToAnims : Duration.Duration -> Duration.Duration -> String -> Props.Format -> Motion -> Move.Move Float -> List Keyframes
-movementToAnims delay duration name format startMotion target =
+hashInitialMovement name now transition format target =
+    let
+        nowMs =
+            Time.inMilliseconds now
+
+        adjustedTime =
+            -- This is an arbitraray posix time that is in the past
+            -- Because it's the time as I write this code.
+            if nowMs > 1723547863409 then
+                nowMs - 1723547863409
+
+            else
+                0
+    in
+    (name ++ "-")
+        -- Arbitrary point that
+        ++ (String.fromInt (round adjustedTime) ++ "-")
+        ++ (Transition.hash transition ++ "-")
+        ++ Props.hashFormat format target
+
+
+movementToAnims : Time.Absolute -> Duration.Duration -> Duration.Duration -> String -> Props.Format -> Motion -> Move.Move Float -> List Keyframes
+movementToAnims now delay duration name format startMotion target =
     let
         transition =
             Move.toTransition target
@@ -331,13 +396,13 @@ movementToAnims delay duration name format startMotion target =
     else
         let
             animName =
-                name ++ "-" ++ Transition.hash transition ++ "-" ++ Props.hashFormat format targetValue
+                hashInitialMovement name now transition format targetValue
 
             dwellAnimations =
                 Move.toDwellSequence target
                     |> List.foldl
                         (\seq gathered ->
-                            sequenceToAnimation name format seq :: gathered
+                            sequenceToAnimation now name format seq :: gathered
                         )
                         []
         in
@@ -526,13 +591,9 @@ transitionToKeyframes duration name format startMotion transition finalValue =
                     (ToString.prop name (Props.format format finalValue))
 
 
-sequenceToAnimation : String -> Props.Format -> Move.Sequence Float -> Keyframes
-sequenceToAnimation name format ((Move.Sequence count delay duration steps) as seq) =
+sequenceToAnimation : Time.Absolute -> String -> Props.Format -> Move.Sequence Float -> Keyframes
+sequenceToAnimation now name format ((Move.Sequence count delay duration steps) as seq) =
     let
-        -- TODO, this isn't right!
-        now =
-            Time.absolute (Time.millisToPosix 0)
-
         animationName =
             Move.hash now
                 name
@@ -602,7 +663,7 @@ getColor targetName props =
 
 
 {-| -}
-getProp : Id -> String -> List Css.Prop -> Maybe ( Move.Move Float, Props.Format )
+getProp : Id -> String -> List Css.Prop -> Maybe (Move.Move Float)
 getProp targetId targetName props =
     case props of
         [] ->
@@ -611,13 +672,13 @@ getProp targetId targetName props =
         (Css.Prop id name move format) :: remain ->
             if (targetId - Props.noId) == 0 then
                 if name == targetName then
-                    Just ( move, format )
+                    Just move
 
                 else
                     getProp targetId targetName remain
 
             else if id == targetId then
-                Just ( move, format )
+                Just move
 
             else
                 getProp targetId targetName remain
