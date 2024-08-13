@@ -12,9 +12,7 @@ import InternalAnim.Time as Time
 
 timingFunction : Bezier.Spline -> String
 timingFunction spline =
-    "cubic-bezier("
-        ++ Bezier.toCss spline
-        ++ ");"
+    "animation-timing-function:" ++ Bezier.toCss spline ++ ";"
 
 
 animation : Time.Duration -> Time.Duration -> Int -> String -> String
