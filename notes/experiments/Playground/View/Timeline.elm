@@ -131,7 +131,7 @@ viewCssProps toProps timeline =
     let
         css =
             Css.cssFromProps
-                (Debug.log "TIMELINE" timeline)
+                timeline
                 toProps
     in
     div
