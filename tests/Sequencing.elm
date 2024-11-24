@@ -280,33 +280,32 @@ basicMovement =
 
 interruptions : Test.Test
 interruptions =
-    Test.only <|
-        Test.describe "Interruptions "
-            [ Test.test "Linear" <|
-                \_ ->
-                    let
-                        options =
-                            { start = Time.millis 0
-                            , now = Time.millis 1000
-                            , end = Time.millis 1000
-                            , transition = Transition.linear
-                            , position = { start = 0, end = 1000 }
-                            , interruptions =
-                                [ { start = Time.millis 500
-                                  , end = Time.millis 1500
-                                  , endPosition = 2000
-                                  , transition = Transition.linear
-                                  }
-                                ]
-                            }
+    Test.describe "Interruptions "
+        [ Test.test "Linear" <|
+            \_ ->
+                let
+                    options =
+                        { start = Time.millis 0
+                        , now = Time.millis 1000
+                        , end = Time.millis 1000
+                        , transition = Transition.linear
+                        , position = { start = 0, end = 1000 }
+                        , interruptions =
+                            [ { start = Time.millis 500
+                              , end = Time.millis 1500
+                              , endPosition = 2000
+                              , transition = Transition.linear
+                              }
+                            ]
+                        }
 
-                        groundTruth =
-                            realtime options
+                    groundTruth =
+                        realtime options
 
-                        sequenceState =
-                            bySequence options
-                    in
-                    Expect.equal
-                        (Debug.log "Ground Truth" groundTruth.position)
-                        sequenceState.position
-            ]
+                    sequenceState =
+                        bySequence options
+                in
+                Expect.equal
+                    (Debug.log "Ground Truth" groundTruth.position)
+                    sequenceState.position
+        ]
