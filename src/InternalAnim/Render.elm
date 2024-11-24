@@ -256,7 +256,8 @@ toKeyframes lookup target now startTime endTime future renderedProps =
             lookup (Timeline.getEvent target)
 
         duration =
-            Time.duration startTime (Timeline.endTime target)
+            -- Time.duration startTime (Timeline.endTime target)
+            Time.duration startTime (Timeline.startTime target)
 
         delay =
             Duration.seconds 0
@@ -269,17 +270,6 @@ toKeyframes lookup target now startTime endTime future renderedProps =
 
         hasStartedOrUpcoming =
             Time.thisAfterOrEqualThat startTime now
-
-        _ =
-            Debug.log "Passing"
-                { startTime = Time.inMilliseconds startTime
-                , endTime = Time.inMilliseconds endTime
-                , target = target
-                , hasStarted = Time.thisAfterOrEqualThat startTime now
-                , hasPassed =
-                    --  Move.after startTime endTime now movement
-                    Time.thisAfterOrEqualThat now endTime
-                }
     in
     List.map
         (\( key, keyFrameList ) ->
@@ -546,7 +536,10 @@ transitionToKeyframes duration name format startMotion transition finalValue =
                         { position = startPos
 
                         -- intro velocity
-                        , velocity = wobble.introVelocity
+                        , velocity =
+                            startMotion.velocity
+
+                        -- wobble.introVelocity
                         }
                         finalValue
 
@@ -562,15 +555,15 @@ transitionToKeyframes duration name format startMotion transition finalValue =
                     List.foldl
                         (\spline rendered ->
                             let
-                                percent =
-                                    (Bezier.first spline |> .x) / finalValue
-
                                 -- _ =
-                                --     Debug.log "percent"
-                                --         { percent = percent * 100
-                                --         , val = value
-                                --         , spline = spline
-                                --         }
+                                --     let
+                                --         _ =
+                                --             Debug.log "  > " ( startPos, finalValue )
+                                --     in
+                                --     Debug.log "x" ( Bezier.first spline |> .x, durationMs, value )
+                                percent =
+                                    (Bezier.first spline |> .x) / durationMs
+
                                 value =
                                     Bezier.first spline |> .y
 

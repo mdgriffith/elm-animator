@@ -263,6 +263,9 @@ type Animation
         , attrs : List Css.RenderedProp
         , allowTransitions : Move.AllowTransitions
         }
+    | Quick
+        { anims : List ( Render.Key, List Render.Keyframes )
+        }
 
 
 {-| -}
@@ -700,13 +703,16 @@ onTimeline timeline toProps =
         rendered =
             Render.keyframes timeline toProps
 
-        _ =
-            Debug.log "rendered" rendered
+        -- _ =
+        -- Debug.log "rendered" rendered
     in
-    Animation
-        { allowTransitions = Move.DisallowTransitions
-        , now = Timeline.getUpdatedAt timeline
-        , attrs = Css.propsToRenderedProps timeline toProps
+    -- Animation
+    --     { allowTransitions = Move.DisallowTransitions
+    --     , now = Timeline.getUpdatedAt timeline
+    --     , attrs = Css.propsToRenderedProps timeline toProps
+    --     }
+    Quick
+        { anims = rendered
         }
 
 
@@ -796,10 +802,54 @@ transition transitionDuration props =
         }
 
 
+joinOn : String -> (a -> String) -> List a -> String
+joinOn divider f list =
+    case list of
+        [] ->
+            ""
+
+        [ fst ] ->
+            f fst
+
+        fst :: rest ->
+            f fst ++ divider ++ joinOn divider f rest
+
+
 {-| -}
 toCss : Animation -> Css
-toCss (Animation anim) =
-    Css.toCss anim
+toCss opt =
+    case opt of
+        Animation anim ->
+            Css.toCss anim
+
+        Quick { anims } ->
+            let
+                styles =
+                    List.filterMap
+                        (\( key, keyframeList ) ->
+                            case keyframeList of
+                                [] ->
+                                    Just (Render.toInitialProp key)
+
+                                _ ->
+                                    Nothing
+                        )
+                        anims
+            in
+            { hash = ""
+            , keyframes =
+                joinOn ""
+                    (Tuple.second >> joinOn "" .keyframes)
+                    anims
+            , transition = ""
+            , props =
+                ( "animation"
+                , joinOn ","
+                    (Tuple.second >> joinOn "," .animationProp)
+                    anims
+                )
+                    :: styles
+            }
 
 
 {-| -}
@@ -808,10 +858,10 @@ div :
     -> List (Html.Attribute msg)
     -> List (Html msg)
     -> Html msg
-div (Animation anim) attrs children =
+div anim attrs children =
     let
         rendered =
-            Css.toCss anim
+            toCss anim
     in
     Html.div
         (List.map (\( key, val ) -> Attr.style key val) rendered.props ++ attrs)
@@ -827,10 +877,10 @@ node :
     -> List (Html.Attribute msg)
     -> List (Html msg)
     -> Html msg
-node name (Animation anim) attrs children =
+node name anim attrs children =
     let
         rendered =
-            Css.toCss anim
+            toCss anim
     in
     Html.node name
         (List.map (\( key, val ) -> Attr.style key val) rendered.props ++ attrs)
