@@ -1,5 +1,12 @@
 {
+	"scripts": {
+		"test": "elm-test",
+		"test:browser": "node browser-tests/build.cjs && playwright test --config browser-tests/playwright.config.cjs"
+	},
 	"devDependencies": {
+		"@playwright/test": "1.63.0",
+		"elm": "0.19.1-6",
+		"elm-test": "0.19.1-revision17",
 		"elm-review": "^2.11.1"
 	}
 }

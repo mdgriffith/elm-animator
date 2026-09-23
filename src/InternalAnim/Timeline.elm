@@ -77,7 +77,8 @@ type alias TimelineDetails event =
     -- The current wall time
     , now : Time.Absolute
 
-    -- The last time we updated the timeline
+    -- The last time the schedule or its retained history changed. CSS renders
+    -- relative to this time; ordinary clock ticks leave it unchanged.
     , updatedAt : Time.Absolute
     , delay : Time.Duration
     , scale : Float
@@ -210,22 +211,29 @@ clean runGC details =
             case details.events of
                 Timetable lines ->
                     linesAreActive details.now lines
+
+        events =
+            if runGC then
+                case details.events of
+                    Timetable lines ->
+                        Timetable (garbageCollectOldEvents details.now [] lines)
+
+            else
+                details.events
     in
     { details
         | running =
             running
-        , events =
-            if runGC then
-                let
-                    events =
-                        case details.events of
-                            Timetable evs ->
-                                evs
-                in
-                Timetable (garbageCollectOldEvents details.now [] events)
+        , events = events
+        , updatedAt =
+            if events == details.events then
+                details.updatedAt
 
             else
-                details.events
+                -- The renderer can no longer reconstruct the discarded past.
+                -- Rebase once at collection time and use negative CSS delays
+                -- for movement already in progress, instead of restarting it.
+                details.now
     }
 
 

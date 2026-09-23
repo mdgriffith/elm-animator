@@ -583,13 +583,6 @@ arrived =
                                 |> Animator.Timeline.to (Animator.ms 1000) Two
                                 |> Timeline.update (Time.millisToPosix 1100)
                                 |> Timeline.update (Time.millisToPosix 2210)
-
-                        _ =
-                            Debug.log "timeline"
-                                { current = Animator.Timeline.current timeline
-                                , previous = Animator.Timeline.previous timeline
-                                , arrived = Animator.Timeline.arrived timeline
-                                }
                     in
                     Expect.equal
                         (Animator.Timeline.previous

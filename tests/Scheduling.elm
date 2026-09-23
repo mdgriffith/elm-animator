@@ -680,48 +680,15 @@ cleaning =
     describe "Cleaning"
         [ test "Marked as running correctly" <|
             \_ ->
-                let
-                    lines =
-                        [ Timeline.Line
-                            (qty 1578168889621)
-                            (occur False (qty 1578168889621) (qty 1578168889621))
-                            [ occur True (qty 1578168895231) (qty 1578168895231)
-                            ]
-                        , Timeline.Line
-                            -- same as now
-                            (qty 1578168893838)
-                            -- 1000ms later
-                            (occur False (qty 1578168895838) (qty 1578168895838))
-                            []
-                        ]
-
-                    now =
-                        qty 1578168893838
-                in
-                Expect.equal True
-                    (Timeline.linesAreActive now lines)
+                interruptedTimeline
+                    |> Animator.Timeline.isRunning
+                    |> Expect.equal True
         , test "Marked as running correctly, now after interuption" <|
             \_ ->
-                let
-                    lines =
-                        [ Timeline.Line
-                            (qty 1578168889621)
-                            (occur False (qty 1578168889621) (qty 1578168889621))
-                            [ occur True (qty 1578168895231) (qty 1578168895231)
-                            ]
-                        , Timeline.Line
-                            -- same as now
-                            (qty 1578168893838)
-                            -- 1000ms later
-                            (occur False (qty 1578168895838) (qty 1578168895838))
-                            []
-                        ]
-
-                    now =
-                        qty 1578168893839
-                in
-                Expect.equal True
-                    (Timeline.linesAreActive now lines)
+                interruptedTimeline
+                    |> Animator.Timeline.update (Time.millisToPosix 1578168893839)
+                    |> Animator.Timeline.isRunning
+                    |> Expect.equal True
         , test "Don't eliminate penultimate event as it's needed for Timeline.previous" <|
             \_ ->
                 let
@@ -781,6 +748,16 @@ cleaning =
         ]
 
 
+interruptedTimeline : Animator.Timeline.Timeline Bool
+interruptedTimeline =
+    Animator.Timeline.init False
+        |> Animator.Timeline.to (Animator.ms 5610) True
+        |> Animator.Timeline.update (Time.millisToPosix 1578168889621)
+        |> Animator.Timeline.update (Time.millisToPosix 1578168893838)
+        |> Animator.Timeline.to (Animator.ms 2000) False
+        |> Animator.Timeline.update (Time.millisToPosix 1578168893838)
+
+
 tailRecursion =
     describe "Tail recursion"
         [ test "Enqueueing - Successfully enqueued 10,000 events" <|
@@ -793,7 +770,7 @@ tailRecursion =
                                 (List.map (Animator.Timeline.transitionTo (seconds 1)) (List.range 0 10000))
                             |> Timeline.update (Time.millisToPosix 5000)
                 in
-                Expect.equal True True
+                Expect.equal True (Animator.Timeline.upcoming 10000 newTimeline)
         , test "Interrupting - Successfully interupt with 10,000 events" <|
             \_ ->
                 let
@@ -804,7 +781,7 @@ tailRecursion =
                                 (List.map (Animator.Timeline.transitionTo (seconds 1)) (List.range 0 10000))
                             |> Timeline.update (Time.millisToPosix 5000)
                 in
-                Expect.equal True True
+                Expect.equal True (Animator.Timeline.upcoming 10000 newTimeline)
         , test "Interpolating - Successfully interpolate with 10,000 events" <|
             \_ ->
                 let
@@ -823,7 +800,12 @@ tailRecursion =
                             )
                             (\x -> Value.to (toFloat x))
                 in
-                Expect.equal True True
+                Expect.all
+                    [ \motion -> Expect.greaterThan 0 motion.position
+                    , \motion -> Expect.lessThan 10000 motion.position
+                    , \motion -> Expect.equal False (isNaN motion.velocity || isInfinite motion.velocity)
+                    ]
+                    now
         ]
 
 
@@ -983,8 +965,7 @@ ordering =
                 Expect.equal
                     (Timeline.gc actualTimeline)
                     (Timeline.gc gcedTimeline)
-        , --only <|
-          fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
+        , fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
             "GC does not affect values at and after gc time."
           <|
             \timelineInstruction ->
@@ -1032,6 +1013,24 @@ ordering =
                             (.velocity (Value.movement (Timeline.gc tl) toPosition))
                     ]
                     timelineAt
+        , test "GC preserves motion at an immediate interruption (shrunk fuzz regression)" <|
+            \_ ->
+                let
+                    instructions =
+                        Fuzz.Timeline.InstructionTimeline 0
+                            Two
+                            [ Fuzz.Timeline.Interruption 0 [ ( 1, One ) ]
+                            , Fuzz.Timeline.Interruption 0 [ ( 0, Two ) ]
+                            , Fuzz.Timeline.Interruption 1400 [ ( 0, One ) ]
+                            ]
+
+                    before =
+                        Fuzz.Timeline.toTimeline { gc = False } instructions
+                            |> Timeline.updateWith False (Time.millisToPosix 1400)
+                in
+                Expect.equal
+                    (Value.movement before toPosition)
+                    (Value.movement (Timeline.gc before) toPosition)
         , test "Harmless GC, test case 1" <|
             \_ ->
                 let

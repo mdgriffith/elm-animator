@@ -285,7 +285,7 @@ atX progress startTime targetTime transition current target =
                         , initial =
                             { position = Units.inPixels current.position
                             , velocity =
-                                if progress == 0 then
+                                if wob.introVelocity /= 0 then
                                     wob.introVelocity
 
                                 else
@@ -359,30 +359,21 @@ keyframes interpolate startPercent endPercent transition =
 
             Wobble wob ->
                 let
-                    splines =
-                        Spring.segments
-                            -- Select a spring that will wobble and settle in 1000 milliseconds
-                            (Spring.new
-                                { wobble = wob.wobble
-                                , quickness = wob.quickness
-                                , settleMax =
-                                    -- (Quantity.Quantity (endPercent - startPercent))
-                                    1000
-
-                                -- endPercent - startPercent
-                                }
-                            )
-                            { position = 0
-
-                            -- intro velocity
-                            , velocity = wob.introVelocity
-
-                            -- 0
-                            -- NOTE: need to normalize introVelocity to the 0-1 domain
+                    spring =
+                        Spring.new
+                            { wobble = wob.wobble
+                            , quickness = wob.quickness
+                            , settleMax = 1000
                             }
+
+                    splines =
+                        Spring.segments spring
+                            { position = 0, velocity = wob.introVelocity }
                             1000
                 in
-                keyframeListFromNonNormalizedBezier splines
+                keyframeListFromNonNormalizedBezier
+                    { start = startPercent, end = endPercent, duration = Spring.settlesAt spring }
+                    splines
                     interpolate
                     ""
 
@@ -430,22 +421,17 @@ keyframeFromSpline percent start toString spline =
             ++ ";}"
 
 
-{-| The beziers are mapped
-
-    |      y: 0-1000  |
-    |      x: 0-1     |
-    v                 v
-    |--------|--------|
-
-We pass in a function that maps x -> "translateX(250px)"
-
+{-| Spring segments use elapsed milliseconds for x and positions in the
+0-1000 domain for y. Map their actual settling duration into the requested
+percentage interval and normalize positions before calling the interpolator.
 -}
 keyframeListFromNonNormalizedBezier :
-    List Bezier.Spline
+    { start : Float, end : Float, duration : Float }
+    -> List Bezier.Spline
     -> (Float -> String)
     -> String
     -> String
-keyframeListFromNonNormalizedBezier steps toString str =
+keyframeListFromNonNormalizedBezier range steps toString str =
     case steps of
         [] ->
             str
@@ -453,7 +439,7 @@ keyframeListFromNonNormalizedBezier steps toString str =
         top :: [] ->
             let
                 percent =
-                    (Bezier.first top |> .x) / 1000
+                    range.start + (range.end - range.start) * (Bezier.first top |> .x) / range.duration
 
                 value =
                     ((Bezier.first top |> .y) / 1000)
@@ -461,26 +447,21 @@ keyframeListFromNonNormalizedBezier steps toString str =
 
                 normalizedSpline =
                     Bezier.normalize top
-
-                finalPercent =
-                    (Bezier.last top
-                        |> .x
-                    )
-                        / 1000
 
                 finalValue =
                     Bezier.last top
                         |> .y
+                        |> (\final -> final / 1000)
                         |> toString
             in
             str
-                ++ keyframeFromSpline (percent * 100) value identity normalizedSpline
-                ++ keyframeFromSpline (finalPercent * 100) finalValue identity normalizedSpline
+                ++ keyframeFromSpline percent value identity normalizedSpline
+                ++ keyframeFromSpline range.end finalValue identity normalizedSpline
 
         top :: remain ->
             let
                 percent =
-                    (Bezier.first top |> .x) / 1000
+                    range.start + (range.end - range.start) * (Bezier.first top |> .x) / range.duration
 
                 value =
                     ((Bezier.first top |> .y) / 1000)
@@ -489,11 +470,11 @@ keyframeListFromNonNormalizedBezier steps toString str =
                 normalizedSpline =
                     Bezier.normalize top
             in
-            keyframeListFromNonNormalizedBezier
+            keyframeListFromNonNormalizedBezier range
                 remain
                 toString
                 (str
-                    ++ keyframeFromSpline (percent * 100) value identity normalizedSpline
+                    ++ keyframeFromSpline percent value identity normalizedSpline
                 )
 
 

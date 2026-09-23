@@ -7,6 +7,7 @@ module InternalAnim.Render.Css exposing
     )
 
 import Bezier
+import InternalAnim.Duration as Duration
 import InternalAnim.Time as Time
 
 
@@ -19,7 +20,7 @@ animation : Time.Duration -> Time.Duration -> Int -> String -> String
 animation duration delay count name =
     let
         n =
-            if count == -1 then
+            if count < 0 then
                 "infinite"
 
             else if count <= 0 then
@@ -28,15 +29,20 @@ animation duration delay count name =
             else
                 String.fromInt count
     in
-    Time.durationToString duration
+    durationString duration
         -- we specify an easing function here because it we have to
         -- , but it is overridden by the one in keyframes
         ++ " linear "
-        ++ Time.durationToString delay
+        ++ durationString delay
         ++ " "
         ++ n
         ++ " normal forwards running "
         ++ name
+
+
+durationString : Time.Duration -> String
+durationString duration =
+    String.fromFloat (Duration.inMilliseconds duration) ++ "ms"
 
 
 keyframes : String -> String -> String
@@ -44,9 +50,9 @@ keyframes name kfs =
     "@keyframes " ++ name ++ " {\n" ++ kfs ++ "\n}"
 
 
-frame : Int -> String -> String
+frame : Float -> String -> String
 frame percent props =
-    String.fromInt percent ++ "% {\n" ++ props ++ "\n}"
+    String.fromFloat (clamp 0 100 percent) ++ "% {\n" ++ props ++ "\n}"
 
 
 prop : String -> String -> String

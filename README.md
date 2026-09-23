@@ -54,3 +54,8 @@ The floating city on the [Elm Japan Website](https://elmjapan.org/) —you will 
 It doesn't distract from what I'm trying to accomplish on the website, it simply sits there, calmly floating. It doesn't take anything away from my _budget of attention_ that I have when visiting the website. In fact it likely **increases** the amount of attention I'm willing to _pay_.
 
 They used [`elm-playground`](https://package.elm-lang.org/packages/evancz/elm-playground/latest/Playground) —which I am likewise inspired by— to achieve the effect and convinced me to make this sort of thing easy in `elm-animator`.
+
+## Development
+
+See [Testing V2](tests/README.md) for the Elm and browser test commands, coverage,
+and the regression failures currently retained during development.

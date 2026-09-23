@@ -1,680 +1,917 @@
-module InternalAnim.Render exposing (Key, Keyframes, keyframes, toInitialProp)
+module InternalAnim.Render exposing (Css, Step(..), keyframes, onTimeline, transition)
 
-{-| -}
+{-| All CSS animation enters here. Properties are grouped once, then timeline
+events and explicit steps are rendered as chronological keyframe animations.
+Only the explicit `transition` entry point permits native CSS transitions.
+
+Each animation has explicit endpoints and a delay relative to the last schedule
+update. Later animations override earlier ones only when they start (forwards
+fill). This also lets an interruption replace an infinite resting animation.
+
+-}
 
 import Bezier
-import Bezier.Spring as Spring
+import Bitwise
 import Color
 import Dict exposing (Dict)
-import InternalAnim.Css as Css
 import InternalAnim.Css.Props as Props
 import InternalAnim.Duration as Duration
 import InternalAnim.Move as Move
-import InternalAnim.Quantity as Quantity
-import InternalAnim.Render.Css as ToString
+import InternalAnim.Property exposing (Prop(..))
+import InternalAnim.Render.Css as Css
 import InternalAnim.Time as Time
 import InternalAnim.Timeline as Timeline
 import InternalAnim.Transition as Transition
 import InternalAnim.Units as Units
-import Set exposing (Set)
-import Time
 
 
-{-| -}
-type alias Keyframes =
-    { animationName : String
-    , animationProp : String
+type alias Css =
+    { hash : String
     , keyframes : String
+    , transition : String
+    , props : List ( String, String )
     }
 
 
-type alias Id =
-    Int
+type Step
+    = Step Time.Duration (List Prop)
+    | Repeat Int (List Step)
 
 
-type Key
-    = TranslateKey
-    | ScaleKey
-    | ColorKey String
-      --      id  name   current initialState
-    | PropKey Int String Motion Props.Format Float
+type Format
+    = Scalar Props.Format
+    | Translation
+    | Scaling
+    | Rgba
 
 
-toInitialProp : Key -> ( String, String )
-toInitialProp key =
-    case key of
-        TranslateKey ->
-            ( "translate", "0% 0" )
-
-        ScaleKey ->
-            ( "scale", "1" )
-
-        ColorKey name ->
-            ( name, "rgba(0,0,0,0)" )
-
-        PropKey _ name _ format value ->
-            ( name, Props.format format value )
+type alias Channel =
+    { position : Float
+    , velocity : Float
+    , transition : Transition.Transition
+    }
 
 
-{--}
+type alias Property =
+    { name : String
+    , format : Format
+    , defaults : List Float
+    , channels : List Channel
+    }
+
+
+type alias State =
+    Dict String Property
+
+
 type alias Motion =
-    { position : Float -- pixels
-    , velocity : Float -- pixels per second
+    { start : Float
+    , duration : Float
+    , from : State
+    , to : State
     }
 
 
-keyframes :
-    Timeline.Timeline state
-    -> (state -> List Css.Prop)
-    -> List ( Key, List Keyframes )
-keyframes timeline lookup =
+type alias Clip =
+    { start : Float
+    , duration : Float
+    , iterations : Int
+    , stop : Float
+    , initial : State
+    , final : State
+    , motions : List Motion
+    }
+
+
+type alias Scene =
+    { props : List Prop, steps : List Step }
+
+
+type alias Event =
+    { start : Float, arrival : Float, stop : Float, scene : Scene }
+
+
+type alias Schedule =
+    { time : Float, state : State, clips : List Clip }
+
+
+forever : Float
+forever =
+    1 / 0
+
+
+transition : Time.Duration -> List Prop -> Css
+transition duration props =
     let
-        present =
-            getInitial timeline lookup
+        initial =
+            defaultsFor props
+
+        target =
+            resolve props initial
+
+        clip =
+            single 0 (milliseconds duration) forever initial target
     in
-    Timeline.foldpAll (Timeline.getUpdatedAt timeline)
-        lookup
-        (\_ -> List.map (\key -> ( key, [] )) present)
-        toKeyframes
-        timeline
+    render True 0 initial [ clip ]
 
 
-getInitial : Timeline.Timeline event -> (event -> List Css.Prop) -> List Key
-getInitial timeline lookup =
+keyframes : List Step -> Css
+keyframes steps =
     let
-        presence =
-            Timeline.foldpAll (Timeline.getUpdatedAt timeline)
-                lookup
-                (\props ->
-                    List.foldl
-                        toInitialProps
-                        { props = Dict.empty
-                        , translate = False
-                        , scale = False
-                        }
-                        props
+        initial =
+            defaultsFor (stepProps steps)
+
+        scheduled =
+            scheduleSteps forever steps { time = 0, state = initial, clips = [] }
+    in
+    render False 0 initial (List.reverse scheduled.clips)
+
+
+onTimeline : Timeline.Timeline state -> (state -> ( List Prop, List Step )) -> Css
+onTimeline (Timeline.Timeline details) lookup =
+    let
+        scene state =
+            let
+                ( props, steps ) =
+                    lookup state
+            in
+            { props = props, steps = steps }
+
+        events =
+            case details.events of
+                Timeline.Timetable lines ->
+                    timelineEvents scene lines
+
+        initialScene =
+            scene details.initial
+
+        defaults =
+            initialScene
+                :: List.map .scene events
+                |> List.concatMap (\item -> item.props ++ stepProps item.steps)
+                |> defaultsFor
+
+        initial =
+            resolve initialScene.props defaults
+
+        origin =
+            Time.inMilliseconds details.updatedAt - milliseconds details.delay
+
+        firstStart =
+            List.head events |> Maybe.map .start |> Maybe.withDefault origin
+
+        resting =
+            scheduleSteps
+                (if List.isEmpty events then
+                    forever
+
+                 else
+                    firstStart
                 )
-                (\get target _ _ _ _ existing ->
+                initialScene.steps
+                { time = firstStart, state = initial, clips = [] }
+
+        scheduled =
+            List.foldl
+                (\event previous ->
                     let
-                        props =
-                            get (Timeline.getEvent target)
+                        target =
+                            resolve event.scene.props defaults
+
+                        clip =
+                            single event.start (max 0 (event.arrival - event.start)) event.stop previous.state target
+
+                        atArrival =
+                            { time = event.arrival
+                            , state = sampleClip (min event.stop event.arrival) clip
+                            , clips = clip :: previous.clips
+                            }
                     in
-                    List.foldl
-                        addInitialProp
-                        existing
-                        props
+                    if event.stop < event.arrival then
+                        atArrival
+
+                    else
+                        scheduleSteps event.stop event.scene.steps atArrival
                 )
-                timeline
+                resting
+                events
     in
-    Dict.values presence.props
+    render False origin initial (List.reverse scheduled.clips)
 
 
-appendIf : Bool -> Key -> List Key -> List Key
-appendIf condition key keys =
-    if condition then
-        key :: keys
+timelineEvents : (state -> Scene) -> List (Timeline.Line state) -> List Event
+timelineEvents lookup lines =
+    timelineEventsHelp lookup lines []
+
+
+timelineEventsHelp : (state -> Scene) -> List (Timeline.Line state) -> List Event -> List Event
+timelineEventsHelp lookup lines collected =
+    case lines of
+        [] ->
+            List.reverse collected
+
+        (Timeline.Line start first rest) :: following ->
+            let
+                stop =
+                    case following of
+                        (Timeline.Line nextStart _ _) :: _ ->
+                            Time.inMilliseconds nextStart
+
+                        [] ->
+                            forever
+            in
+            timelineEventsHelp lookup
+                following
+                (lineEvents lookup stop (Time.inMilliseconds start) (first :: rest) collected)
+
+
+lineEvents : (state -> Scene) -> Float -> Float -> List (Timeline.Occurring state) -> List Event -> List Event
+lineEvents lookup cutoff start events collected =
+    case events of
+        [] ->
+            collected
+
+        event :: rest ->
+            if start > cutoff then
+                collected
+
+            else
+                let
+                    nextStart =
+                        Time.inMilliseconds (Timeline.endTime event)
+                in
+                lineEvents lookup
+                    cutoff
+                    nextStart
+                    rest
+                    ({ start = start
+                     , arrival = Time.inMilliseconds (Timeline.startTime event)
+                     , stop =
+                        if List.isEmpty rest then
+                            cutoff
+
+                        else
+                            min cutoff nextStart
+                     , scene = lookup (Timeline.getEvent event)
+                     }
+                        :: collected
+                    )
+
+
+single : Float -> Float -> Float -> State -> State -> Clip
+single start duration stop from to =
+    { start = start
+    , duration = duration
+    , iterations = 1
+    , stop = stop
+    , initial = from
+    , final = to
+    , motions = [ { start = 0, duration = duration, from = from, to = to } ]
+    }
+
+
+scheduleSteps : Float -> List Step -> Schedule -> Schedule
+scheduleSteps stop steps scheduled =
+    if scheduled.time >= stop then
+        scheduled
 
     else
-        keys
+        case steps of
+            [] ->
+                scheduled
 
+            (Step duration props) :: rest ->
+                let
+                    clip =
+                        single scheduled.time (milliseconds duration) stop scheduled.state (resolve props scheduled.state)
+                in
+                continueSteps stop rest clip scheduled
 
-type alias PropPresence =
-    { props : Dict String Key
-    , translate : Bool
-    , scale : Bool
-    }
+            (Repeat count children) :: rest ->
+                if count == 0 || List.isEmpty children then
+                    scheduleSteps stop rest scheduled
 
+                else if List.any isInfiniteStep children then
+                    -- An infinite child prevents its enclosing sequence from
+                    -- ever completing, so the outer repeat cannot restart.
+                    scheduleSteps stop children scheduled
 
-toInitialProps : Css.Prop -> PropPresence -> PropPresence
-toInitialProps prop rendered =
-    case prop of
-        Css.Prop id name movement format ->
-            if Props.isTranslateId id then
-                { props = Dict.insert name TranslateKey rendered.props
-                , translate = True
-                , scale = rendered.scale
-                }
+                else
+                    let
+                        cycle =
+                            cycleMotions children { time = 0, state = scheduled.state, motions = [] }
 
-            else if Props.isScaleId id then
-                { props = Dict.insert name ScaleKey rendered.props
-                , translate = rendered.translate
-                , scale = True
-                }
-
-            else
-                { props =
-                    Dict.insert name
-                        (PropKey id
-                            name
-                            { position = Move.toValue movement
-                            , velocity = 0
+                        clip =
+                            { start = scheduled.time
+                            , duration = cycle.time
+                            , iterations = count
+                            , stop = stop
+                            , initial = scheduled.state
+                            , final = cycle.state
+                            , motions = List.reverse cycle.motions
                             }
-                            format
-                            (Move.toValue movement)
-                        )
-                        rendered.props
-                , translate = rendered.translate
-                , scale = rendered.scale
-                }
+                    in
+                    continueSteps stop rest clip scheduled
 
-        Css.ColorProp name _ ->
-            { props = Dict.insert name (ColorKey name) rendered.props
-            , translate = rendered.translate
-            , scale = rendered.scale
+
+continueSteps : Float -> List Step -> Clip -> Schedule -> Schedule
+continueSteps stop rest clip scheduled =
+    let
+        end =
+            clipEnd clip
+
+        next =
+            { time = end
+            , state = sampleClip (min stop end) clip
+            , clips = clip :: scheduled.clips
             }
-
-
-{-| If a props isn't defined in the first state, but is defined in the future, we want to add it.
--}
-addInitialProp : Css.Prop -> PropPresence -> PropPresence
-addInitialProp prop rendered =
-    case prop of
-        Css.Prop id name movement format ->
-            if Props.isTranslateId id then
-                if rendered.translate then
-                    rendered
-
-                else
-                    { props = Dict.insert name TranslateKey rendered.props
-                    , translate = True
-                    , scale = rendered.scale
-                    }
-
-            else if Props.isScaleId id then
-                if rendered.scale then
-                    rendered
-
-                else
-                    { props = Dict.insert name ScaleKey rendered.props
-                    , translate = rendered.translate
-                    , scale = True
-                    }
-
-            else if Dict.member name rendered.props then
-                rendered
-
-            else
-                { props =
-                    Dict.insert name
-                        (PropKey id
-                            name
-                            { position = Props.defaultPosition id
-                            , velocity = 0
-                            }
-                            format
-                            (Props.defaultPosition id)
-                        )
-                        rendered.props
-                , translate = rendered.translate
-                , scale = rendered.scale
-                }
-
-        Css.ColorProp name _ ->
-            if Dict.member name rendered.props then
-                rendered
-
-            else
-                { props = Dict.insert name (ColorKey name) rendered.props
-                , translate = rendered.translate
-                , scale = rendered.scale
-                }
-
-
-{-|
-
-    Render an animation as a set of keyframe animations
-
-
-    Keyframes can be rendered out of order, with multiple keyframes for the same percentage
-
-
-    e.g.
-
-    @keyframes anim {
-        0% { translate: 0% 0; }
-        100% { translate: 100% 0; }
-
-        0%, 100% { scale: 1; }
-        5%, 95% { scale: 1.2; }
-
-        0% { rotate: 0deg; }
-        10%, 90% { rotate: 180deg; }
-        100% { rotate: 360deg; }
-    }
-
-        type Key
-                = TranslateKey
-                | ScaleKey
-                | ColorKey String
-                | PropKey String
-
--}
-toKeyframes : Timeline.Transition state (List Css.Prop) (List ( Key, List Keyframes ))
-toKeyframes lookup target now startTime endTime future renderedProps =
-    let
-        props =
-            lookup (Timeline.getEvent target)
-
-        duration =
-            -- Time.duration startTime (Timeline.endTime target)
-            Time.duration startTime (Timeline.startTime target)
-
-        delay =
-            Duration.seconds 0
-
-        targetTime =
-            Timeline.startTime target
-
-        progress =
-            Time.progress startTime targetTime now
-
-        hasStartedOrUpcoming =
-            Time.thisAfterOrEqualThat startTime now
     in
-    List.map
-        (\( key, keyFrameList ) ->
-            case key of
-                TranslateKey ->
-                    ( key
-                    , keyFrameList
-                    )
-
-                ScaleKey ->
-                    ( key
-                    , keyFrameList
-                    )
-
-                ColorKey name ->
-                    case getColor name props of
-                        Just (Move.Pos initialTransition targetColor _) ->
-                            let
-                                animName =
-                                    name ++ "-" ++ Props.colorHash targetColor
-                            in
-                            ( key
-                            , { animationName = animName
-                              , animationProp = ToString.animation duration delay 1 animName
-                              , keyframes =
-                                    ToString.keyframes animName
-                                        (ToString.frame 100
-                                            (ToString.prop name (Color.toCssString targetColor))
-                                        )
-                              }
-                                :: keyFrameList
-                            )
-
-                        Nothing ->
-                            ( key
-                            , keyFrameList
-                            )
-
-                PropKey targetId name startingValue format default ->
-                    case getProp targetId name props of
-                        Just prop ->
-                            let
-                                newAnims =
-                                    if hasStartedOrUpcoming then
-                                        movementToAnims now delay duration name format startingValue prop
-
-                                    else
-                                        []
-
-                                newMotion =
-                                    Transition.atX
-                                        progress
-                                        startTime
-                                        targetTime
-                                        (Move.toTransition prop)
-                                        -- current
-                                        { position = Units.pixels startingValue.position
-                                        , velocity = Units.pixelsPerSecond startingValue.velocity
-                                        }
-                                        (Move.toValue prop)
-                            in
-                            ( PropKey targetId
-                                name
-                                { position = Units.inPixels newMotion.position
-                                , velocity = Units.inPixelsPerSecond newMotion.velocity
-                                }
-                                format
-                                default
-                            , newAnims ++ keyFrameList
-                            )
-
-                        Nothing ->
-                            ( key
-                            , keyFrameList
-                            )
-        )
-        renderedProps
+    scheduleSteps stop rest next
 
 
-hashInitialMovement name now transition format target =
-    let
-        nowMs =
-            Time.inMilliseconds now
+isInfiniteStep : Step -> Bool
+isInfiniteStep step =
+    isInfinite (stepDuration step)
 
-        adjustedTime =
-            -- This is an arbitraray posix time that is in the past
-            -- Because it's the time as I write this code.
-            if nowMs > 1723547863409 then
-                nowMs - 1723547863409
 
-            else
+stepDuration : Step -> Float
+stepDuration step =
+    case step of
+        Step duration _ ->
+            milliseconds duration
+
+        Repeat count children ->
+            let
+                duration =
+                    List.sum (List.map stepDuration children)
+            in
+            if count == 0 || duration == 0 then
                 0
-    in
-    (name ++ "-")
-        -- Arbitrary point that
-        ++ (String.fromInt (round adjustedTime) ++ "-")
-        ++ (Transition.hash transition ++ "-")
-        ++ Props.hashFormat format target
+
+            else if count < 0 then
+                forever
+
+            else
+                toFloat count * duration
 
 
-movementToAnims : Time.Absolute -> Duration.Duration -> Duration.Duration -> String -> Props.Format -> Motion -> Move.Move Float -> List Keyframes
-movementToAnims now delay duration name format startMotion target =
-    let
-        transition =
-            Move.toTransition target
+type alias Cycle =
+    { time : Float, state : State, motions : List Motion }
 
-        targetValue =
-            Move.toValue target
-    in
-    if startMotion.position == targetValue then
-        -- Todo, it's possible that we could have a spring transition that ultimately doesn't move, but bobbles around a little bit.
-        []
+
+cycleMotions : List Step -> Cycle -> Cycle
+cycleMotions steps initial =
+    List.foldl
+        (\step cycle ->
+            case step of
+                Step duration props ->
+                    let
+                        target =
+                            resolve props cycle.state
+
+                        length =
+                            milliseconds duration
+                    in
+                    { time = cycle.time + length
+                    , state = target
+                    , motions = { start = cycle.time, duration = length, from = cycle.state, to = target } :: cycle.motions
+                    }
+
+                Repeat count children ->
+                    repeatCycle count children cycle
+        )
+        initial
+        steps
+
+
+repeatCycle : Int -> List Step -> Cycle -> Cycle
+repeatCycle count steps cycle =
+    if count <= 0 then
+        cycle
 
     else
         let
-            animName =
-                hashInitialMovement name now transition format targetValue
-
-            dwellAnimations =
-                Move.toDwellSequence target
-                    |> List.foldl
-                        (\seq gathered ->
-                            sequenceToAnimation now name format seq :: gathered
-                        )
-                        []
+            one =
+                cycleMotions steps { time = 0, state = cycle.state, motions = [] }
         in
-        { animationName = animName
-        , animationProp = ToString.animation duration delay 1 animName
-        , keyframes =
-            ToString.keyframes animName
-                (transitionToKeyframes duration
-                    name
-                    format
-                    startMotion
-                    transition
-                    targetValue
-                )
+        { time = cycle.time + toFloat count * one.time
+        , state = one.state
+        , motions = repeatMotions count cycle.time one.time one.motions cycle.motions
         }
-            :: dwellAnimations
 
 
-{-|
-
-    -- From the example, where the target is 186
-    -- The last value is off by 3 orders of magnitude :joy:
-    0% {
-        translate: 0px;
-        animation-timing-function: cubic-bezier(0.17,0.17,0.7,0.7);
-    }
-    12% {
-        translate: 112px;
-        animation-timing-function: cubic-bezier(0.3,0.34,0.7,0.83);
-    }
-    25% {
-        translate: 213px;
-        animation-timing-function: cubic-bezier(0.3,-13.13,0.7,-3.36);
-    }
-    37% {
-        translate: 213px;
-        animation-timing-function: cubic-bezier(0.3,0.21,0.7,0.79);
-    }
-    50% {
-        translate: 185px;
-        animation-timing-function: cubic-bezier(0.3,0.64,0.7,0.92);
-    }
-    62% {
-        translate: 178px;
-        animation-timing-function: cubic-bezier(0.3,0.03,0.7,0.73);
-    }
-    75% {
-        translate: 183px;
-        animation-timing-function: cubic-bezier(0.3,0.39,0.7,0.84);
-    }
-    87% {
-        translate: 186px;
-        animation-timing-function: cubic-bezier(0.3,-0.86,0.7,0.46);
-    }
-    100% {
-        translate: 185940px;
-    }
-
-
-
-    Move to third position
-
-    0% {
-        translate: 0px;
-        animation-timing-function: cubic-bezier(0.17,0.17,0.7,0.7);
-    }
-    12% {
-        translate: 195px;
-        animation-timing-function: cubic-bezier(0.3,0.34,0.7,0.83);
-    }
-    25% {
-        translate: 372px;
-        animation-timing-function: cubic-bezier(0.3,-13.13,0.7,-3.36);
-    }
-    37% {
-        translate: 370px;
-        animation-timing-function: cubic-bezier(0.3,0.21,0.7,0.79);
-    }
-    50% {
-        translate: 322px;
-        animation-timing-function: cubic-bezier(0.3,0.64,0.7,0.92);
-    }
-    62% {
-        translate: 309px;
-        animation-timing-function: cubic-bezier(0.3,0.03,0.7,0.73);
-    }
-    75% {
-        translate: 318px;
-        animation-timing-function: cubic-bezier(0.3,0.39,0.7,0.84);
-    }
-    87% {
-        translate: 324px;
-        animation-timing-function: cubic-bezier(0.3,-0.86,0.7,0.46);
-    }
-    100% {
-        translate: 323636px;
-    }
-
-    To 322
-
-
-
-    Transition keyframes: { count = 8, finalValue = 322, splines = [Spline { x = 0, y = 185 } { x = 6.708333333333333, y = 187.13818069458338 } { x = 28.174999999999997, y = 191.81437474618713 } { x = 40.25, y = 197.82908416750035 },Spline { x = 40.25, y = 197.82908416750035 } { x = 52.325, y = 204.88366791132245 } { x = 68.425, y = 218.08997800402824 } { x = 80.5, y = 227.90956049517226 },Spline { x = 80.5, y = 227.90956049517226 } { x = 92.575, y = 238.09884060309136 } { x = 108.675, y = 253.40633901166706 } { x = 120.75, y = 263.99313961259804 },Spline { x = 120.75, y = 263.99313961259804 } { x = 132.825, y = 274.4475340306158 } { x = 148.925, y = 288.450794380649 } { x = 161, y = 297.68777673722093 },Spline { x = 161, y = 297.68777673722093 } { x = 173.075, y = 306.4877348888135 } { x = 189.175, y = 317.1917511835213 } { x = 201.25, y = 323.93291273127306 },Spline { x = 201.25, y = 323.93291273127306 } { x = 213.325, y = 330.11459614721747 } { x = 229.425, y = 336.79379744254396 } { x = 241.5, y = 340.727336283524 },Spline { x = 241.5, y = 340.727336283524 } { x = 253.575, y = 344.11926197208413 } { x = 269.675, y = 347.00357423321395 } { x = 281.75, y = 348.416743334021 },Spline { x = 281.75, y = 348.416743334021 } { x = 293.825, y = 349.3946387719228 } { x = 309.925, y = 349.29752500078473 } { x = 322, y = 348.8184148541855 }], startPos = 185 }
-
-
-    percent: { percent = 0, spline = Spline { x = 0, y = 185 } { x = 6.708333333333333, y = 187.13818069458338 } { x = 28.174999999999997, y = 191.81437474618713 } { x = 40.25, y = 197.82908416750035 }, val = 185 }
-    percent: { percent = 4.025, spline = Spline { x = 40.25, y = 197.82908416750035 } { x = 52.325, y = 204.88366791132245 } { x = 68.425, y = 218.08997800402824 } { x = 80.5, y = 227.90956049517226 }, val = 197.82908416750035 }
-    percent: { percent = 8.05, spline = Spline { x = 80.5, y = 227.90956049517226 } { x = 92.575, y = 238.09884060309136 } { x = 108.675, y = 253.40633901166706 } { x = 120.75, y = 263.99313961259804 }, val = 227.90956049517226 }
-    percent: { percent = 12.075, spline = Spline { x = 120.75, y = 263.99313961259804 } { x = 132.825, y = 274.4475340306158 } { x = 148.925, y = 288.450794380649 } { x = 161, y = 297.68777673722093 }, val = 263.99313961259804 }
-    percent: { percent = 16.1, spline = Spline { x = 161, y = 297.68777673722093 } { x = 173.075, y = 306.4877348888135 } { x = 189.175, y = 317.1917511835213 } { x = 201.25, y = 323.93291273127306 }, val = 297.68777673722093 }
-    percent: { percent = 20.125, spline = Spline { x = 201.25, y = 323.93291273127306 } { x = 213.325, y = 330.11459614721747 } { x = 229.425, y = 336.79379744254396 } { x = 241.5, y = 340.727336283524 }, val = 323.93291273127306 }
-    percent: { percent = 24.15, spline = Spline { x = 241.5, y = 340.727336283524 } { x = 253.575, y = 344.11926197208413 } { x = 269.675, y = 347.00357423321395 } { x = 281.75, y = 348.416743334021 }, val = 340.727336283524 }
-    percent: { percent = 28.175, spline = Spline { x = 281.75, y = 348.416743334021 } { x = 293.825, y = 349.3946387719228 } { x = 309.925, y = 349.29752500078473 } { x = 322, y = 348.8184148541855 }, val = 348.416743334021 }
-
--}
-transitionToKeyframes : Duration.Duration -> String -> Props.Format -> Motion -> Transition.Transition -> Float -> String
-transitionToKeyframes duration name format startMotion transition finalValue =
-    case transition of
-        Transition.Transition spline ->
-            ToString.frame 0 (ToString.timingFunction spline)
-                ++ ToString.frame 100
-                    (ToString.prop name (Props.format format finalValue))
-
-        Transition.Wobble wobble ->
-            let
-                durationMs =
-                    Duration.inMilliseconds duration
-
-                startPos =
-                    startMotion.position
-
-                splines =
-                    Spring.segments
-                        -- Select a spring that will wobble and settle in 1000 milliseconds
-                        (Spring.new
-                            { wobble = wobble.wobble
-                            , quickness = wobble.quickness
-                            , settleMax = durationMs
-                            }
-                        )
-                        { position = startPos
-
-                        -- intro velocity
-                        , velocity =
-                            startMotion.velocity
-
-                        -- wobble.introVelocity
-                        }
-                        finalValue
-
-                -- _ =
-                --     Debug.log "Transition keyframes"
-                --         { count = List.length splines -- should be roughly 8
-                --         , duratino = durationMs
-                --         , splines = splines
-                --         , startPos = startPos
-                --         , finalValue = finalValue
-                --         }
-                allFrames =
-                    List.foldl
-                        (\spline rendered ->
-                            let
-                                -- _ =
-                                --     let
-                                --         _ =
-                                --             Debug.log "  > " ( startPos, finalValue )
-                                --     in
-                                --     Debug.log "x" ( Bezier.first spline |> .x, durationMs, value )
-                                percent =
-                                    (Bezier.first spline |> .x) / durationMs
-
-                                value =
-                                    Bezier.first spline |> .y
-
-                                normalizedSpline =
-                                    Bezier.normalize spline
-                            in
-                            rendered
-                                ++ ToString.frame (roundPercent percent)
-                                    (ToString.timingFunction spline
-                                        ++ ToString.prop name (Props.format format value)
-                                    )
-                        )
-                        ""
-                        splines
-            in
-            allFrames
-                ++ ToString.frame 100
-                    (ToString.prop name (Props.format format finalValue))
-
-
-sequenceToAnimation : Time.Absolute -> String -> Props.Format -> Move.Sequence Float -> Keyframes
-sequenceToAnimation now name format ((Move.Sequence count delay duration steps) as seq) =
-    let
-        animationName =
-            Move.hash now
-                name
-                seq
-                (Props.hashFormat format)
-    in
-    { animationName = animationName
-    , animationProp = ToString.animation duration delay count animationName
-    , keyframes =
-        ToString.keyframes animationName
-            (List.foldl
-                (stepToKeyframe name format duration)
-                ( Duration.seconds 0, "" )
-                steps
-                |> Tuple.second
-            )
-    }
-
-
-stepToKeyframe : String -> Props.Format -> Duration.Duration -> Move.Step Float -> ( Duration.Duration, String ) -> ( Duration.Duration, String )
-stepToKeyframe name format totalDuration (Move.Step stepDuration transition value) ( lastDuration, lastKeyframe ) =
-    let
-        newDuration =
-            Quantity.plus lastDuration stepDuration
-
-        percent =
-            if Duration.isZero totalDuration then
-                0
-
-            else
-                Duration.inSeconds lastDuration / Duration.inSeconds totalDuration
-    in
-    ( newDuration
-    , lastKeyframe
-        ++ ToString.frame (roundPercent percent) (ToString.prop name (Props.format format value))
-    )
-
-
-roundPercent : Float -> Int
-roundPercent percent =
-    if percent < 0.01 then
-        0
-
-    else if percent > 0.98 then
-        100
+repeatMotions : Int -> Float -> Float -> List Motion -> List Motion -> List Motion
+repeatMotions count start duration motions collected =
+    if count <= 0 then
+        collected
 
     else
-        round (percent * 100)
+        repeatMotions (count - 1)
+            (start + duration)
+            duration
+            motions
+            (List.map (\motion -> { motion | start = motion.start + start }) motions ++ collected)
 
 
-{-| -}
-getColor : String -> List Css.Prop -> Maybe (Move.Move Color.Color)
-getColor targetName props =
-    case props of
-        [] ->
-            Nothing
+clipEnd : Clip -> Float
+clipEnd clip =
+    if clip.duration == 0 then
+        clip.start
 
-        (Css.Prop _ _ _ _) :: remain ->
-            getColor targetName remain
+    else if clip.iterations < 0 then
+        forever
 
-        (Css.ColorProp name movement) :: remain ->
-            if targetName == name then
-                Just movement
-
-            else
-                getColor targetName remain
+    else
+        clip.start + clip.duration * toFloat clip.iterations
 
 
-{-| -}
-getProp : Id -> String -> List Css.Prop -> Maybe (Move.Move Float)
-getProp targetId targetName props =
-    case props of
-        [] ->
-            Nothing
+sampleClip : Float -> Clip -> State
+sampleClip now clip =
+    if now < clip.start then
+        clip.initial
 
-        (Css.Prop id name move format) :: remain ->
-            if (targetId - Props.noId) == 0 then
-                if name == targetName then
-                    Just move
+    else if clip.duration == 0 || now >= clipEnd clip then
+        settle clip.final
+
+    else
+        let
+            elapsed =
+                now - clip.start
+
+            local =
+                elapsed - toFloat (floor (elapsed / clip.duration)) * clip.duration
+        in
+        List.foldl
+            (\motion state ->
+                if local < motion.start then
+                    state
 
                 else
-                    getProp targetId targetName remain
+                    sampleMotion local motion
+            )
+            clip.initial
+            clip.motions
 
-            else if id == targetId then
-                Just move
+
+sampleMotion : Float -> Motion -> State
+sampleMotion now motion =
+    if motion.duration == 0 || now >= motion.start + motion.duration then
+        settle motion.to
+
+    else
+        Dict.map
+            (\name target ->
+                let
+                    from =
+                        Dict.get name motion.from |> Maybe.withDefault target
+                in
+                { target
+                    | channels =
+                        List.map2
+                            (sampleChannel ((now - motion.start) / motion.duration) motion.duration)
+                            from.channels
+                            target.channels
+                }
+            )
+            motion.to
+
+
+sampleChannel : Float -> Float -> Channel -> Channel -> Channel
+sampleChannel progress duration from target =
+    let
+        sampled =
+            Transition.atX (clamp 0 1 progress)
+                (Time.millis 0)
+                (Time.millis duration)
+                target.transition
+                { position = Units.pixels from.position, velocity = Units.pixelsPerSecond from.velocity }
+                target.position
+    in
+    { target | position = Units.inPixels sampled.position, velocity = Units.inPixelsPerSecond sampled.velocity }
+
+
+settle : State -> State
+settle =
+    Dict.map (\_ prop -> { prop | channels = List.map (\part -> { part | velocity = 0 }) prop.channels })
+
+
+type alias Output =
+    { base : State
+    , animations : List String
+    , keyframes : List String
+    , transitions : List String
+    , animated : Dict String Bool
+    }
+
+
+render : Bool -> Float -> State -> List Clip -> Css
+render allowTransitions origin initial clips =
+    let
+        output =
+            List.foldl
+                (renderClip allowTransitions origin)
+                { base = initial, animations = [], keyframes = [], transitions = [], animated = Dict.empty }
+                clips
+
+        transitionCss =
+            String.join ", " (List.reverse output.transitions)
+
+        animationCss =
+            String.join ", " (List.reverse output.animations)
+
+        props =
+            Dict.values output.base |> List.map (\prop -> ( prop.name, format prop ))
+
+        animationProps =
+            case output.animations of
+                [] ->
+                    []
+
+                _ ->
+                    [ ( "animation", animationCss ) ]
+
+        transitionProps =
+            if transitionCss == "" then
+                []
 
             else
-                getProp targetId targetName remain
+                [ ( "transition", transitionCss ) ]
 
-        (Css.ColorProp _ _) :: remain ->
-            getProp targetId targetName remain
+        keyframeCss =
+            String.join "\n" (List.reverse output.keyframes)
+    in
+    { hash = hash (keyframeCss ++ animationCss ++ transitionCss ++ String.join ";" (List.map (\( name, value ) -> name ++ ":" ++ value) props))
+    , keyframes = keyframeCss
+    , transition = transitionCss
+    , props = animationProps ++ transitionProps ++ props
+    }
+
+
+renderClip : Bool -> Float -> Clip -> Output -> Output
+renderClip allowTransitions origin clip output =
+    let
+        atOrigin =
+            if clip.start <= origin then
+                { output | base = sampleClip (min origin clip.stop) clip }
+
+            else
+                output
+    in
+    if clip.stop <= origin || (clipEnd clip <= origin && clip.duration > 0) then
+        atOrigin
+
+    else
+        Dict.foldl
+            (\name initial result ->
+                let
+                    target =
+                        Dict.get name clip.final |> Maybe.withDefault initial
+
+                    native =
+                        if allowTransitions && clip.iterations == 1 && List.length clip.motions == 1 then
+                            commonBezier initial target
+
+                        else
+                            Nothing
+
+                    changed =
+                        List.any
+                            (\motion ->
+                                propertyChanges name motion
+                            )
+                            clip.motions
+                in
+                case native of
+                    Just spline ->
+                        { result
+                            | base = Dict.insert name target result.base
+                            , transitions =
+                                if clip.duration == 0 then
+                                    result.transitions
+
+                                else
+                                    (name ++ " " ++ ms clip.duration ++ " " ++ Bezier.toCss spline ++ " " ++ ms (clip.start - origin)) :: result.transitions
+                        }
+
+                    Nothing ->
+                        if not changed && not (Dict.member name result.animated) then
+                            result
+
+                        else if clip.duration == 0 && clip.start <= origin then
+                            { result | base = Dict.insert name target result.base }
+
+                        else
+                            let
+                                frames =
+                                    framesForMotions name initial clip.duration clip.motions
+
+                                animationName =
+                                    "anim-" ++ hash (String.join ":" [ name, frames, String.fromFloat origin, String.fromFloat clip.start, String.fromFloat clip.duration, String.fromInt clip.iterations ])
+
+                                animation =
+                                    Css.animation (Duration.milliseconds clip.duration)
+                                        (Duration.milliseconds (clip.start - origin))
+                                        clip.iterations
+                                        animationName
+                            in
+                            { result
+                                | animations = animation :: result.animations
+                                , keyframes = Css.keyframes animationName frames :: result.keyframes
+                                , animated = Dict.insert name True result.animated
+                            }
+            )
+            atOrigin
+            clip.initial
+
+
+propertyChanges : String -> Motion -> Bool
+propertyChanges name motion =
+    case ( Dict.get name motion.from, Dict.get name motion.to ) of
+        ( Just from, Just to ) ->
+            values from /= values to || from.format /= to.format || List.any (\part -> part.velocity /= 0) from.channels
+
+        _ ->
+            False
+
+
+commonBezier : Property -> Property -> Maybe Bezier.Spline
+commonBezier from to =
+    let
+        changed =
+            List.map2 (\one two -> ( one.position /= two.position, two.transition )) from.channels to.channels
+                |> List.filter Tuple.first
+                |> List.map Tuple.second
+
+        transitions =
+            if List.isEmpty changed then
+                List.map .transition to.channels
+
+            else
+                changed
+    in
+    case transitions of
+        ((Transition.Transition spline) as first) :: rest ->
+            if List.all ((==) first) rest then
+                Just spline
+
+            else
+                Nothing
+
+        _ ->
+            Nothing
+
+
+framesForMotions : String -> Property -> Float -> List Motion -> String
+framesForMotions name fallback total motions =
+    framesForMotionsHelp name fallback total motions []
+
+
+framesForMotionsHelp : String -> Property -> Float -> List Motion -> List String -> String
+framesForMotionsHelp name fallback total motions collected =
+    case motions of
+        [] ->
+            String.concat (List.reverse collected)
+
+        motion :: rest ->
+            let
+                rendered =
+                    case rest of
+                        next :: _ ->
+                            let
+                                position state =
+                                    Dict.get name state |> Maybe.map (\prop -> ( prop.format, values prop ))
+
+                                nextPosition =
+                                    if next.duration == 0 then
+                                        position next.to
+
+                                    else
+                                        position next.from
+                            in
+                            if motion.duration > 0 && motion.start + motion.duration == next.start && position motion.to /= nextPosition then
+                                -- CSS merges duplicate offsets. Preserve the
+                                -- endpoint just before an instantaneous set or
+                                -- a nested repeat resets its starting value.
+                                { motion | duration = motion.duration - min 0.001 (motion.duration / 1000) }
+
+                            else
+                                motion
+
+                        [] ->
+                            motion
+            in
+            framesForMotionsHelp name fallback total rest (motionFrames name fallback total rendered :: collected)
+
+
+motionFrames : String -> Property -> Float -> Motion -> String
+motionFrames name fallback total motion =
+    let
+        from =
+            Dict.get name motion.from |> Maybe.withDefault fallback
+
+        to =
+            Dict.get name motion.to |> Maybe.withDefault fallback
+
+        frame elapsed property easing =
+            Css.frame
+                (if total == 0 then
+                    100
+
+                 else
+                    100 * elapsed / total
+                )
+                (Css.prop name (format property) ++ easing)
+    in
+    if motion.duration == 0 then
+        frame motion.start to ""
+
+    else
+        case commonBezier from to of
+            Just spline ->
+                frame motion.start from (Css.timingFunction spline)
+                    ++ frame (motion.start + motion.duration) to ""
+
+            Nothing ->
+                sampledFrames frame motion from to
+
+
+sampledFrames : (Float -> Property -> String -> String) -> Motion -> Property -> Property -> String
+sampledFrames frame motion from to =
+    -- Springs are not single CSS timing functions, and compound properties
+    -- cannot assign different timing functions to individual axes. Sample
+    -- those cases in the actual time/value domain, with a bounded frame count.
+    -- Sample the requested duration, which need not equal the spring's
+    -- estimated settling time, and explicitly land on the destination.
+    let
+        count =
+            clamp 2 240 (ceiling (motion.duration / (1000 / 60)))
+    in
+    List.range 0 count
+        |> List.map
+            (\index ->
+                let
+                    time =
+                        motion.start + motion.duration * toFloat index / toFloat count
+                in
+                frame time
+                    (if index == count then
+                        to
+
+                     else
+                        { to | channels = List.map2 (sampleChannel (toFloat index / toFloat count) motion.duration) from.channels to.channels }
+                    )
+                    "animation-timing-function:linear;"
+            )
+        |> String.concat
+
+
+defaultsFor : List Prop -> State
+defaultsFor props =
+    resolve props Dict.empty
+        |> Dict.map (\_ property -> { property | channels = List.map channel property.defaults })
+
+
+resolve : List Prop -> State -> State
+resolve props initial =
+    List.foldl resolveProp initial props
+
+
+resolveProp : Prop -> State -> State
+resolveProp prop state =
+    case prop of
+        Prop id name movement scalarFormat ->
+            let
+                target =
+                    { position = Move.toValue movement, velocity = 0, transition = Move.toTransition movement }
+            in
+            if Props.isTranslateId id || Props.isScaleId id then
+                let
+                    scaling =
+                        Props.isScaleId id
+
+                    default =
+                        if scaling then
+                            1
+
+                        else
+                            0
+
+                    empty =
+                        { name = name
+                        , format =
+                            if scaling then
+                                Scaling
+
+                            else
+                                Translation
+                        , defaults = List.repeat 3 default
+                        , channels = List.repeat 3 (channel default)
+                        }
+
+                    previous =
+                        Dict.get name state |> Maybe.withDefault empty
+
+                    axis =
+                        if scaling then
+                            id - Props.ids.scaleX
+
+                        else
+                            id
+                in
+                Dict.insert name
+                    { empty
+                        | channels =
+                            List.indexedMap
+                                (\index current ->
+                                    if id == Props.ids.scale || index == axis then
+                                        target
+
+                                    else
+                                        current
+                                )
+                                previous.channels
+                    }
+                    state
+
+            else
+                Dict.insert name
+                    { name = name, format = Scalar scalarFormat, defaults = [ Props.defaultPosition id ], channels = [ target ] }
+                    state
+
+        ColorProp name movement ->
+            let
+                rgba =
+                    Color.toRgba (Move.toValue movement)
+
+                trans =
+                    Move.toTransition movement
+            in
+            Dict.insert name
+                { name = name
+                , format = Rgba
+                , defaults = [ 0, 0, 0, 0 ]
+                , channels = List.map (\value -> { position = value, velocity = 0, transition = trans }) [ rgba.red, rgba.green, rgba.blue, rgba.alpha ]
+                }
+                state
+
+
+channel : Float -> Channel
+channel value =
+    { position = value, velocity = 0, transition = Transition.standard }
+
+
+values : Property -> List Float
+values =
+    .channels >> List.map .position
+
+
+format : Property -> String
+format property =
+    case ( property.format, values property ) of
+        ( Scalar scalarFormat, value :: _ ) ->
+            Props.format scalarFormat value
+
+        ( Translation, [ x, y, z ] ) ->
+            Props.vectorToString Props.groups.translation { x = x, y = y, z = z }
+
+        ( Scaling, [ x, y, z ] ) ->
+            Props.vectorToString Props.groups.scaling { x = x, y = y, z = z }
+
+        ( Rgba, [ red, green, blue, alpha ] ) ->
+            Color.toCssString (Color.rgba red green blue alpha)
+
+        _ ->
+            ""
+
+
+stepProps : List Step -> List Prop
+stepProps =
+    List.concatMap
+        (\step ->
+            case step of
+                Step _ props ->
+                    props
+
+                Repeat count children ->
+                    if count == 0 then
+                        []
+
+                    else
+                        stepProps children
+        )
+
+
+milliseconds : Time.Duration -> Float
+milliseconds =
+    Duration.inMilliseconds >> max 0
+
+
+ms : Float -> String
+ms value =
+    String.fromFloat value ++ "ms"
+
+
+hash : String -> String
+hash source =
+    String.foldl (\char value -> Bitwise.or 0 (value * 31 + Char.toCode char)) 5381 source
+        |> String.fromInt

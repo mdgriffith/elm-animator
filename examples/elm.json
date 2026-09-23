@@ -17,7 +17,7 @@
             "elm/url": "1.0.0",
             "ianmackenzie/elm-geometry": "4.0.0",
             "ianmackenzie/elm-units": "2.10.0",
-            "mdgriffith/elm-bezier": "1.0.0",
+            "mdgriffith/elm-bezier": "2.0.0",
             "terezka/line-charts": "2.0.2"
         },
         "indirect": {

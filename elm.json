@@ -16,7 +16,7 @@
     "elm/core": "1.0.0 <= v < 2.0.0",
     "elm/html": "1.0.0 <= v < 2.0.0",
     "elm/time": "1.0.0 <= v < 2.0.0",
-    "mdgriffith/elm-bezier": "1.0.0 <= v < 2.0.0"
+    "mdgriffith/elm-bezier": "2.0.0 <= v < 3.0.0"
   },
   "test-dependencies": {
     "elm-explorations/test": "2.2.0 <= v < 3.0.0"
