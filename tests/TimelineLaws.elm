@@ -148,6 +148,92 @@ suite =
                     |> Timeline.delay (Animator.ms 200)
                     |> position
                     |> Expect.within (Expect.Absolute 0.1) 50
+        , test "Delays accumulate and ignore negative additions" <|
+            \_ ->
+                scheduled 1000 0 1000
+                    |> at 700
+                    |> Timeline.delay (Animator.ms 100)
+                    |> Timeline.delay (Animator.ms -400)
+                    |> Timeline.delay (Animator.ms 200)
+                    |> position
+                    |> Expect.within (Expect.Absolute 0.1) 40
+        , test "View delay is capped at five seconds" <|
+            \_ ->
+                scheduled 10000 0 10000
+                    |> at 7000
+                    |> Timeline.delay (Animator.ms 10000)
+                    |> position
+                    |> Expect.within (Expect.Absolute 0.1) 20
+        , test "During a dwell, arrival is complete and the next transition has not started" <|
+            \_ ->
+                scheduled 1000 500 1000
+                    |> at 1250
+                    |> Expect.all
+                        [ Timeline.current >> Expect.equal 100
+                        , Timeline.arrived >> Expect.equal 100
+                        , Timeline.previous >> Expect.equal 0
+                        , Timeline.progress >> Expect.equal 1
+                        , Timeline.upcoming 100 >> Expect.equal False
+                        , Timeline.upcoming 200 >> Expect.equal True
+                        ]
+        , test "ArrivedAt fires at arrival, not at the end of a dwell or again on the next tick" <|
+            \_ ->
+                let
+                    before =
+                        scheduled 1000 500 1000 |> at 999
+
+                    after =
+                        at 1000 before
+                in
+                Expect.equal ( True, False )
+                    ( Timeline.arrivedAt 100 (Time.millisToPosix 11000) before
+                    , Timeline.arrivedAt 100 (Time.millisToPosix 11001) after
+                    )
+        , test "Canceled destinations are neither upcoming nor reported as arrivals" <|
+            \_ ->
+                let
+                    timeline =
+                        scheduled 1000 0 1000
+                            |> at 100
+                            |> Timeline.interrupt
+                                [ Timeline.wait (Animator.ms 100)
+                                , Timeline.transitionTo (Animator.ms 1000) 300
+                                ]
+                            |> at 100
+                in
+                Expect.equal ( False, False, False )
+                    ( Timeline.upcoming 100 timeline
+                    , Timeline.upcoming 200 timeline
+                    , Timeline.arrivedAt 100 (Time.millisToPosix 12000) timeline
+                    )
+        , test "A return transition is discounted from the last reached state" <|
+            \_ ->
+                Timeline.init 0
+                    |> Timeline.to (Animator.ms 1000) 100
+                    |> at 0
+                    |> at 1000
+                    |> Timeline.to (Animator.ms 1000) 200
+                    |> at 1000
+                    |> at 1500
+                    |> Timeline.to (Animator.ms 1000) 100
+                    |> at 1500
+                    |> at 1750
+                    |> Expect.all
+                        [ position >> Expect.within (Expect.Absolute 0.1) 125
+                        , Timeline.progress >> Expect.within (Expect.Absolute 0.000001) 0.5
+                        , at 2000 >> Timeline.arrived >> Expect.equal 100
+                        ]
+        , test "Previous excludes an abandoned destination even if its original arrival is later" <|
+            \_ ->
+                Timeline.init 0
+                    |> Timeline.to (Animator.ms 10000) 100
+                    |> at 0
+                    |> at 500
+                    |> Timeline.to (Animator.ms 1000) 200
+                    |> at 500
+                    |> at 1500
+                    |> Timeline.previous
+                    |> Expect.equal 0
         ]
 
 

@@ -1,9 +1,8 @@
 # Testing V2
 
-The full Elm suite is intentionally red while V2's timeline/value behavior is being sorted out. The
-regressions are ordinary assertions: they are not skipped, marked as expected
-failures, or changed to accept the current incorrect output. The rendering
-contracts and browser suite now pass through the unified renderer.
+The Elm and browser suites pass. Previously failing V2 scenarios remain as
+ordinary regression assertions, including timeline traversal, interruptions,
+and garbage collection; no expected failures or skipped regressions are needed.
 
 ## Run
 
@@ -41,15 +40,16 @@ while increasing the fuzz count in this review.
 
 ### Recorded baseline
 
-After consolidating rendering and upgrading to elm-bezier 2.0.0:
+After consolidating rendering, upgrading to elm-bezier 2.0.0, and resolving the
+timeline/value regressions:
 
 | Command | Passed | Failed |
 | --- | ---: | ---: |
-| `npm test -- --seed 12345 --fuzz 1000` | 225 | 7 |
+| `npm test -- --seed 67890 --fuzz 10000` | 247 | 0 |
 | `npm run test:browser` | 24 | 0 |
 
-The GC regression appears as both a fuzz failure and a saved example. Failure
-counts are not counts of distinct bugs. All test modules and the browser fixture compile.
+GC invariance is exercised by fuzz tests and saved minimal examples, at collection
+time and at later sample times. All test modules and the browser fixture compile.
 
 ## Coverage
 
@@ -77,21 +77,26 @@ used. The initial DOM style matches the fixture's starting opacity so queued
 timing failures can be distinguished from implicit browser starting values.
 Browser coverage currently runs in Chromium.
 
-## Known regressions retained
+## Regression coverage
 
-These are behavioral failures, not compilation problems:
-
-| Area | Demonstrated failure |
+| Area | Verified behavior |
 | --- | --- |
-| Timeline progress | Progress during the first of two queued transitions describes a later transition instead of the active one |
-| Timeline delay | A requested 200ms delay samples the wrong time |
-| Value interpolation | `xyz.y` mirrors X; a zero-duration transition retains the old value; interrupted movement uses the abandoned trajectory rather than its sampled interruption position |
-| Garbage collection | Collection can change position at an immediate interruption; covered by both fuzzing and a saved minimal reproduction |
+| Timeline progress | Reports the active transition; future queued transitions do not overwrite progress |
+| Timeline delay | Delays add together, negative additions are ignored, and the total is capped at five seconds |
+| Value interpolation | XYZ channels are independent; instantaneous changes reach their targets; completed movement has zero velocity |
+| Interruptions | Numeric and color motion continue from the sampled interruption point, preserving spring momentum |
+| State inspection | Arrival occurs before a dwell; canceled destinations are excluded; arrival notifications are not repeated on the next tick |
+| Garbage collection | Removing obsolete history preserves position and velocity, including instantaneous and canceled queued events |
 
 The former rendering regressions (initial values, grouped transforms, omitted
-custom properties, invalid animation lists, and queued timing) now pass. CSS
-interruptions also pass; the remaining interrupted-motion failure is in
-`Animator.Value`, which is tested independently.
+custom properties, invalid animation lists, and queued timing) also pass. Both
+CSS and `Animator.Value` interruption behavior are tested independently.
+
+Timeline inspection and value interpolation share a traversal that visits each
+reachable transition once, with its end clipped to the next interruption.
+Sampling freezes abandoned motion at that boundary. Arrivals use the target's
+arrival time rather than the end of its dwell, which also makes return-duration
+discounting recognize states that have already been reached.
 
 ## Rendering architecture
 

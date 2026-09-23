@@ -130,15 +130,16 @@ init first =
 
 This is generally used in your view function to add a bit of variety when animating multiple elements.
 
-        Animator.move (Animator.delay (Animator.millis 200) timeline) <|
+        Animator.Value.float (Animator.Timeline.delay (Animator.ms 200) timeline) <|
             \state ->
                 if state then
-                    Animator.at 0
+                    Animator.Value.to 0
 
                 else
-                    Animator.at 1
+                    Animator.Value.to 1
 
-This has a maximum value of 5 seconds.
+Delays add together, negative additions are ignored, and the total is capped at
+5 seconds.
 
 If you need a longer delay, it's likely you want to create a separate timeline.
 
@@ -146,7 +147,13 @@ If you need a longer delay, it's likely you want to create a separate timeline.
 delay : Duration -> Timeline state -> Timeline state
 delay dur (Timeline.Timeline details) =
     Timeline.Timeline
-        { details | delay = Time.maxDuration (Duration.milliseconds 5000) (Time.expand details.delay (Time.positiveDuration dur)) }
+        { details
+            | delay =
+                Duration.milliseconds
+                    (min 5000
+                        (Duration.inMilliseconds details.delay + max 0 (Duration.inMilliseconds dur))
+                    )
+        }
 
 
 {-| Scale timeline durations.
@@ -212,10 +219,12 @@ arrived =
 
 {-| Sometimes we want to know when we've arrived at a state so we can trigger some other work.
 
-You can use `arrivedAt` in the `Tick` branch of your update to see if you will arrive at an event on this tick.
+Use `arrivedAt` before updating the timeline to detect arrivals after its current
+time and at or before the new tick. An arrival is not reported again on the next
+tick. Destinations canceled by an interruption are not reported.
 
     Tick time ->
-        if Animator.arrivedAt MyState time model.timeline then
+        if Animator.Timeline.arrivedAt MyState time model.timeline then
             --...do something special
 
 -}

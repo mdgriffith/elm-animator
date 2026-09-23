@@ -125,7 +125,11 @@ progress (Quantity.Quantity start) (Quantity.Quantity end) (Quantity.Quantity cu
             abs (end - start)
     in
     if total == 0 then
-        0
+        if current < start then
+            0
+
+        else
+            1
 
     else
         ((current - start) / total)

@@ -259,7 +259,11 @@ at :
     -> State
     -> State
 at progress startTime targetTime (Pos transition targetPosition dwell) current =
-    Transition.atX progress startTime targetTime transition current targetPosition
+    if progress >= 1 then
+        toState targetPosition
+
+    else
+        Transition.atX progress startTime targetTime transition current targetPosition
 
 
 {-| Adds a new sequence to the top of the sequence stack.

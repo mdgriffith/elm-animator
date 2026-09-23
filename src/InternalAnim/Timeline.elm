@@ -130,11 +130,9 @@ type alias Transition state anchor motion =
     -- or when the interruption happened
     -> Time.Absolute
     -- end time:
-    -- This is either the endtime of `target event`
-    -- or the interruption time
+    -- Either the arrival time of the target or an earlier interruption.
     -> Time.Absolute
-    -- the future, but we can only look 1 deep
-    -- this should be a maybe, but dont want to allocate it.
+    -- Remaining events on this line; a later interruption may cancel them.
     -> List (Occurring state)
     -> motion
     -> motion
@@ -866,23 +864,14 @@ foldpAll :
 foldpAll now lookup toStart transitionTo (Timeline timelineDetails) =
     case timelineDetails.events of
         Timetable timetable ->
-            let
-                start =
-                    toStart (lookup timelineDetails.initial)
-            in
-            case timetable of
-                [] ->
-                    start
-
-                (Line lineStart _ _) :: _ ->
-                    visitAll now
-                        lookup
-                        transitionTo
-                        timelineDetails
-                        (Occurring timelineDetails.initial lineStart lineStart)
-                        []
-                        timetable
-                        start
+            visitAll now
+                lookup
+                transitionTo
+                (Time.millis 0)
+                Nothing
+                []
+                timetable
+                (toStart (lookup timelineDetails.initial))
 
 
 {-| -}
@@ -890,161 +879,58 @@ visitAll :
     Time.Absolute
     -> (state -> anchor)
     -> Transition state anchor motion
-    -> TimelineDetails state
-    -> Occurring state
+    -> Time.Absolute
+    -> Maybe Time.Absolute
     -> List (Occurring state)
     -> List (Line state)
     -> motion
     -> motion
-visitAll now toAnchor transitionTo details prev queue future state =
-    -- queue: the upcoming events on this Line
+visitAll now toAnchor transitionTo start cutoff queue future state =
+    -- Visit each reachable transition exactly once. The next line truncates
+    -- this line, including any queued events which never get to start.
     case queue of
         [] ->
             case future of
                 [] ->
                     state
 
-                (Line futureStart futureEvent futureRemain) :: [] ->
-                    -- the last line.
-                    -- transition to futureEvent and then continue on through the remaining events in futureRemain
+                (Line lineStart first rest) :: following ->
                     let
-                        new =
-                            state
-                                |> transitionTo
-                                    toAnchor
-                                    futureEvent
-                                    now
-                                    futureStart
-                                    (startTime futureEvent)
-                                    futureRemain
+                        nextCutoff =
+                            case following of
+                                (Line nextStart _ _) :: _ ->
+                                    Just nextStart
+
+                                [] ->
+                                    Nothing
                     in
-                    visitAll now
-                        toAnchor
-                        transitionTo
-                        details
-                        futureEvent
-                        futureRemain
-                        []
-                        new
-
-                (Line futureStart futureEvent futureRemain) :: (((Line nextStart nextEvent nextRemain) :: _) as allFuture) ->
-                    if Time.thisBeforeThat nextStart (endTime futureEvent) then
-                        -- we've been interrupted!
-                        let
-                            new =
-                                state
-                                    |> transitionTo
-                                        toAnchor
-                                        futureEvent
-                                        now
-                                        --v transition start time
-                                        futureStart
-                                        --v transition end time
-                                        nextStart
-                                        futureRemain
-                        in
-                        visitAll now
-                            toAnchor
-                            transitionTo
-                            details
-                            nextEvent
-                            nextRemain
-                            allFuture
-                            new
-
-                    else
-                        let
-                            new =
-                                state
-                                    |> transitionTo
-                                        toAnchor
-                                        futureEvent
-                                        now
-                                        (endTime prev)
-                                        nextStart
-                                        futureRemain
-                        in
-                        visitAll now
-                            toAnchor
-                            transitionTo
-                            details
-                            futureEvent
-                            futureRemain
-                            allFuture
-                            new
+                    visitAll now toAnchor transitionTo lineStart nextCutoff (first :: rest) following state
 
         top :: remain ->
-            case future of
-                [] ->
-                    let
-                        new =
-                            transitionTo toAnchor
-                                top
-                                now
-                                (endTime prev)
-                                (startTime top)
-                                remain
-                                state
-                    in
-                    visitAll now
-                        toAnchor
-                        transitionTo
-                        details
-                        top
-                        remain
-                        future
-                        new
+            if Maybe.map (Time.thisAfterThat start) cutoff |> Maybe.withDefault False then
+                visitAll now toAnchor transitionTo start cutoff [] future state
 
-                (Line futureStart futureEvent futureRemain) :: restOfFuture ->
-                    if Time.thisBeforeThat futureStart (endTime top) then
-                        -- enroute to `top`, we are interrupted
-                        -- so we transition to top (stopping at the interruption point)
-                        -- then make another transition from where we were interrupted to
-                        -- our new destination
-                        let
-                            new =
-                                state
-                                    |> transitionTo toAnchor
-                                        top
-                                        now
-                                        (endTime prev)
-                                        futureStart
-                                        remain
-                                    |> transitionTo toAnchor
-                                        futureEvent
-                                        now
-                                        futureStart
-                                        (endTime futureEvent)
-                                        futureRemain
-                        in
-                        visitAll now
-                            toAnchor
-                            transitionTo
-                            details
-                            futureEvent
-                            futureRemain
-                            restOfFuture
-                            new
+            else
+                let
+                    arrival =
+                        startTime top
 
-                    else
-                        let
-                            new =
-                                transitionTo toAnchor
-                                    top
-                                    now
-                                    (endTime prev)
-                                    (endTime top)
-                                    remain
-                                    state
-                        in
-                        visitAll now
-                            toAnchor
-                            transitionTo
-                            details
-                            top
-                            remain
-                            future
-                            new
+                    end =
+                        case cutoff of
+                            Just interrupted ->
+                                if Time.thisBeforeThat interrupted arrival then
+                                    interrupted
+
+                                else
+                                    arrival
+
+                            Nothing ->
+                                arrival
+
+                    new =
+                        transitionTo toAnchor top now start end remain state
+                in
+                visitAll now toAnchor transitionTo (endTime top) cutoff remain future new
 
 
 
@@ -1064,16 +950,22 @@ status timeline =
     foldpAll (getCurrentTime timeline)
         identity
         (\_ -> Dwelling Time.zeroDuration)
-        (\_ target now start end theFuture found ->
-            -- Some notes because I have this loaded in my brain now.
-            -- end: either the endtime of `target event` or the interruption time
-            -- We generally care about progress towards the start time of the target
-            -- so we don't want to use `end` necessarily.
+        (\_ target now start end _ found ->
             let
                 startTimeTarget =
                     startTime target
+
+                sampledAt =
+                    if Time.thisBeforeThat end now then
+                        end
+
+                    else
+                        now
             in
-            if Time.thisAfterThat now startTimeTarget then
+            if Time.thisBeforeThat now start then
+                found
+
+            else if Time.thisAfterOrEqualThat sampledAt startTimeTarget then
                 Dwelling (Time.duration now startTimeTarget)
 
             else
@@ -1081,7 +973,7 @@ status timeline =
                     Transitioning trans ->
                         Transitioning
                             { progress =
-                                Time.progress start startTimeTarget now
+                                Time.progress start startTimeTarget sampledAt
                             , transitionProgress =
                                 trans.progress :: trans.transitionProgress
                             }
@@ -1089,7 +981,7 @@ status timeline =
                     Dwelling _ ->
                         Transitioning
                             { progress =
-                                Time.progress start startTimeTarget now
+                                Time.progress start startTimeTarget sampledAt
                             , transitionProgress = []
                             }
         )
@@ -1146,10 +1038,7 @@ arrived ((Timeline details) as timeline) =
             -- Arrived value is the last value that we've successfully arrived at
             if
                 Time.thisAfterOrEqualThat now endTransition
-                    && (-- the endTransition is either the endtime of `target event` or the interruption time
-                        -- If we were interrupted, we never made it to this event.
-                        endTime target == endTransition
-                       )
+                    && (startTime target == endTransition)
             then
                 getEvent target
 
@@ -1164,18 +1053,8 @@ current ((Timeline details) as timeline) =
     foldpAll (getCurrentTime timeline)
         identity
         (\_ -> details.initial)
-        (\_ target now start endTransition future state ->
-            -- This is the current event when
-            --      we have started toward an event or arrived at it.
-            -- A tricky aspect is that css timelines are only updated on transition
-            -- This means that now == start must be current, or else current will be wrong for the whole transition.
-            if
-                Time.thisBeforeOrEqualThat now endTransition
-                    && Time.thisAfterOrEqualThat now start
-            then
-                getEvent target
-
-            else if List.isEmpty future && Time.thisAfterThat now endTransition then
+        (\_ target now start _ _ state ->
+            if Time.thisAfterOrEqualThat now start then
                 getEvent target
 
             else
@@ -1199,54 +1078,19 @@ previous : Timeline event -> event
 previous ((Timeline details) as timeline) =
     foldpAll (getCurrentTime timeline)
         identity
-        (\_ -> ( details.initial, NoIntention ))
-        (\_ target now start endTransition future (( lastVisited, maybeLeadingVisited ) as state) ->
-            let
-                completedEvent =
-                    Time.thisAfterThat now (endTime target) && (endTime target == endTransition)
+        (\_ -> ( details.initial, details.initial ))
+        (\_ target now start endTransition _ (( _, lastArrived ) as state) ->
+            if startTime target == endTransition && Time.thisAfterOrEqualThat now endTransition then
+                ( lastArrived, getEvent target )
 
-                atEvent =
-                    Time.equal now (endTime target) && Time.equal now endTransition
+            else if Time.thisAfterThat now start then
+                ( lastArrived, lastArrived )
 
-                result =
-                    if completedEvent || atEvent then
-                        -- completed or at target
-                        case maybeLeadingVisited of
-                            NoIntention ->
-                                ( lastVisited, Completed (getEvent target) )
-
-                            Completed leadingVisited ->
-                                ( leadingVisited, Completed (getEvent target) )
-
-                            EnRoute leadingVisited ->
-                                ( leadingVisited, Completed (getEvent target) )
-
-                    else if Time.thisAfterThat now start && Time.thisBeforeThat now (endTime target) then
-                        -- enroute
-                        case maybeLeadingVisited of
-                            NoIntention ->
-                                ( lastVisited, EnRoute (getEvent target) )
-
-                            Completed leadingVisited ->
-                                ( leadingVisited, EnRoute (getEvent target) )
-
-                            EnRoute _ ->
-                                -- We were going to one place, now we're going to another
-                                ( lastVisited, EnRoute (getEvent target) )
-
-                    else
-                        state
-            in
-            result
+            else
+                state
         )
         timeline
         |> Tuple.first
-
-
-type Intention a
-    = NoIntention
-    | EnRoute a
-    | Completed a
 
 
 arrivedAt : (event -> Bool) -> Time.Posix -> Timeline event -> Bool
@@ -1254,11 +1098,13 @@ arrivedAt matches newTime ((Timeline details) as tl) =
     foldpAll (getCurrentTime tl)
         identity
         (\_ -> False)
-        (\_ target _ _ end _ state ->
+        (\_ target now _ end _ state ->
             state
                 || (matches (getEvent target)
-                        && Time.thisBeforeOrEqualThat details.now end
-                        && Time.thisAfterOrEqualThat (Time.absolute newTime) end
+                        && startTime target
+                        == end
+                        && Time.thisBeforeThat now end
+                        && Time.thisAfterOrEqualThat (Time.rollbackBy details.delay (Time.absolute newTime)) end
                    )
         )
         tl
@@ -1307,6 +1153,8 @@ upcoming matches ((Timeline details) as tl) =
             (\_ target now _ end _ state ->
                 state
                     || (matches (getEvent target)
+                            && startTime target
+                            == end
                             && Time.thisBeforeThat now end
                        )
             )

@@ -495,8 +495,11 @@ interruptions =
                             [ occur Four (qty 7000) (qty 7000)
                             ]
                         , Timeline.Line (qty 4500)
-                            (occur Two (qty 5500) (qty 6500))
-                            [ occur One (qty 7500) (qty 7500)
+                            -- Two was reached at 4000 before its dwell was
+                            -- interrupted. Returning halfway through the
+                            -- transition to Three takes only 500ms.
+                            (occur Two (qty 5000) (qty 6000))
+                            [ occur One (qty 7000) (qty 7000)
                             ]
                         ]
                     )
@@ -978,41 +981,47 @@ ordering =
                             |> Timeline.updateWith False (Time.millisToPosix 1400)
                 in
                 Expect.all
-                    [ \tl ->
-                        let
-                            nonGCedPos =
-                                .position (Value.movement tl toPosition)
+                    (List.map
+                        (\offset tl ->
+                            let
+                                sampleAt =
+                                    Timeline.getCurrentTime tl
+                                        |> Time.advanceBy (Animator.ms offset)
+                                        |> Time.toPosix
 
-                            gcedPos =
-                                .position (Value.movement (Timeline.gc tl) toPosition)
+                                before =
+                                    Value.movement (Timeline.atTime sampleAt tl) toPosition
 
-                            gced =
-                                if nonGCedPos == gcedPos then
-                                    { nonGcedPos = nonGCedPos
-                                    , timeline = tl
-                                    , gcedPos = gcedPos
-                                    , gcedTimeline = Timeline.gc tl
-                                    }
-
-                                else
-                                    -- Debug.log "GCED"
-                                    { nonGcedPos = nonGCedPos
-                                    , timeline = tl
-                                    , gcedPos = gcedPos
-                                    , gcedTimeline = Timeline.gc tl
-                                    }
-                        in
-                        Expect.within
-                            (Absolute 0.001)
-                            nonGCedPos
-                            gcedPos
-                    , \tl ->
-                        Expect.within
-                            (Absolute 0.001)
-                            (.velocity (Value.movement tl toPosition))
-                            (.velocity (Value.movement (Timeline.gc tl) toPosition))
-                    ]
+                                after =
+                                    Value.movement (Timeline.atTime sampleAt (Timeline.gc tl)) toPosition
+                            in
+                            Expect.all
+                                [ .position >> Expect.within (Absolute 0.001) before.position
+                                , .velocity >> Expect.within (Absolute 0.001) before.velocity
+                                ]
+                                after
+                        )
+                        [ 0, 1, 250, 1000 ]
+                    )
                     timelineAt
+        , test "Canceled queued events cannot reappear after collection" <|
+            \_ ->
+                let
+                    instructions =
+                        Fuzz.Timeline.InstructionTimeline 0
+                            One
+                            [ Fuzz.Timeline.Interruption 0 [ ( 0, One ) ]
+                            , Fuzz.Timeline.Interruption 0 [ ( 1, Two ), ( 0, One ) ]
+                            , Fuzz.Timeline.Interruption 0 [ ( 0, One ) ]
+                            , Fuzz.Timeline.Interruption 1400 [ ( 1, One ) ]
+                            ]
+
+                    before =
+                        Fuzz.Timeline.toTimeline { gc = False } instructions
+                in
+                Expect.equal
+                    [ { position = 1, velocity = 0 }, { position = 1, velocity = 0 } ]
+                    (List.map (\tl -> Value.movement tl toPosition) [ before, Timeline.gc before ])
         , test "GC preserves motion at an immediate interruption (shrunk fuzz regression)" <|
             \_ ->
                 let

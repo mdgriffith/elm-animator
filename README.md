@@ -57,5 +57,5 @@ They used [`elm-playground`](https://package.elm-lang.org/packages/evancz/elm-pl
 
 ## Development
 
-See [Testing V2](tests/README.md) for the Elm and browser test commands, coverage,
-and the regression failures currently retained during development.
+See [Testing V2](tests/README.md) for the Elm and browser test commands and
+regression coverage.
