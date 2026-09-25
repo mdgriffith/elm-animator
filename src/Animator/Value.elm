@@ -72,7 +72,8 @@ float timeline lookup =
         |> .position
 
 
-{-| -}
+{-| Units per second: if your values are pixels, this returns pixels per second.
+-}
 velocity : Timeline state -> (state -> Movement) -> Float
 velocity timeline lookup =
     movement timeline lookup

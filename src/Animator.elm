@@ -153,7 +153,7 @@ z value =
     Prop Props.ids.z "translate" (Move.to value) Props.float
 
 
-{-| Choose a motion curve. This does not select CSS transitions versus keyframes.
+{-| Attributes use `Animator.Transition.standard` by default.
 -}
 withTransition : Animator.Transition.Transition -> Attribute -> Attribute
 withTransition curve attribute =
@@ -307,7 +307,9 @@ pulsing duration =
         ]
 
 
-{-| -}
+{-| The duration covers a complete out-and-back bounce. Distance is in pixels:
+positive moves down, negative moves up.
+-}
 bouncing : Duration -> Float -> Animation
 bouncing duration distance =
     if Time.isZeroDuration duration then
@@ -343,6 +345,10 @@ pinging duration =
 
 {-| Animate on a timeline, allowing multiple elements to synchronize and handling
 interruptions from their sampled positions. Uses CSS keyframe animations.
+
+Omitted properties return to their defaults: translation and rotation to `0`,
+scale and opacity to `1`. In contrast, `step` keeps omitted properties as they are.
+
 -}
 onTimeline : Timeline state -> (state -> List Attribute) -> Animation
 onTimeline timeline lookup =
