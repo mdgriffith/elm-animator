@@ -12,6 +12,9 @@ From the repository root:
 # Install the pinned tools using the existing pnpm lockfile.
 npx --yes pnpm@8.15.9 install --frozen-lockfile
 
+# Static review of the package source and README.
+npm run review
+
 # Elm unit, regression, and property tests.
 npm test -- --seed 12345 --fuzz 1000
 
@@ -60,8 +63,8 @@ All test modules and the browser fixture compile.
 
 ## Continuous integration
 
-`.github/workflows/test.yml` runs on pushes and pull requests. One job runs the
-Elm suite with 10,000 fuzz iterations and compiles all examples. Separate browser
+`.github/workflows/test.yml` runs on pushes and pull requests. One job runs
+`elm-review`, the Elm suite with 10,000 fuzz iterations, and compiles all examples. Separate browser
 jobs install and test Chromium, Firefox, and WebKit. Failed browser jobs upload
 Playwright traces and screenshots. Tool versions are pinned by `package.json`
 and `pnpm-lock.yaml`.

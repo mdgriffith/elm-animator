@@ -1,4 +1,4 @@
-module InternalAnim.Bits exposing (Bits, store4Float, value)
+module Bits exposing (Bits, store4Float, value)
 
 {-| Let's make storing values within a single Int a bit easier to do while not compromising performance.
 

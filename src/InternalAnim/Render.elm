@@ -161,9 +161,6 @@ onTimeline (Timeline.Timeline details) lookup =
         origin =
             Time.inMilliseconds details.updatedAt - milliseconds details.delay
 
-        firstStart =
-            List.head events |> Maybe.map .start |> Maybe.withDefault origin
-
         initialStart =
             details.initialStartedAt
                 |> Maybe.map Time.inMilliseconds
@@ -175,7 +172,7 @@ onTimeline (Timeline.Timeline details) lookup =
                     forever
 
                  else
-                    firstStart
+                    List.head events |> Maybe.map .start |> Maybe.withDefault origin
                 )
                 initialScene.steps
                 { time = initialStart, state = initial, clips = [] }
@@ -628,13 +625,6 @@ renderClip allowTransitions origin clip output =
 
                         else
                             Nothing
-
-                    changed =
-                        List.any
-                            (\motion ->
-                                propertyChanges name motion
-                            )
-                            clip.motions
                 in
                 case native of
                     Just easing ->
@@ -649,6 +639,10 @@ renderClip allowTransitions origin clip output =
                         }
 
                     Nothing ->
+                        let
+                            changed =
+                                List.any (propertyChanges name) clip.motions
+                        in
                         if not changed && not (Dict.member name result.animated) then
                             result
 
@@ -778,9 +772,6 @@ framesForMotionsHelp name fallback total motions collected =
 motionFrames : String -> Property -> Float -> Motion -> String
 motionFrames name fallback total motion =
     let
-        from =
-            Dict.get name motion.from |> Maybe.withDefault fallback
-
         to =
             Dict.get name motion.to |> Maybe.withDefault fallback
 
@@ -798,6 +789,10 @@ motionFrames name fallback total motion =
         frame motion.start to ""
 
     else
+        let
+            from =
+                Dict.get name motion.from |> Maybe.withDefault fallback
+        in
         case commonBezier from to of
             Just spline ->
                 frame motion.start from (Css.timingFunction spline)

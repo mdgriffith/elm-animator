@@ -1,9 +1,8 @@
 module InternalAnim.Transition exposing
     ( Transition(..)
     , linear, standard, wobble, bezier
-    , hash, keyframes
+    , keyframes
     , atX
-    , isStandard
     , takeAfter, withVelocities
     )
 
@@ -13,11 +12,9 @@ module InternalAnim.Transition exposing
 
 @docs linear, standard, wobble, bezier
 
-@docs hash, keyframes
+@docs keyframes
 
 @docs atX
-
-@docs isStandard
 
 @docs takeAfter, withVelocities
 
@@ -65,7 +62,6 @@ Goals:
 import Bezier
 import Bezier.Spring as Spring
 import InternalAnim.Duration as Duration
-import InternalAnim.Hash as Hash
 import InternalAnim.Time as Time
 import InternalAnim.Units as Units
 
@@ -165,39 +161,6 @@ linear =
             }
 
 
-isStandard : Transition -> Bool
-isStandard trans =
-    case trans of
-        Transition spline ->
-            let
-                { one, two, three, four } =
-                    toBezierPoints spline
-            in
-            (one
-                == { x = 0
-                   , y = 0
-                   }
-            )
-                && (two
-                        == { x = 0.4
-                           , y = 0
-                           }
-                   )
-                && (three
-                        == { x = 0.2
-                           , y = 1
-                           }
-                   )
-                && (four
-                        == { x = 1
-                           , y = 1
-                           }
-                   )
-
-        _ ->
-            False
-
-
 {-| The opposite of `normalizeOver`.
 
 I guess this is denormalization? Though i was always confused by that term :/
@@ -249,15 +212,16 @@ atX progress startTime targetTime transition current target =
                         normalizedVelocity.x
                             * Duration.inSeconds
                                 (Time.duration startTime targetTime)
-
-                    scaledY =
-                        normalizedVelocity.y
-                            * (target - startingPosition)
                 in
                 if scaledX == 0 || isNaN scaledX then
                     Units.pixelsPerSecond 0
 
                 else
+                    let
+                        scaledY =
+                            normalizedVelocity.y
+                                * (target - startingPosition)
+                    in
                     Units.pixelsPerSecond (scaledY / scaledX)
             }
 
@@ -276,9 +240,6 @@ atX progress startTime targetTime transition current target =
                 durationMilliseconds =
                     totalDuration * progress
 
-                currentVelocity =
-                    Units.inPixelsPerSecond current.velocity
-
                 sprung =
                     Spring.at
                         { spring = params
@@ -289,7 +250,7 @@ atX progress startTime targetTime transition current target =
                                     wob.introVelocity
 
                                 else
-                                    currentVelocity
+                                    Units.inPixelsPerSecond current.velocity
                             }
                         , target = target
                         }
@@ -313,26 +274,6 @@ withVelocities intro exit transition =
                 , quickness = wob.quickness
                 , introVelocity = intro
                 }
-
-
-toBezierPoints : Bezier.Spline -> { one : Bezier.Point, two : Bezier.Point, three : Bezier.Point, four : Bezier.Point }
-toBezierPoints spline =
-    { one = Bezier.first spline
-    , two = Bezier.controlOne spline
-    , three = Bezier.controlTwo spline
-    , four = Bezier.last spline
-    }
-
-
-{-| -}
-hash : Transition -> String
-hash transition =
-    case transition of
-        Transition spline ->
-            Hash.bezierNormalized spline
-
-        Wobble f ->
-            "wob" ++ Hash.float f.wobble
 
 
 {-| -}

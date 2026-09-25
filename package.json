@@ -1,6 +1,7 @@
 {
 	"packageManager": "pnpm@8.15.9",
 	"scripts": {
+		"review": "elm-review",
 		"test": "elm-test",
 		"test:all": "npm test && npm run test:browser",
 		"test:browser": "node browser-tests/build.cjs && playwright test --config browser-tests/playwright.config.cjs"

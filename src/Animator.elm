@@ -358,8 +358,12 @@ onTimelineWith timeline lookup =
 
 
 {-| Animate a change to these properties using native CSS transitions where
-possible. Springs and incompatible curves within a compound property use
-keyframes instead.
+possible. Springs use native CSS `linear(...)` easing, which requires a browser
+with support for that timing function. Incompatible curves within a compound
+property use keyframes instead.
+
+Native springs follow CSS transition reversal rules. Use a timeline when spring
+interruptions need to preserve incoming velocity.
 
     Animator.div
         (Animator.transition (Animator.ms 200)

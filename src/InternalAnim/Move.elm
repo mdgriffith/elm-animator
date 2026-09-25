@@ -1,35 +1,31 @@
 module InternalAnim.Move exposing
     ( Move(..), to, toWith
-    , toValue, toTransition, toDwellSequence
-    , State, init
-    , lerpColor, lerpFloat, lerpVector
+    , toValue, toTransition
+    , State, init, toState
+    , lerpColor
     , Sequence(..)
-    , Step(..), stepWith
-    , sequences, hasSequence
-    , addSequence
-    , withTransition, withVelocities
+    , Step(..)
+    , sequences
+    , withTransition
     , at
-    , hash, move, toState
     )
 
 {-|
 
 @docs Move, to, toWith
 
-@docs toValue, toTransition, toDwellSequence
+@docs toValue, toTransition
 
-@docs State, init, fromFloat
+@docs State, init, toState
 
-@docs lerpColor, lerpFloat, lerpVector
+@docs lerpColor
 
 @docs Sequence
-@docs Step, stepWith
+@docs Step
 
-@docs sequences, goto, hasSequence
+@docs sequences
 
-@docs addSequence
-
-@docs withTransition, withVelocities
+@docs withTransition
 
 @docs at
 
@@ -43,26 +39,9 @@ import InternalAnim.Transition as Transition
 import InternalAnim.Units as Units
 
 
-{-| If this is a simple transition, then we can render it as a browser transition.
-
-Otherwise, if it has sequences, then it needs to be rendered as a CSS animation.
-
-Value animations don't care.
-
--}
-hasSequence : Move value -> Bool
-hasSequence (Pos _ _ seq) =
-    not (List.isEmpty seq)
-
-
 {-| -}
 type Move value
     = Pos Transition.Transition value (List (Sequence value))
-
-
-toDwellSequence : Move value -> List (Sequence value)
-toDwellSequence (Pos _ _ dwell) =
-    dwell
 
 
 toValue : Move value -> value
@@ -119,23 +98,6 @@ toState x =
     }
 
 
-{-|
-
-    Adjust the transition by taking into account intro and exit velocity if necessary
-
--}
-withVelocities : Float -> Float -> Move x -> Move x
-withVelocities intro exit ((Pos trans val dwell) as untouched) =
-    if intro == 0 && exit == 0 then
-        untouched
-
-    else
-        Pos
-            (Transition.withVelocities intro exit trans)
-            val
-            dwell
-
-
 {-| -}
 withTransition : Transition.Transition -> Move value -> Move value
 withTransition trans (Pos _ value sequence) =
@@ -157,16 +119,6 @@ toWith t v =
     Pos t v []
 
 
-move : Transition.Transition -> value -> List (Sequence value) -> Move value
-move =
-    Pos
-
-
-addSequence : Int -> Duration.Duration -> List (Step value) -> Move value -> Move value
-addSequence n dur steps (Pos transition value seq) =
-    Pos transition value (seq ++ [ Sequence n Time.zeroDuration dur steps ])
-
-
 getSequenceDuration : Sequence value -> Duration.Duration
 getSequenceDuration (Sequence i delay dur steps) =
     dur
@@ -175,11 +127,6 @@ getSequenceDuration (Sequence i delay dur steps) =
 withSequenceDelay : Duration.Duration -> Sequence value -> Sequence value
 withSequenceDelay delay (Sequence i _ dur steps) =
     Sequence i delay dur steps
-
-
-stepWith : Duration.Duration -> Transition.Transition -> value -> Step value
-stepWith =
-    Step
 
 
 {--}
@@ -207,11 +154,6 @@ addDelayToSequence delay seqs captured =
                 )
 
 
-lerpFloat : Float -> Float -> Float -> Float
-lerpFloat t one two =
-    one + ((two - one) * t)
-
-
 lerpColor : Float -> Color.Color -> Color.Color -> Color.Color
 lerpColor progress from target =
     let
@@ -231,24 +173,6 @@ lerpColor progress from target =
 average : Float -> Float -> Float -> Float
 average x y progress =
     sqrt ((x * x) * (1 - progress) + (y * y) * progress)
-
-
-type alias Vector =
-    { x : Float
-    , y : Float
-    , z : Float
-    }
-
-
-lerpVector : Float -> Vector -> Vector -> Vector
-lerpVector t one two =
-    { x =
-        lerpFloat t one.x two.x
-    , y =
-        lerpFloat t one.y two.y
-    , z =
-        lerpFloat t one.z two.z
-    }
 
 
 at :
@@ -708,58 +632,3 @@ afterSequence durationTillNow (Sequence n delay duration steps) =
 zeroDuration : Duration.Duration
 zeroDuration =
     Duration.milliseconds 0
-
-
-
-{- CSS KEYFRAMES -}
-
-
-hash : Time.Absolute -> String -> Sequence value -> (value -> String) -> String
-hash now name (Sequence n delay dur steps) toString =
-    -- we need to encode the current time in the animations name so the browser doesn't cache anything
-    -- IM LOOKIN AT YOU, CHROME
-    name
-        ++ String.fromInt (round <| Time.inMilliseconds now)
-        ++ (if n == 1 then
-                ""
-
-            else
-                "n" ++ String.fromInt n
-           )
-        ++ hashDuration "dl" delay
-        ++ hashDuration "d" dur
-        ++ stepHash steps toString ""
-
-
-stepHash : List (Step value) -> (value -> String) -> String -> String
-stepHash steps toString hashed =
-    case steps of
-        [] ->
-            hashed
-
-        (Step dur trans v) :: remain ->
-            stepHash
-                remain
-                toString
-                (hashed
-                    -- ++ "--"
-                    ++ hashDuration "d" dur
-                    ++ Transition.hash trans
-                    ++ "-"
-                    ++ toString v
-                )
-
-
-hashDuration : String -> Duration.Duration -> String
-hashDuration prefix dur =
-    let
-        seconds =
-            Duration.inSeconds dur
-    in
-    if seconds == 0 then
-        ""
-
-    else
-        prefix
-            ++ String.fromInt
-                (round (Duration.inSeconds dur))

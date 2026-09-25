@@ -6,8 +6,8 @@ import Animator.Css2
 import Array
 import Benchmark exposing (..)
 import Benchmark.Runner exposing (BenchmarkProgram, program)
+import Bits
 import InternalAnim.Bezier as Bezier
-import InternalAnim.Bits as Bits
 import InternalAnim.Css.Props
 import InternalAnim.Interpolate as Interpolate
 import InternalAnim.Spring as Spring

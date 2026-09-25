@@ -2,8 +2,8 @@ module InternalAnim.Time exposing
     ( thisBeforeOrEqualThat, thisAfterOrEqualThat, equal
     , Absolute, AbsoluteTime(..), Duration, absolute, duration, progress
     , inMilliseconds
-    , latest, toPosix, durationToString
-    , advanceBy, expand, isZeroDuration, maxDuration, millis, positiveDuration, progressWithin, rollbackBy, scaleDuration, thisAfterThat, thisBeforeThat, zeroDuration
+    , latest, toPosix
+    , advanceBy, expand, isZeroDuration, millis, progressWithin, rollbackBy, scaleDuration, thisAfterThat, thisBeforeThat, zeroDuration
     )
 
 {-|
@@ -14,7 +14,7 @@ module InternalAnim.Time exposing
 
 @docs inMilliseconds
 
-@docs latest, toPosix, durationToString
+@docs latest, toPosix
 
 -}
 
@@ -35,28 +35,9 @@ type alias Duration =
     Duration.Duration
 
 
-durationToString : Duration -> String
-durationToString dur =
-    dur
-        |> Duration.inMilliseconds
-        |> round
-        |> String.fromInt
-        |> (\s -> s ++ "ms")
-
-
-maxDuration : Duration -> Duration -> Duration
-maxDuration (Quantity.Quantity one) (Quantity.Quantity two) =
-    Quantity.Quantity (max one two)
-
-
 millis : Float -> Absolute
 millis ms =
     Quantity.Quantity ms
-
-
-positiveDuration : Duration -> Duration
-positiveDuration (Quantity.Quantity d) =
-    Quantity.Quantity (max 0 d)
 
 
 toPosix : Absolute -> Time.Posix

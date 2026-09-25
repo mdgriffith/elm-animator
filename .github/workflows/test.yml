@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   elm:
-    name: Elm tests and examples
+    name: Elm review, tests, and examples
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,8 +22,9 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.elm
-          key: ${{ runner.os }}-elm-0.19.1-${{ hashFiles('elm.json', 'examples/elm.json') }}
+          key: ${{ runner.os }}-elm-0.19.1-${{ hashFiles('elm.json', 'examples/elm.json', 'review/elm.json') }}
       - run: pnpm install --frozen-lockfile
+      - run: pnpm run review
       - run: pnpm test --seed 67890 --fuzz 10000
       - name: Compile examples
         working-directory: examples

@@ -10,7 +10,7 @@ module InternalAnim.Timeline exposing
     , foldpAll
     , gc, atTime, dwellingTime, getCurrentTime
     , Transition
-    , getUpdatedAt, maxDelay, transitionProgress
+    , maxDelay
     )
 
 {-|
@@ -172,11 +172,6 @@ atTime now (Timeline timeline) =
     Timeline { timeline | now = Time.absolute now }
 
 
-getUpdatedAt : Timeline event -> Time.Absolute
-getUpdatedAt (Timeline details) =
-    details.updatedAt
-
-
 getCurrentTime : Timeline event -> Time.Absolute
 getCurrentTime (Timeline timeline) =
     Time.rollbackBy timeline.delay timeline.now
@@ -251,13 +246,10 @@ type alias Retained event =
 collectHistory : TimelineDetails event -> TimelineDetails event
 collectHistory details =
     let
-        oldestSample =
-            Time.rollbackBy maxDelay details.now
-
         retained =
             case details.events of
                 Timetable lines ->
-                    findAnchor oldestSample
+                    findAnchor (Time.rollbackBy maxDelay details.now)
                         (Time.millis 0)
                         Nothing
                         []
@@ -646,7 +638,7 @@ interruptionHappensLater startInterruption remaining =
 interruptLine : Time.Absolute -> Schedule event -> Line event -> List (Line event) -> Maybe (List (Line event))
 interruptLine now scheduled line future =
     case line of
-        Line start startEvent trailing ->
+        Line start _ _ ->
             let
                 startInterruption =
                     Time.advanceBy (scheduleDelay scheduled) now
@@ -961,39 +953,40 @@ status timeline =
         identity
         (\_ -> Dwelling Time.zeroDuration)
         (\_ target now start end _ found ->
-            let
-                startTimeTarget =
-                    startTime target
-
-                sampledAt =
-                    if Time.thisBeforeThat end now then
-                        end
-
-                    else
-                        now
-            in
             if Time.thisBeforeThat now start then
                 found
 
-            else if Time.thisAfterOrEqualThat sampledAt startTimeTarget then
-                Dwelling (Time.duration now startTimeTarget)
-
             else
-                case found of
-                    Transitioning trans ->
-                        Transitioning
-                            { progress =
-                                Time.progress start startTimeTarget sampledAt
-                            , transitionProgress =
-                                trans.progress :: trans.transitionProgress
-                            }
+                let
+                    startTimeTarget =
+                        startTime target
 
-                    Dwelling _ ->
-                        Transitioning
-                            { progress =
-                                Time.progress start startTimeTarget sampledAt
-                            , transitionProgress = []
-                            }
+                    sampledAt =
+                        if Time.thisBeforeThat end now then
+                            end
+
+                        else
+                            now
+                in
+                if Time.thisAfterOrEqualThat sampledAt startTimeTarget then
+                    Dwelling (Time.duration now startTimeTarget)
+
+                else
+                    case found of
+                        Transitioning trans ->
+                            Transitioning
+                                { progress =
+                                    Time.progress start startTimeTarget sampledAt
+                                , transitionProgress =
+                                    trans.progress :: trans.transitionProgress
+                                }
+
+                        Dwelling _ ->
+                            Transitioning
+                                { progress =
+                                    Time.progress start startTimeTarget sampledAt
+                                , transitionProgress = []
+                                }
         )
         timeline
 
