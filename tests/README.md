@@ -9,24 +9,27 @@ and garbage collection; no expected failures or skipped regressions are needed.
 From the repository root:
 
 ```sh
-# Install the pinned tools using the existing pnpm lockfile.
-npx --yes pnpm@8.15.9 install --frozen-lockfile
+# Install the pinned tools using Bun 1.2.3 and the committed lockfile.
+bun install --frozen-lockfile
 
 # Static review of the package source and README.
-npm run review
+bun run review
 
 # Elm unit, regression, and property tests.
-npm test -- --seed 12345 --fuzz 1000
+bun run test --seed 12345 --fuzz 1000
 
 # One-time browser installation, then the browser contract tests.
-npx playwright install chromium firefox webkit
-npm run test:browser
+bunx --no-install playwright install chromium firefox webkit
+bun run test:browser
 
 # Both suites in one command (after installing browsers).
-npm run test:all
+bun run test:all
 ```
 
-On Linux, Playwright may require `npx playwright install --with-deps chromium firefox webkit`.
+Use `bun run test` to invoke elm-test; `bun test` invokes Bun's own test runner.
+Node.js 22 is used in CI for the Elm and Playwright command-line tools.
+
+On Linux, Playwright may require `bunx --no-install playwright install --with-deps chromium firefox webkit`.
 The browser command compiles an optimized Elm fixture against this checkout's
 `src/`, not the published package. Generated files live in ignored `elm-stuff/`
 and `test-results/` directories. No development server is needed.
@@ -34,12 +37,12 @@ and `test-results/` directories. No development server is needed.
 To focus on one area:
 
 ```sh
-npm test -- tests/Rendering.elm --seed 12345
-npm test -- tests/Values.elm tests/TimelineLaws.elm --seed 12345 --fuzz 1000
-npm test -- tests/Scheduling.elm --seed 12345 --fuzz 1000
-npm test -- tests/TimelineRetention.elm --seed 67890 --fuzz 10000
-npm run test:browser -- --grep "queued transition"
-npm run test:browser -- --project=webkit
+bun run test tests/Rendering.elm --seed 12345
+bun run test tests/Values.elm tests/TimelineLaws.elm --seed 12345 --fuzz 1000
+bun run test tests/Scheduling.elm --seed 12345 --fuzz 1000
+bun run test tests/TimelineRetention.elm --seed 67890 --fuzz 10000
+bun run test:browser --grep "queued transition"
+bun run test:browser --project=webkit
 ```
 
 Elm prints the seed and shrunk input for a failing fuzz test. Keep useful shrunk
@@ -53,8 +56,8 @@ resting-animation continuity changes:
 
 | Command | Passed | Failed |
 | --- | ---: | ---: |
-| `npm test -- --seed 67890 --fuzz 10000` | 264 | 0 |
-| `npm run test:browser` | 90 | 0 |
+| `bun run test --seed 67890 --fuzz 10000` | 264 | 0 |
+| `bun run test:browser` | 90 | 0 |
 
 Browser results cover 30 scenarios in each of Chromium, Firefox, and WebKit.
 GC invariance is exercised by fuzz tests and saved minimal examples, including
@@ -67,7 +70,7 @@ All test modules and the browser fixture compile.
 `elm-review`, the Elm suite with 10,000 fuzz iterations, and compiles all examples. Separate browser
 jobs install and test Chromium, Firefox, and WebKit. Failed browser jobs upload
 Playwright traces and screenshots. Tool versions are pinned by `package.json`
-and `pnpm-lock.yaml`.
+and `bun.lock`. CI installs with `bun install --frozen-lockfile`.
 
 ## Coverage
 
