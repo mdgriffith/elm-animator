@@ -285,7 +285,7 @@ arrivedAtWith =
 
 {-| Get the previous `state` on this timeline.
 
-As you'll see in the [Loading example](https://github.com/mdgriffith/elm-animator/blob/v2/examples/src/Loading.elm), it means we can use `previous` to refer to data that we've already "deleted" or set to `Nothing`.
+As you'll see in the [Loading example](https://github.com/mdgriffith/elm-animator/blob/master/examples/src/Loading.elm), it means we can use `previous` to refer to data that we've already "deleted" or set to `Nothing`.
 
 How cool!
 

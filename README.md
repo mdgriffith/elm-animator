@@ -25,6 +25,8 @@ Join the `#animations` channel on the [Elm Slack](https://elmlang.herokuapp.com/
         [ Html.text "👍" ]
 ```
 
+Upgrading from 1.x? See the [2.0.0 release notes and upgrade guide](https://github.com/mdgriffith/elm-animator/blob/master/changelog.md#200).
+
 # The Goal of a Continuous UI
 
 Animation can either be a nuanced, playful helper in your UI, or it can be a nuisance.
@@ -43,7 +45,7 @@ We can use animation to make that experience continuous so our users can build a
 
 [Sarah Drasner has an excellent talk showing what a continuous UI interaction can look like](https://youtu.be/QlmaI7x7SYo?t=167).
 
-The [V2 examples](https://github.com/mdgriffith/elm-animator/tree/v2/examples/src) demonstrate timeline-driven movement, springs, and loading states.
+The [V2 examples](https://github.com/mdgriffith/elm-animator/tree/master/examples/src) demonstrate timeline-driven movement, springs, and loading states.
 
 ## Calm Enrichment
 
@@ -57,5 +59,5 @@ They used [`elm-playground`](https://package.elm-lang.org/packages/evancz/elm-pl
 
 ## Development
 
-See [Testing V2](https://github.com/mdgriffith/elm-animator/blob/v2/tests/README.md) for the review, Elm, and browser test commands and
+See [Testing V2](https://github.com/mdgriffith/elm-animator/blob/master/tests/README.md) for the review, Elm, and browser test commands and
 regression coverage.
