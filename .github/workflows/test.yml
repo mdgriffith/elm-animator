@@ -1,0 +1,58 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  elm:
+    name: Elm tests and examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: ~/.elm
+          key: ${{ runner.os }}-elm-0.19.1-${{ hashFiles('elm.json', 'examples/elm.json') }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test --seed 67890 --fuzz 10000
+      - name: Compile examples
+        working-directory: examples
+        run: ../node_modules/.bin/elm make src/*.elm --output=/dev/null
+
+  browser:
+    name: Browser (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: ~/.elm
+          key: ${{ runner.os }}-elm-0.19.1-browser-${{ hashFiles('elm.json', 'browser-tests/elm.json') }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps "${{ matrix.browser }}"
+      - run: pnpm run test:browser --project="${{ matrix.browser }}"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-results-${{ matrix.browser }}
+          path: test-results/
+          if-no-files-found: ignore

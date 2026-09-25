@@ -83,6 +83,19 @@ for (const renderer of ['onTimeline', 'onTimelineWith']) {
 }
 
 test.describe('standalone keyframes', () => {
+  test('directly nested repeats use a single browser iteration count', async ({ page }) => {
+    await mount(page, 'onTimeline', 'nested-repeat');
+    expect(await sampleOpacity(page, 500)).toBeCloseTo(0.5, 2);
+    expect(await sampleOpacity(page, 5500)).toBeCloseTo(0.5, 2);
+    expect(await sampleOpacity(page, 6500)).toBeCloseTo(1, 2);
+    const timing = await page.locator('#subject').evaluate(element =>
+      element.getAnimations().map(animation => ({
+        duration: animation.effect.getTiming().duration,
+        iterations: animation.effect.getTiming().iterations,
+      })));
+    expect(timing).toEqual([{ duration: 1000, iterations: 6 }]);
+  });
+
   test('a finite loop repeats twice and holds its final value', async ({ page }) => {
     await mount(page, 'onTimeline', 'finite-loop');
     expect.soft(await sampleOpacity(page, 500), 'first iteration').toBeCloseTo(0.5, 2);
@@ -141,10 +154,18 @@ test.describe('unified pipeline behavior', () => {
 
   test('collecting completed timeline events preserves the active CSS position', async ({ page }) => {
     await mount(page, 'onTimeline', 'gc');
-    expect(await sampleOpacity(page, 3250)).toBeCloseTo(0.75, 2);
+    expect(await sampleOpacity(page, 8250)).toBeCloseTo(0.86875, 3);
     await trigger(page);
-    expect(await sampleOpacity(page, 0)).toBeCloseTo(0.75, 2);
-    expect(await sampleOpacity(page, 750)).toBeCloseTo(0.875, 2);
+    expect(await sampleOpacity(page, 0)).toBeCloseTo(0.86875, 3);
+    expect(await sampleOpacity(page, 750)).toBeCloseTo(0.8875, 3);
+  });
+
+  test('the maximum view delay preserves CSS phase through collection', async ({ page }) => {
+    await mount(page, 'onTimeline', 'gc-delayed');
+    expect(await sampleOpacity(page, 8250)).toBeCloseTo(0.75, 3);
+    await trigger(page);
+    expect(await sampleOpacity(page, 0)).toBeCloseTo(0.75, 3);
+    expect(await sampleOpacity(page, 750)).toBeCloseTo(0.7625, 3);
   });
 
   test('explicit transitions use actual browser CSSTransitions', async ({ page }) => {
@@ -157,20 +178,53 @@ test.describe('unified pipeline behavior', () => {
     expect(native).toBe(true);
   });
 
-  test('spring transitions fall back to keyframes and settle', async ({ page }) => {
+  test('spring transitions use native linear() easing, overshoot, and settle', async ({ page }) => {
     await mount(page, 'onTimeline', 'spring');
     await trigger(page);
     await sampleOpacity(page, 250);
     const overshoot = await page.locator('#subject').evaluate(element => ({
       x: parseFloat(getComputedStyle(element).translate),
-      keyframes: element.getAnimations().every(animation => animation instanceof CSSAnimation),
+      native: element.getAnimations().every(animation => animation instanceof CSSTransition),
+      easing: getComputedStyle(element).transitionTimingFunction,
     }));
-    expect(overshoot.keyframes).toBe(true);
+    expect(overshoot.native).toBe(true);
+    expect(overshoot.easing).toMatch(/^linear\(/);
     expect(overshoot.x).toBeGreaterThan(100);
     expect(overshoot.x).toBeLessThan(150);
     await sampleOpacity(page, 1000);
     const final = await page.locator('#subject').evaluate(element => parseFloat(getComputedStyle(element).translate));
     expect(final).toBeCloseTo(100, 2);
+  });
+
+  test('native springs animate back to zero from the current browser value', async ({ page }) => {
+    await mount(page, 'onTimeline', 'spring');
+    await trigger(page);
+    await sampleOpacity(page, 1000);
+    await page.locator('#return').click();
+    await expect(page.locator('#updates')).toHaveText('2');
+    await sampleOpacity(page, 0);
+    const x = () => page.locator('#subject').evaluate(element => parseFloat(getComputedStyle(element).translate));
+    expect(await x()).toBeCloseTo(100, 2);
+    await sampleOpacity(page, 250);
+    expect(await x()).toBeLessThan(0);
+    expect(await x()).toBeGreaterThan(-50);
+    await sampleOpacity(page, 1000);
+    expect(await x()).toBeCloseTo(0, 2);
+  });
+
+  test('retargeting a native spring starts at its current rendered position', async ({ page }) => {
+    await mount(page, 'onTimeline', 'spring');
+    await trigger(page);
+    await sampleOpacity(page, 100);
+    const x = () => page.locator('#subject').evaluate(element => parseFloat(getComputedStyle(element).translate));
+    const before = await x();
+    expect(before).toBeGreaterThan(0);
+    await page.locator('#retarget').click();
+    await expect(page.locator('#updates')).toHaveText('2');
+    await sampleOpacity(page, 0);
+    expect(await x()).toBeCloseTo(before, 2);
+    await sampleOpacity(page, 1000);
+    expect(await x()).toBeCloseTo(150, 2);
   });
 
   test('compound transforms preserve independent channel curves', async ({ page }) => {

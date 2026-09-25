@@ -1,5 +1,6 @@
 module InternalAnim.Render.Css exposing
     ( animation
+    , easing
     , frame
     , keyframes
     , prop
@@ -9,6 +10,51 @@ module InternalAnim.Render.Css exposing
 import Bezier
 import InternalAnim.Duration as Duration
 import InternalAnim.Time as Time
+import InternalAnim.Transition as Transition
+import InternalAnim.Units as Units
+
+
+{-| Native easing is independent of the element's current position. CSS applies
+this normalized curve to its actual start and destination, including retargets.
+-}
+easing : Time.Duration -> Transition.Transition -> String
+easing duration curve =
+    case curve of
+        Transition.Transition spline ->
+            Bezier.toCss spline
+
+        Transition.Wobble _ ->
+            let
+                milliseconds =
+                    Duration.inMilliseconds duration
+
+                count =
+                    clamp 2 240 (ceiling (milliseconds / (1000 / 60)))
+
+                sample index =
+                    if index == 0 then
+                        "0"
+
+                    else if index == count then
+                        "1"
+
+                    else
+                        Transition.atX (toFloat index / toFloat count)
+                            (Time.millis 0)
+                            (Time.millis milliseconds)
+                            curve
+                            { position = Units.pixels 0, velocity = Units.pixelsPerSecond 0 }
+                            1
+                            |> .position
+                            |> Units.inPixels
+                            |> (\value -> toFloat (round (value * 1000000)) / 1000000)
+                            |> String.fromFloat
+            in
+            if milliseconds <= 0 then
+                "linear"
+
+            else
+                "linear(" ++ String.join "," (List.map sample (List.range 0 count)) ++ ")"
 
 
 timingFunction : Bezier.Spline -> String

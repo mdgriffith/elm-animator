@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased — V2
+
+- Consolidated CSS rendering and expanded Elm/browser regression coverage.
+- Native spring transitions now use CSS `linear(...)` easing through the existing
+  per-attribute API, including transitions back to default values and retargeting.
+- Timeline collection preserves the supported five-second delay window and the
+  previous reached state.
+- Sequence wrappers and directly nested repeats retain compact CSS iteration
+  counts instead of expanding every repetition into keyframes.
+- Added CI for Elm tests/examples and Chromium, Firefox, and WebKit browser tests.
+
 
 
 ## 1.1.0

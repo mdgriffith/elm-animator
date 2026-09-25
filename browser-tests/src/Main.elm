@@ -29,6 +29,7 @@ type alias Model =
 type Msg
     = UnrelatedUpdate
     | Trigger
+    | SetTarget Float
 
 
 main : Program Flags Model Msg
@@ -84,15 +85,10 @@ init flags =
                     |> Timeline.update (Time.millisToPosix 10000)
 
             "gc" ->
-                Timeline.init [ Animator.opacity 0 ]
-                    |> Timeline.queue
-                        [ Timeline.transitionTo (Animator.ms 1000) (opacity 0.25)
-                        , Timeline.transitionTo (Animator.ms 1000) (opacity 0.5)
-                        , Timeline.transitionTo (Animator.ms 1000) (opacity 0.75)
-                        , Timeline.wait (Animator.ms 500)
-                        , Timeline.transitionTo (Animator.ms 1000) (opacity 1)
-                        ]
-                    |> Timeline.update (Time.millisToPosix 10000)
+                gcTimeline
+
+            "gc-delayed" ->
+                gcTimeline
 
             "color" ->
                 Timeline.init [ Animator.color "background-color" (Color.rgb255 255 0 0) ]
@@ -107,9 +103,25 @@ init flags =
     }
 
 
+gcTimeline : Timeline.Timeline (List Animator.Attribute)
+gcTimeline =
+    Timeline.init [ Animator.opacity 0 ]
+        |> Timeline.queue
+            [ Timeline.transitionTo (Animator.ms 1000) (opacity 0.25)
+            , Timeline.transitionTo (Animator.ms 1000) (opacity 0.5)
+            , Timeline.transitionTo (Animator.ms 1000) (opacity 0.75)
+            , Timeline.wait (Animator.ms 500)
+            , Timeline.transitionTo (Animator.ms 10000) (opacity 1)
+            ]
+        |> Timeline.update (Time.millisToPosix 10000)
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        SetTarget target ->
+            ( { model | target = target, updates = model.updates + 1 }, Cmd.none )
+
         UnrelatedUpdate ->
             ( { model | updates = model.updates + 1 }, Cmd.none )
 
@@ -126,8 +138,8 @@ update msg model =
                 | updates = model.updates + 1
                 , target = 1
                 , timeline =
-                    if model.scenario == "gc" then
-                        model.timeline |> Timeline.update (Time.millisToPosix 13250)
+                    if model.scenario == "gc" || model.scenario == "gc-delayed" then
+                        model.timeline |> Timeline.update (Time.millisToPosix 18250)
 
                     else if model.scenario == "spring-interruption" then
                         model.timeline
@@ -163,6 +175,8 @@ view model =
             [ Html.text "Animated" ]
         , Html.button [ Attr.id "update", Events.onClick UnrelatedUpdate ] [ Html.text "Unrelated update" ]
         , Html.button [ Attr.id "trigger", Events.onClick Trigger ] [ Html.text "Change target" ]
+        , Html.button [ Attr.id "return", Events.onClick (SetTarget 0) ] [ Html.text "Return to zero" ]
+        , Html.button [ Attr.id "retarget", Events.onClick (SetTarget 1.5) ] [ Html.text "Retarget" ]
         , Html.div [ Attr.id "updates" ] [ Html.text (String.fromInt model.updates) ]
         ]
 
@@ -170,6 +184,13 @@ view model =
 animation : Model -> Animator.Animation
 animation model =
     let
+        timeline =
+            if model.scenario == "gc-delayed" then
+                Timeline.delay (Animator.ms 5000) model.timeline
+
+            else
+                model.timeline
+
         steps =
             [ Animator.set (opacity 0)
             , Animator.step (Animator.ms 1000) (opacity 1)
@@ -181,6 +202,9 @@ animation model =
 
         "infinite-loop" ->
             Animator.keyframes [ Animator.loop steps ]
+
+        "nested-repeat" ->
+            Animator.keyframes [ Animator.loopFor 2 [ Animator.sequence [ Animator.loopFor 3 steps ] ] ]
 
         "nested" ->
             Animator.keyframes
@@ -224,7 +248,7 @@ animation model =
 
         _ ->
             if model.renderer == "onTimeline" then
-                Animator.onTimeline model.timeline identity
+                Animator.onTimeline timeline identity
 
             else
-                Animator.onTimelineWith model.timeline (\attrs -> ( attrs, [] ))
+                Animator.onTimelineWith timeline (\attrs -> ( attrs, [] ))

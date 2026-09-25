@@ -10,7 +10,7 @@ module InternalAnim.Timeline exposing
     , foldpAll
     , gc, atTime, dwellingTime, getCurrentTime
     , Transition
-    , getUpdatedAt, transitionProgress
+    , getUpdatedAt, maxDelay, transitionProgress
     )
 
 {-|
@@ -72,7 +72,8 @@ type Timeline event
 
 
 type alias TimelineDetails event =
-    { initial : event
+    { -- The state preceding retained history, advanced when history is collected.
+      initial : event
 
     -- The current wall time
     , now : Time.Absolute
@@ -210,118 +211,121 @@ clean runGC details =
                 Timetable lines ->
                     linesAreActive details.now lines
 
-        events =
+        retained =
             if runGC then
-                case details.events of
-                    Timetable lines ->
-                        Timetable (garbageCollectOldEvents details.now [] lines)
+                collectHistory details
 
             else
-                details.events
+                details
     in
-    { details
-        | running =
-            running
-        , events = events
-        , updatedAt =
-            if events == details.events then
-                details.updatedAt
-
-            else
-                -- The renderer can no longer reconstruct the discarded past.
-                -- Rebase once at collection time and use negative CSS delays
-                -- for movement already in progress, instead of restarting it.
-                details.now
-    }
+    { retained | running = running }
 
 
 gc : Timeline event -> Timeline event
 gc (Timeline details) =
-    let
-        events =
-            case details.events of
-                Timetable evs ->
-                    evs
-    in
-    Timeline { details | events = Timetable (garbageCollectOldEvents details.now [] events) }
+    Timeline (collectHistory details)
 
 
-{-| If we're dwelling at an event, we can reset the event we're dwelling on to the base of the timeline.
-
-All previous lines can be dropped.
-
-However, if we're not dwelling, we want to keep the previous lines.
-
-So we track "droppable" lines until we meet a dwell.
-
+{-| View functions may request any delay up to this duration after `update` has
+already run. Collection must preserve the entire supported lookback window.
 -}
-garbageCollectOldEvents : Time.Absolute -> List (Line event) -> List (Line event) -> List (Line event)
-garbageCollectOldEvents now droppable lines =
-    case lines of
+maxDelay : Time.Duration
+maxDelay =
+    Duration.seconds 5
+
+
+type alias Retained event =
+    { initial : event, events : Timetable event }
+
+
+collectHistory : TimelineDetails event -> TimelineDetails event
+collectHistory details =
+    let
+        oldestSample =
+            Time.rollbackBy maxDelay details.now
+
+        retained =
+            case details.events of
+                Timetable lines ->
+                    findAnchor oldestSample
+                        (Time.millis 0)
+                        Nothing
+                        []
+                        lines
+                        details.initial
+                        { initial = details.initial, events = details.events }
+    in
+    if retained.events == details.events && retained.initial == details.initial then
+        details
+
+    else
+        { details
+            | initial = retained.initial
+            , events = retained.events
+
+            -- Regenerate CSS relative to now, preserving phase with delays.
+            , updatedAt = details.now
+        }
+
+
+{-| Only a reached state can anchor retained history: an unfinished interruption
+chain still needs its earlier motions. Keep the actual arrival/dwell times for
+resting sequences and the preceding reached state for `previous`.
+-}
+findAnchor :
+    Time.Absolute
+    -> Time.Absolute
+    -> Maybe Time.Absolute
+    -> List (Occurring event)
+    -> List (Line event)
+    -> event
+    -> Retained event
+    -> Retained event
+findAnchor oldest start cutoff queue future lastArrived retained =
+    case queue of
         [] ->
-            List.reverse droppable
+            case future of
+                [] ->
+                    retained
 
-        ((Line startAt startingEvent events) as topLine) :: remaining ->
-            if Time.thisAfterThat startAt now then
-                -- this line hasn't happened yet
-                List.reverse droppable ++ lines
+                (Line lineStart first rest) :: following ->
+                    findAnchor oldest
+                        lineStart
+                        (List.head following |> Maybe.map lineStartTime)
+                        (first :: rest)
+                        following
+                        lastArrived
+                        retained
 
-            else if dwellingAt now startingEvent then
-                -- we can safetly drop the droppables
-                lines
+        event :: rest ->
+            if Maybe.map (Time.thisAfterThat start) cutoff |> Maybe.withDefault False then
+                findAnchor oldest start cutoff [] future lastArrived retained
+
+            else if Time.thisAfterThat start oldest then
+                retained
 
             else
                 let
-                    maybeInterruptionTime =
-                        remaining
-                            |> List.head
-                            |> Maybe.map lineStartTime
+                    arrival =
+                        startTime event
 
-                    interrupted =
-                        case maybeInterruptionTime of
-                            Nothing ->
-                                False
-
-                            Just interruptionTime ->
-                                Time.thisAfterThat now interruptionTime
+                    reached =
+                        Time.thisBeforeOrEqualThat arrival oldest
+                            && (Maybe.map (Time.thisBeforeOrEqualThat arrival) cutoff |> Maybe.withDefault True)
                 in
-                if interrupted then
-                    garbageCollectOldEvents now (topLine :: droppable) remaining
+                if reached then
+                    findAnchor oldest
+                        (endTime event)
+                        cutoff
+                        rest
+                        future
+                        (getEvent event)
+                        { initial = lastArrived
+                        , events = Timetable (Line arrival event rest :: future)
+                        }
 
                 else
-                    case hewLine startAt now Nothing (startingEvent :: events) of
-                        NothingCaptured ->
-                            List.reverse droppable ++ lines
-
-                        Captured capturedLine ->
-                            capturedLine :: remaining
-
-
-type HewStatus event
-    = Captured (Line event)
-    | NothingCaptured
-
-
-hewLine : Time.Absolute -> Time.Absolute -> Maybe (Occurring event) -> List (Occurring event) -> HewStatus event
-hewLine lineOriginalStartingTime now maybePrevious events =
-    case events of
-        [] ->
-            NothingCaptured
-
-        top :: remaining ->
-            if dwellingAt now top then
-                case maybePrevious of
-                    Nothing ->
-                        NothingCaptured
-
-                    Just prev ->
-                        Captured (Line lineOriginalStartingTime prev (top :: remaining))
-
-            else if Time.thisAfterThat now (endTime top) then
-                hewLine lineOriginalStartingTime now (Just top) remaining
-
-            else
-                NothingCaptured
+                    findAnchor oldest (endTime event) cutoff rest future lastArrived retained
 
 
 lineStartTime : Line event -> Time.Absolute
@@ -355,19 +359,6 @@ beforeEventEnd time events =
 
             else
                 beforeEventEnd time remain
-
-
-dwellingAt : Time.Absolute -> Occurring event -> Bool
-dwellingAt now event =
-    let
-        eventEndTime =
-            endTime event
-
-        eventStartTime =
-            startTime event
-    in
-    Time.thisAfterOrEqualThat now eventStartTime
-        && Time.thisBeforeOrEqualThat now eventEndTime
 
 
 linesAreActive : Time.Absolute -> List (Line event) -> Bool

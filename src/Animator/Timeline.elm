@@ -150,7 +150,7 @@ delay dur (Timeline.Timeline details) =
         { details
             | delay =
                 Duration.milliseconds
-                    (min 5000
+                    (min (Duration.inMilliseconds Timeline.maxDelay)
                         (Duration.inMilliseconds details.delay + max 0 (Duration.inMilliseconds dur))
                     )
         }

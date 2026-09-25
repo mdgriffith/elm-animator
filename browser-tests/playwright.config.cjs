@@ -7,5 +7,13 @@ module.exports = defineConfig({
   workers: 2,
   retries: 0,
   reporter: 'list',
-  use: { browserName: 'chromium', headless: true },
+  use: {
+    headless: true,
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
+  },
+  projects: ['chromium', 'firefox', 'webkit'].map(browserName => ({
+    name: browserName,
+    use: { browserName },
+  })),
 });

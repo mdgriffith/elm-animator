@@ -27,33 +27,64 @@ suite =
                         , \css -> Expect.equal (Just (Color.toCssString Color.red)) (Css.property "color" css)
                         , \css -> Expect.equal True (List.all (\name -> String.contains (name ++ " 300ms") css.transition) [ "translate", "scale", "color", "opacity" ])
                         ]
-        , test "An explicit spring transition falls back to bounded keyframes" <|
+        , test "An explicit spring uses normalized native linear() easing" <|
             \_ ->
                 Anim.transition (Anim.ms 1000)
                     [ Anim.float "left" 100 |> Anim.withTransition (Transition.spring { wobble = 1, quickness = 0 }) ]
                     |> Anim.toCss
                     |> Expect.all
-                        [ \css -> Expect.equal "" css.transition
-                        , \css -> Expect.notEqual Nothing (Css.property "animation" css)
+                        [ \css -> Expect.equal "" css.keyframes
+                        , \css -> Expect.equal Nothing (Css.property "animation" css)
+                        , \css -> Expect.equal (Just "100") (Css.property "left" css)
                         , \css ->
-                            case Css.keyframes css.keyframes of
-                                Ok [ block ] ->
+                            case String.split "linear(" css.transition of
+                                [ _, following ] ->
                                     let
                                         values =
-                                            List.filterMap (.declarations >> Dict.get "left" >> Maybe.andThen String.toFloat) block.frames
+                                            following
+                                                |> String.split ")"
+                                                |> List.head
+                                                |> Maybe.withDefault ""
+                                                |> String.split ","
+                                                |> List.filterMap String.toFloat
                                     in
                                     Expect.all
-                                        [ \_ -> Expect.equal (List.length block.frames) (List.length values)
+                                        [ \_ -> Expect.greaterThan 2 (List.length values)
+                                        , \_ -> Expect.atMost 241 (List.length values)
                                         , \_ -> Expect.equal (Just 0) (List.head values)
-                                        , \_ -> Expect.equal (Just 100) (List.reverse values |> List.head)
-                                        , \_ -> Expect.greaterThan 100 (List.maximum values |> Maybe.withDefault 0)
-                                        , \_ -> Expect.atLeast -100 (List.minimum values |> Maybe.withDefault 0)
-                                        , \_ -> Expect.atMost 200 (List.maximum values |> Maybe.withDefault 0)
+                                        , \_ -> Expect.equal (Just 1) (List.reverse values |> List.head)
+                                        , \_ -> Expect.greaterThan 1 (List.maximum values |> Maybe.withDefault 0)
+                                        , \_ -> Expect.atLeast -1 (List.minimum values |> Maybe.withDefault 0)
+                                        , \_ -> Expect.atMost 2 (List.maximum values |> Maybe.withDefault 0)
                                         ]
                                         ()
 
                                 _ ->
-                                    Expect.fail "Expected one spring animation"
+                                    Expect.fail "Expected a native linear() timing function"
+                        ]
+        , test "Spring transitions back to defaults still emit native transition rules" <|
+            \_ ->
+                Anim.transition (Anim.ms 1000)
+                    (List.map (Anim.withTransition (Transition.spring { wobble = 1, quickness = 0 }))
+                        [ Anim.x 0, Anim.y 0, Anim.scale 1, Anim.opacity 1 ]
+                    )
+                    |> Anim.toCss
+                    |> Expect.all
+                        [ \css -> Expect.equal "" css.keyframes
+                        , \css -> Expect.equal Nothing (Css.property "animation" css)
+                        , \css -> Expect.equal True (List.all (\name -> String.contains (name ++ " 1000ms linear(") css.transition) [ "translate", "scale", "opacity" ])
+                        ]
+        , test "Separate properties retain their own native easing curves" <|
+            \_ ->
+                Anim.transition (Anim.ms 1000)
+                    [ Anim.x 0 |> Anim.withTransition (Transition.spring { wobble = 1, quickness = 0 })
+                    , Anim.opacity 0 |> Anim.withTransition Transition.linear
+                    ]
+                    |> Anim.toCss
+                    |> Expect.all
+                        [ \css -> Expect.equal "" css.keyframes
+                        , \css -> Expect.equal True (String.contains "translate 1000ms linear(" css.transition)
+                        , \css -> Expect.equal True (String.contains "opacity 1000ms cubic-bezier(" css.transition)
                         ]
         , test "Zero-duration spring transitions immediately set the target" <|
             \_ ->
@@ -78,6 +109,66 @@ suite =
                     |> Anim.toCss
                     |> .props
                     |> Expect.equal []
+        , test "Wrapping a repeat in sequence preserves compact CSS" <|
+            \_ ->
+                let
+                    repeated =
+                        Anim.loopFor 1000
+                            [ Anim.set [ Anim.opacity 0 ]
+                            , Anim.step (Anim.ms 1000) [ Anim.opacity 1 ]
+                            ]
+
+                    direct =
+                        Anim.keyframes [ repeated ] |> Anim.toCss
+
+                    wrapped =
+                        Anim.keyframes [ Anim.sequence [ repeated ] ] |> Anim.toCss
+                in
+                Expect.all
+                    [ \_ -> Expect.lessThan 1024 (String.length wrapped.keyframes)
+                    , \_ -> Expect.equal direct wrapped
+                    ]
+                    ()
+        , test "Directly nested repeat counts stay in CSS rather than expanding frames" <|
+            \_ ->
+                let
+                    css =
+                        Anim.keyframes
+                            [ Anim.loopFor 1000
+                                [ Anim.sequence
+                                    [ Anim.loopFor 1000
+                                        [ Anim.set [ Anim.opacity 0 ]
+                                        , Anim.step (Anim.ms 1000) [ Anim.opacity 1 ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                            |> Anim.toCss
+                in
+                Expect.all
+                    [ \_ -> Expect.lessThan 1024 (String.length css.keyframes)
+                    , \_ -> Expect.equal (Just True) (Css.property "animation" css |> Maybe.map (String.contains " 1000000 normal "))
+                    ]
+                    ()
+        , test "Nested infinite repetition remains one compact infinite animation" <|
+            \_ ->
+                let
+                    css =
+                        Anim.keyframes
+                            [ Anim.loop
+                                [ Anim.loopFor 1000
+                                    [ Anim.set [ Anim.opacity 0 ]
+                                    , Anim.step (Anim.ms 1000) [ Anim.opacity 1 ]
+                                    ]
+                                ]
+                            ]
+                            |> Anim.toCss
+                in
+                Expect.all
+                    [ \_ -> Expect.lessThan 1024 (String.length css.keyframes)
+                    , \_ -> Expect.equal (Just True) (Css.property "animation" css |> Maybe.map (String.contains " infinite normal "))
+                    ]
+                    ()
         , test "Empty infinite loops do not swallow subsequent steps" <|
             \_ ->
                 Anim.keyframes

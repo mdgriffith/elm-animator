@@ -49,6 +49,7 @@ type alias Channel =
     { position : Float
     , velocity : Float
     , transition : Transition.Transition
+    , specified : Bool
     }
 
 
@@ -118,11 +119,14 @@ transition duration props =
 keyframes : List Step -> Css
 keyframes steps =
     let
+        normalized =
+            normalizeSteps steps
+
         initial =
-            defaultsFor (stepProps steps)
+            defaultsFor (stepProps normalized)
 
         scheduled =
-            scheduleSteps forever steps { time = 0, state = initial, clips = [] }
+            scheduleSteps forever normalized { time = 0, state = initial, clips = [] }
     in
     render False 0 initial (List.reverse scheduled.clips)
 
@@ -135,7 +139,7 @@ onTimeline (Timeline.Timeline details) lookup =
                 ( props, steps ) =
                     lookup state
             in
-            { props = props, steps = steps }
+            { props = props, steps = normalizeSteps steps }
 
         events =
             case details.events of
@@ -268,6 +272,51 @@ single start duration stop from to =
     , final = to
     , motions = [ { start = 0, duration = duration, from = from, to = to } ]
     }
+
+
+{-| A run-once sequence is only a grouping, not a new CSS iteration. Flatten it
+before compiling cycles. A repeat whose entire body is another repeat can also
+keep its repetition in CSS instead of materializing one copy of every frame.
+-}
+normalizeSteps : List Step -> List Step
+normalizeSteps steps =
+    List.concatMap
+        (\step ->
+            case step of
+                Step duration props ->
+                    if milliseconds duration == 0 && List.isEmpty props then
+                        []
+
+                    else
+                        [ step ]
+
+                Repeat count children ->
+                    if count == 0 then
+                        []
+
+                    else if count == 1 then
+                        normalizeSteps children
+
+                    else
+                        case normalizeSteps children of
+                            [] ->
+                                []
+
+                            [ Repeat innerCount innerSteps ] ->
+                                [ Repeat
+                                    (if count < 0 || innerCount < 0 then
+                                        -1
+
+                                     else
+                                        count * innerCount
+                                    )
+                                    innerSteps
+                                ]
+
+                            normalized ->
+                                [ Repeat count normalized ]
+        )
+        steps
 
 
 scheduleSteps : Float -> List Step -> Schedule -> Schedule
@@ -569,7 +618,8 @@ renderClip allowTransitions origin clip output =
 
                     native =
                         if allowTransitions && clip.iterations == 1 && List.length clip.motions == 1 then
-                            commonBezier initial target
+                            nativeCurve target
+                                |> Maybe.map (Css.easing (Duration.milliseconds clip.duration))
 
                         else
                             Nothing
@@ -582,7 +632,7 @@ renderClip allowTransitions origin clip output =
                             clip.motions
                 in
                 case native of
-                    Just spline ->
+                    Just easing ->
                         { result
                             | base = Dict.insert name target result.base
                             , transitions =
@@ -590,7 +640,7 @@ renderClip allowTransitions origin clip output =
                                     result.transitions
 
                                 else
-                                    (name ++ " " ++ ms clip.duration ++ " " ++ Bezier.toCss spline ++ " " ++ ms (clip.start - origin)) :: result.transitions
+                                    (name ++ " " ++ ms clip.duration ++ " " ++ easing ++ " " ++ ms (clip.start - origin)) :: result.transitions
                         }
 
                     Nothing ->
@@ -632,6 +682,23 @@ propertyChanges name motion =
 
         _ ->
             False
+
+
+nativeCurve : Property -> Maybe Transition.Transition
+nativeCurve property =
+    -- Native transitions start at the browser's current value, not at our
+    -- defaults. Select curves from explicitly supplied channels, even when
+    -- their targets equal those defaults (e.g. a spring returning to x = 0).
+    case List.filter .specified property.channels |> List.map .transition of
+        first :: rest ->
+            if List.all ((==) first) rest then
+                Just first
+
+            else
+                Nothing
+
+        [] ->
+            Nothing
 
 
 commonBezier : Property -> Property -> Maybe Bezier.Spline
@@ -782,7 +849,7 @@ resolveProp prop state =
         Prop id name movement scalarFormat ->
             let
                 target =
-                    { position = Move.toValue movement, velocity = 0, transition = Move.toTransition movement }
+                    { position = Move.toValue movement, velocity = 0, transition = Move.toTransition movement, specified = True }
             in
             if Props.isTranslateId id || Props.isScaleId id then
                 let
@@ -850,14 +917,14 @@ resolveProp prop state =
                 { name = name
                 , format = Rgba
                 , defaults = [ 0, 0, 0, 0 ]
-                , channels = List.map (\value -> { position = value, velocity = 0, transition = trans }) [ rgba.red, rgba.green, rgba.blue, rgba.alpha ]
+                , channels = List.map (\value -> { position = value, velocity = 0, transition = trans, specified = True }) [ rgba.red, rgba.green, rgba.blue, rgba.alpha ]
                 }
                 state
 
 
 channel : Float -> Channel
 channel value =
-    { position = value, velocity = 0, transition = Transition.standard }
+    { position = value, velocity = 0, transition = Transition.standard, specified = False }
 
 
 values : Property -> List Float

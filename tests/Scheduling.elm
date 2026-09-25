@@ -717,7 +717,7 @@ cleaning =
                             [ occur Two (qty 5000) (qty 5000) ]
                         ]
                     )
-        , test "Reduce multiple timelines down if we're dwelling" <|
+        , test "Collect old lines after the delay window while retaining previous and current" <|
             \_ ->
                 let
                     newTimeline =
@@ -736,17 +736,18 @@ cleaning =
                                 , Animator.Timeline.transitionTo (seconds 1) Five
                                 ]
                             |> Timeline.update (Time.millisToPosix 2000)
-                            |> Timeline.update (Time.millisToPosix 5000)
+                            |> Timeline.update (Time.millisToPosix 11000)
                             |> Timeline.gc
-                            |> manuallyOverrideUpdatedAt (Time.millisToPosix 5000)
                 in
                 Expect.equal
-                    newTimeline
-                    (timelines.events 5000
-                        [ Timeline.Line (qty 2000)
-                            (occur Four (qty 3000) (qty 4000))
-                            [ occur Five (qty 5000) (qty 5000) ]
-                        ]
+                    ( Four, Five, 1 )
+                    ( Animator.Timeline.previous newTimeline
+                    , Animator.Timeline.current newTimeline
+                    , case newTimeline of
+                        Timeline.Timeline details ->
+                            case details.events of
+                                Timeline.Timetable lines ->
+                                    List.length lines
                     )
         ]
 
@@ -1132,7 +1133,9 @@ ordering =
                 in
                 Expect.equal
                     eventCount
-                    9502
+                    -- Five seconds of lookback plus the reached anchor are
+                    -- retained; earlier events can still be discarded.
+                    9506
         ]
 
 
