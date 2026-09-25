@@ -89,6 +89,7 @@ timelines =
                     Timeline.Timetable
                         events
                 , initial = Starting
+                , initialStartedAt = Just (qty 0)
                 , interruption = []
                 , now = qty now
                 , updatedAt = qty now

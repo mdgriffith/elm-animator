@@ -45,14 +45,15 @@ while increasing the fuzz count in this review.
 
 ### Recorded baseline
 
-After the history-retention, native spring, and repeat-compaction changes:
+After the history-retention, native spring, repeat-compaction, and initial
+resting-animation continuity changes:
 
 | Command | Passed | Failed |
 | --- | ---: | ---: |
-| `npm test -- --seed 67890 --fuzz 10000` | 257 | 0 |
-| `npm run test:browser` | 84 | 0 |
+| `npm test -- --seed 67890 --fuzz 10000` | 264 | 0 |
+| `npm run test:browser` | 90 | 0 |
 
-Browser results cover 28 scenarios in each of Chromium, Firefox, and WebKit.
+Browser results cover 30 scenarios in each of Chromium, Firefox, and WebKit.
 GC invariance is exercised by fuzz tests and saved minimal examples, including
 inspectors and movement throughout the supported five-second delay window.
 All test modules and the browser fixture compile.
@@ -71,6 +72,7 @@ and `pnpm-lock.yaml`.
 | --- | --- |
 | `Rendering.elm` | Same initial-value, grouping, property-presence, easing, and animation-identity expectations for `onTimeline`, `onTimelineWith` with no steps, and `css` with no steps |
 | `UnifiedRendering.elm` | Native Bézier/spring transitions, default-value targets, zero-duration steps, compact nested repeats, fractional durations, animation identity, sampled interruption positions, and a 10,000-event rendering stress test |
+| `InitialResting.elm` | Initial loop interruption positions, repeat phase, finite completion, queued waits, stable idle CSS, and first-tick clock anchoring |
 | `SpringIntegration.elm` | Segment time domains independent of target position, initial velocity, consistent explicit intro velocity, and momentum when retargeting to the current position |
 | `Values.elm` | Independent coordinates, color endpoints, zero-duration motion, linear position/velocity, interruption position, and completed motion |
 | `TimelineLaws.elm` | Scheduling flags, completion, latest interruption, waits, progress, scaling, delay, clock-update invariance, and a small independent reference model for queued movement |
@@ -100,6 +102,7 @@ All browser scenarios run in Chromium, Firefox, and WebKit.
 | Timeline delay | Delays add together, negative additions are ignored, and the total is capped at five seconds |
 | Value interpolation | XYZ channels are independent; instantaneous changes reach their targets; completed movement has zero velocity |
 | Interruptions | Numeric and color motion continue from the sampled interruption point, preserving spring momentum |
+| Initial resting steps | The first clock update anchors the initial resting animation; departures sample its current position, including after queued waits |
 | State inspection | Arrival occurs before a dwell; canceled destinations are excluded; arrival notifications are not repeated on the next tick |
 | Garbage collection | Retains the five-second lookback window and the previous reached state; collection preserves delayed inspectors, position, velocity, and CSS phase |
 | Native springs | CSS `linear(...)` starts from the browser's current value, including returning to zero and retargeting an active transition |
@@ -135,6 +138,9 @@ been removed.
 - Ordinary ticks preserve animation identity. If collection actually removes
   history, the rendering origin advances once and negative delays preserve the
   current position of animations already in progress.
+- Initial resting steps have a separate first-update time anchor, so scheduling
+  a departure does not discard their elapsed time or restart their loop phase.
+  Collection advances this anchor to the retained history boundary.
 - Collection anchors at the latest reached state before the five-second
   lookback window, retaining its original arrival/dwell times and the preceding
   reached state. Unfinished interruption chains may require older history; the

@@ -138,6 +138,26 @@ async function trigger(page) {
 }
 
 test.describe('unified pipeline behavior', () => {
+  test('leaving the initial resting loop preserves its current position', async ({ page }) => {
+    await mount(page, 'onTimelineWith', 'initial-resting');
+    expect(await sampleOpacity(page, 500)).toBeCloseTo(0.5, 2);
+    await trigger(page);
+    expect(await sampleOpacity(page, 0)).toBeCloseTo(0.5, 2);
+    expect(await sampleOpacity(page, 500)).toBeCloseTo(0.625, 2);
+    expect(await sampleOpacity(page, 1000)).toBeCloseTo(0.75, 2);
+  });
+
+  test('the initial resting loop continues during a queued wait before departing', async ({ page }) => {
+    await mount(page, 'onTimelineWith', 'initial-resting-queued');
+    expect(await sampleOpacity(page, 500)).toBeCloseTo(0.5, 2);
+    await trigger(page);
+    expect(await sampleOpacity(page, 0)).toBeCloseTo(0.5, 2);
+    expect(await sampleOpacity(page, 125)).toBeCloseTo(0.625, 2);
+    expect(await sampleOpacity(page, 250)).toBeCloseTo(0.75, 2);
+    expect(await sampleOpacity(page, 750)).toBeCloseTo(0.5, 2);
+    expect(await sampleOpacity(page, 1250)).toBeCloseTo(0.25, 2);
+  });
+
   test('an interrupted spring carries incoming momentum even at its target position', async ({ page }) => {
     await mount(page, 'onTimeline', 'spring-interruption');
     const x = () => page.locator('#subject').evaluate(element => parseFloat(getComputedStyle(element).translate));

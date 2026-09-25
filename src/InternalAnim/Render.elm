@@ -164,6 +164,11 @@ onTimeline (Timeline.Timeline details) lookup =
         firstStart =
             List.head events |> Maybe.map .start |> Maybe.withDefault origin
 
+        initialStart =
+            details.initialStartedAt
+                |> Maybe.map Time.inMilliseconds
+                |> Maybe.withDefault (Time.inMilliseconds details.updatedAt)
+
         resting =
             scheduleSteps
                 (if List.isEmpty events then
@@ -173,7 +178,7 @@ onTimeline (Timeline.Timeline details) lookup =
                     firstStart
                 )
                 initialScene.steps
-                { time = firstStart, state = initial, clips = [] }
+                { time = initialStart, state = initial, clips = [] }
 
         scheduled =
             List.foldl

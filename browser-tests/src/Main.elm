@@ -50,6 +50,14 @@ init flags =
     , target = 0
     , timeline =
         case flags.scenario of
+            "initial-resting" ->
+                Timeline.init (opacity 0)
+                    |> Timeline.update (Time.millisToPosix 10037)
+
+            "initial-resting-queued" ->
+                Timeline.init (opacity 0)
+                    |> Timeline.update (Time.millisToPosix 10037)
+
             "initial" ->
                 Timeline.init
                     [ Animator.opacity 0.35
@@ -128,7 +136,10 @@ update msg model =
         Trigger ->
             let
                 now =
-                    if model.scenario == "resting" then
+                    if String.startsWith "initial-resting" model.scenario then
+                        10537
+
+                    else if model.scenario == "resting" then
                         11500
 
                     else
@@ -140,6 +151,15 @@ update msg model =
                 , timeline =
                     if model.scenario == "gc" || model.scenario == "gc-delayed" then
                         model.timeline |> Timeline.update (Time.millisToPosix 18250)
+
+                    else if model.scenario == "initial-resting-queued" then
+                        model.timeline
+                            |> Timeline.update (Time.millisToPosix now)
+                            |> Timeline.queue
+                                [ Timeline.wait (Animator.ms 250)
+                                , Timeline.transitionTo (Animator.ms 1000) (opacity 0.25)
+                                ]
+                            |> Timeline.update (Time.millisToPosix now)
 
                     else if model.scenario == "spring-interruption" then
                         model.timeline
@@ -195,8 +215,26 @@ animation model =
             [ Animator.set (opacity 0)
             , Animator.step (Animator.ms 1000) (opacity 1)
             ]
+
+        initialResting =
+            Animator.onTimelineWith timeline
+                (\attrs ->
+                    ( attrs
+                    , if attrs == opacity 0 then
+                        [ Animator.loop steps ]
+
+                      else
+                        []
+                    )
+                )
     in
     case model.scenario of
+        "initial-resting" ->
+            initialResting
+
+        "initial-resting-queued" ->
+            initialResting
+
         "finite-loop" ->
             Animator.keyframes [ Animator.loopFor 2 steps ]
 

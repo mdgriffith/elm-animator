@@ -114,6 +114,7 @@ init first =
     in
     Timeline.Timeline
         { initial = first
+        , initialStartedAt = Nothing
         , now = epoch
         , updatedAt = epoch
         , delay = Duration.milliseconds 0

@@ -75,6 +75,10 @@ type alias TimelineDetails event =
     { -- The state preceding retained history, advanced when history is collected.
       initial : event
 
+    -- Anchor initial resting steps to the first clock update, independently of
+    -- subsequent scheduling changes. Nothing means we have not received a tick.
+    , initialStartedAt : Maybe Time.Absolute
+
     -- The current wall time
     , now : Time.Absolute
 
@@ -194,7 +198,13 @@ updateWith withGC possiblyNow (Timeline timeline) =
         now =
             Quantity.max (Time.absolute possiblyNow) timeline.now
     in
-    { timeline | now = now }
+    (case timeline.initialStartedAt of
+        Nothing ->
+            { timeline | now = now, initialStartedAt = Just now, updatedAt = now }
+
+        Just _ ->
+            { timeline | now = now }
+    )
         |> applyQueued
         |> applyInterruptions
         |> clean withGC
@@ -261,6 +271,15 @@ collectHistory details =
     else
         { details
             | initial = retained.initial
+            , initialStartedAt =
+                case retained.events of
+                    Timetable ((Line start _ _) :: _) ->
+                        -- The retained anchor is already reached. Its zero-time
+                        -- arrival supplies the resting phase from here onward.
+                        Just start
+
+                    Timetable [] ->
+                        details.initialStartedAt
             , events = retained.events
 
             -- Regenerate CSS relative to now, preserving phase with delays.
