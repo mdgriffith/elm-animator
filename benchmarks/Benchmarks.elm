@@ -6,14 +6,13 @@ import Animator.Css2
 import Array
 import Benchmark exposing (..)
 import Benchmark.Runner exposing (BenchmarkProgram, program)
-import Internal.Bezier as Bezier
-import Internal.Bits as Bits
-import Internal.Css as Css
-import Internal.Css.Props
-import Internal.Interpolate as Interpolate
-import Internal.Spring as Spring
-import Internal.Time as Time
-import Internal.Timeline as Timeline
+import Bits
+import InternalAnim.Bezier as Bezier
+import InternalAnim.Css.Props
+import InternalAnim.Interpolate as Interpolate
+import InternalAnim.Spring as Spring
+import InternalAnim.Time as Time
+import InternalAnim.Timeline as Timeline
 import Pixels
 import Random
 import Time
@@ -89,15 +88,14 @@ suite =
 --                             target
 --                     }
 --                     timeline
-
 --         , benchmark "Visit" <|
 --             \_ ->
 --                 Interpolate.visit identity
 --                     (Timeline.Occurring (Interpolate.Pos Interpolate.standardDefault 20) (Time.millis 100) (Time.millis 900))
 --                     (Time.millis 500)
 --                     Nothing
---                     { position = Pixels.pixels 0
---                     , velocity = Pixels.pixelsPerSecond 0
+--                     { position = Units.pixels 0
+--                     , velocity = Units.pixelsPerSecond 0
 --                     }
 --         ]
 -- springs : Benchmark
@@ -336,7 +334,7 @@ floatComparison =
 --     --     base = toFloat state * 100
 --     -- in
 --     -- -- Interpolate.Pos Interpolate.standardDefault (toFloat (state * 100))
---     -- [ Css.Prop Internal.Css.Props.ids.opacity
+--     -- [ Css.Prop InternalAnim.Css.Props.ids.opacity
 --     --     (wave (Timeline.Repeat 5 (Animator.millis 200)) base (base + 100))
 --     -- ]
 --     case event of

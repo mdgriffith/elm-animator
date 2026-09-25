@@ -3,14 +3,13 @@ module Scheduling exposing (cleaning, interruptions, ordering, queueing, tailRec
 import Animator
 import Animator.Timeline
 import Animator.Value as Value
-import Duration
 import Expect exposing (Expectation, FloatingPointTolerance(..))
 import Fuzz exposing (Fuzzer, float, int, list, string)
 import Fuzz.Timeline
-import Internal.Time as Time
-import Internal.Timeline as Timeline
-import Pixels
-import Quantity
+import InternalAnim.Duration as Duration
+import InternalAnim.Quantity as Quantity
+import InternalAnim.Time as Time
+import InternalAnim.Timeline as Timeline
 import Random
 import Result
 import Test exposing (..)
@@ -72,9 +71,9 @@ valueAtEquals time val tl =
         val
 
 
-seconds : Float -> Animator.Timeline.Duration
+seconds : Float -> Animator.Duration
 seconds s =
-    Animator.Timeline.ms (s * 1000)
+    Animator.ms (s * 1000)
 
 
 timeline =
@@ -90,8 +89,10 @@ timelines =
                     Timeline.Timetable
                         events
                 , initial = Starting
+                , initialStartedAt = Just (qty 0)
                 , interruption = []
                 , now = qty now
+                , updatedAt = qty now
                 , queued = Nothing
                 , running = True
                 , delay = Time.zeroDuration
@@ -122,10 +123,7 @@ queueing =
                     Expect.equal
                         newTimeline
                         (timelines.events 0
-                            [ Timeline.Line (qty 0)
-                                (occur Starting (qty 0) (qty 1000))
-                                []
-                            , Timeline.Line (qty 1000)
+                            [ Timeline.Line (qty 1000)
                                 (occur One (qty 2000) (qty 3000))
                                 [ occur Two (qty 4000) (qty 5000)
                                 , occur Three (qty 6000) (qty 7000)
@@ -155,12 +153,21 @@ queueing =
                                     , Animator.Timeline.wait (seconds 1.0)
                                     , Animator.Timeline.transitionTo (seconds 1) Two
                                     , Animator.Timeline.wait (seconds 1.0)
+
+                                    -- Transition to Three
+                                    --     starts at 5 seconds
+                                    --    and arrives at 6 seconds
                                     , Animator.Timeline.transitionTo (seconds 1) Three
+
+                                    -- The wait here means the end time is now (1 second)
+                                    -- , which is 7 seconds on the wall clock
                                     , Animator.Timeline.wait (seconds 1.0)
                                     ]
                                 |> Timeline.updateWith False (Time.millisToPosix 0)
                                 |> Timeline.updateWith False (Time.millisToPosix 3000)
                                 |> Animator.Timeline.queue
+                                    -- wait an additional second.  so `Three` now ends at 8 seconds
+                                    -- (This line starts at 8 seconds)
                                     [ Animator.Timeline.wait (seconds 1.0)
                                     , Animator.Timeline.transitionTo (seconds 1) One
                                     , Animator.Timeline.wait (seconds 1.0)
@@ -169,15 +176,13 @@ queueing =
                                     , Animator.Timeline.transitionTo (seconds 1) Three
                                     , Animator.Timeline.wait (seconds 1.0)
                                     ]
+                                -- The update here happens before the first queued timeline is finished
                                 |> Timeline.updateWith False (Time.millisToPosix 4000)
                     in
                     Expect.equal
                         queuedTimeline
                         (timelines.events 4000
-                            [ Timeline.Line (qty 0)
-                                (occur Starting (qty 0) (qty 1000))
-                                []
-                            , Timeline.Line (qty 1000)
+                            [ Timeline.Line (qty 1000)
                                 (occur One (qty 2000) (qty 3000))
                                 [ occur Two (qty 4000) (qty 5000)
                                 , occur Three (qty 6000) (qty 8000)
@@ -187,25 +192,6 @@ queueing =
                                 [ occur Two (qty 11000) (qty 12000)
                                 , occur Three (qty 13000) (qty 14000)
                                 ]
-
-                            -- , Timeline.Line (qty 0)
-                            --     (occur Starting (qty 0) (qty 1000))
-                            --     [ occur One (qty 2000) (qty 3000)
-                            --     , occur Two (qty 4000) (qty 5000)
-                            --     , occur Three (qty 6000) (qty 8000)
-                            --     , occur One (qty 9000) (qty 10000)
-                            --     , occur Two (qty 11000) (qty 12000)
-                            --     , occur Three (qty 13000) (qty 14000)
-                            --     ]
-                            -- , Timeline.Line (qty 0)
-                            --     (occur Starting (qty 0) (qty 1000))
-                            --     [ occur One (qty 2000) (qty 3000)
-                            --     , occur Two (qty 4000) (qty 5000)
-                            --     , occur Three (qty 6000) (qty 8000)
-                            --     , occur One (qty 9000) (qty 10000)
-                            --     , occur Two (qty 11000) (qty 12000)
-                            --     , occur Three (qty 13000) (qty 14000)
-                            --     ]
                             ]
                         )
             , test "one event queued" <|
@@ -228,9 +214,6 @@ queueing =
                         queuedTimeline
                         (timelines.events 300
                             [ Timeline.Line (qty 0)
-                                (occur Starting (qty 0) (qty 0))
-                                []
-                            , Timeline.Line (qty 0)
                                 (occur One (qty 2000) (qty 2000))
                                 []
                             , Timeline.Line (qty 2000)
@@ -288,10 +271,7 @@ queueing =
                 Expect.equal
                     queued
                     (timelines.events 4000
-                        [ Timeline.Line (qty 0)
-                            (occur Starting (qty 0) (qty 4000))
-                            []
-                        , Timeline.Line (qty 4000)
+                        [ Timeline.Line (qty 4000)
                             (occur One (qty 5000) (qty 5000))
                             []
                         ]
@@ -315,10 +295,7 @@ queueing =
                 Expect.equal
                     queued
                     (timelines.events 7000
-                        [ Timeline.Line (qty 0)
-                            (occur Starting (qty 0) (qty 4000))
-                            []
-                        , Timeline.Line (qty 4000)
+                        [ Timeline.Line (qty 4000)
                             (occur One (qty 5000) (qty 7000))
                             []
                         , Timeline.Line (qty 7000)
@@ -337,6 +314,8 @@ queueing =
                         |> Timeline.update (Time.millisToPosix 0)
                         -- move the clock forward to 2s so that `now` matches
                         |> Timeline.update (Time.millisToPosix 2000)
+                        -- set updated at to make the equals check work, even though this doesn't happen
+                        |> manuallyOverrideUpdatedAt (Time.millisToPosix 2000)
                     )
                     (timeline
                         |> Animator.Timeline.queue
@@ -345,6 +324,14 @@ queueing =
                         |> Timeline.update (Time.millisToPosix 2000)
                     )
         ]
+
+
+manuallyOverrideUpdatedAt : Time.Posix -> Timeline.Timeline event -> Timeline.Timeline event
+manuallyOverrideUpdatedAt time (Timeline.Timeline tl) =
+    Timeline.Timeline
+        { tl
+            | updatedAt = Time.absolute time
+        }
 
 
 interruptions =
@@ -375,10 +362,7 @@ interruptions =
                 Expect.equal
                     newTimeline
                     (timelines.events 3000
-                        [ Timeline.Line (qty 0)
-                            (occur Starting (qty 0) (qty 1000))
-                            []
-                        , Timeline.Line (qty 1000)
+                        [ Timeline.Line (qty 1000)
                             (occur One (qty 2000) (qty 3000))
                             [ occur Two (qty 4000) (qty 5000)
                             , occur Unreachable (qty 6000) (qty 7000)
@@ -444,10 +428,7 @@ interruptions =
                 Expect.equal
                     fourWithPause
                     (timelines.events 3000
-                        [ Timeline.Line (qty 0)
-                            (occur Starting (qty 0) (qty 1000))
-                            []
-                        , Timeline.Line (qty 1000)
+                        [ Timeline.Line (qty 1000)
                             (occur One (qty 2000) (qty 3000))
                             [ occur Two (qty 4000) (qty 5000)
                             , occur Three (qty 6000) (qty 7000)
@@ -498,10 +479,7 @@ interruptions =
                 Expect.equal
                     doubleInterrupted
                     (timelines.events 4500
-                        [ Timeline.Line (qty 0)
-                            (occur Starting (qty 0) (qty 1000))
-                            []
-                        , Timeline.Line (qty 1000)
+                        [ Timeline.Line (qty 1000)
                             (occur One (qty 2000) (qty 3000))
                             [ occur Two (qty 4000) (qty 5000)
                             , occur Unreachable (qty 6000) (qty 7000)
@@ -518,8 +496,11 @@ interruptions =
                             [ occur Four (qty 7000) (qty 7000)
                             ]
                         , Timeline.Line (qty 4500)
-                            (occur Two (qty 5500) (qty 6500))
-                            [ occur One (qty 7500) (qty 7500)
+                            -- Two was reached at 4000 before its dwell was
+                            -- interrupted. Returning halfway through the
+                            -- transition to Three takes only 500ms.
+                            (occur Two (qty 5000) (qty 6000))
+                            [ occur One (qty 7000) (qty 7000)
                             ]
                         ]
                     )
@@ -550,10 +531,7 @@ interruptions =
                 Expect.equal
                     interruptedAfterFinish
                     (timelines.events 6000
-                        [ Timeline.Line (qty 0)
-                            (occur Starting (qty 0) (qty 1000))
-                            []
-                        , Timeline.Line (qty 1000)
+                        [ Timeline.Line (qty 1000)
                             (occur One (qty 2000) (qty 3000))
                             [ occur Two (qty 4000) (qty 5000)
                             , occur Three (qty 6000) (qty 6000)
@@ -694,10 +672,7 @@ interruptions =
                 Expect.equal
                     firstTimeline
                     (timelines.events 501
-                        [ Timeline.Line (qty 0)
-                            (occur Starting (qty 0) (qty 1))
-                            []
-                        , Timeline.Line (qty 1)
+                        [ Timeline.Line (qty 1)
                             (occur One (qty 1001) (qty 1001))
                             []
                         ]
@@ -709,48 +684,15 @@ cleaning =
     describe "Cleaning"
         [ test "Marked as running correctly" <|
             \_ ->
-                let
-                    lines =
-                        [ Timeline.Line
-                            (qty 1578168889621)
-                            (occur False (qty 1578168889621) (qty 1578168889621))
-                            [ occur True (qty 1578168895231) (qty 1578168895231)
-                            ]
-                        , Timeline.Line
-                            -- same as now
-                            (qty 1578168893838)
-                            -- 1000ms later
-                            (occur False (qty 1578168895838) (qty 1578168895838))
-                            []
-                        ]
-
-                    now =
-                        qty 1578168893838
-                in
-                Expect.true "This timeline at this time should still be active"
-                    (Timeline.linesAreActive now lines)
+                interruptedTimeline
+                    |> Animator.Timeline.isRunning
+                    |> Expect.equal True
         , test "Marked as running correctly, now after interuption" <|
             \_ ->
-                let
-                    lines =
-                        [ Timeline.Line
-                            (qty 1578168889621)
-                            (occur False (qty 1578168889621) (qty 1578168889621))
-                            [ occur True (qty 1578168895231) (qty 1578168895231)
-                            ]
-                        , Timeline.Line
-                            -- same as now
-                            (qty 1578168893838)
-                            -- 1000ms later
-                            (occur False (qty 1578168895838) (qty 1578168895838))
-                            []
-                        ]
-
-                    now =
-                        qty 1578168893839
-                in
-                Expect.true "This timeline at this time should still be active"
-                    (Timeline.linesAreActive now lines)
+                interruptedTimeline
+                    |> Animator.Timeline.update (Time.millisToPosix 1578168893839)
+                    |> Animator.Timeline.isRunning
+                    |> Expect.equal True
         , test "Don't eliminate penultimate event as it's needed for Timeline.previous" <|
             \_ ->
                 let
@@ -766,16 +708,17 @@ cleaning =
                             |> Timeline.updateWith False (Time.millisToPosix 1000)
                             |> Timeline.updateWith False (Time.millisToPosix 5000)
                             |> Timeline.gc
+                            |> manuallyOverrideUpdatedAt (Time.millisToPosix 5000)
                 in
                 Expect.equal
                     newTimeline
                     (timelines.events 5000
-                        [ Timeline.Line (qty 3000)
+                        [ Timeline.Line (qty 2000)
                             (occur One (qty 3000) (qty 4000))
                             [ occur Two (qty 5000) (qty 5000) ]
                         ]
                     )
-        , test "Reduce multiple timelines down if we're dwelling" <|
+        , test "Collect old lines after the delay window while retaining previous and current" <|
             \_ ->
                 let
                     newTimeline =
@@ -794,23 +737,35 @@ cleaning =
                                 , Animator.Timeline.transitionTo (seconds 1) Five
                                 ]
                             |> Timeline.update (Time.millisToPosix 2000)
-                            |> Timeline.update (Time.millisToPosix 5000)
+                            |> Timeline.update (Time.millisToPosix 11000)
                             |> Timeline.gc
                 in
                 Expect.equal
-                    newTimeline
-                    (timelines.events 5000
-                        [ Timeline.Line (qty 3000)
-                            (occur Four (qty 3000) (qty 4000))
-                            [ occur Five (qty 5000) (qty 5000) ]
-                        ]
+                    ( Four, Five, 1 )
+                    ( Animator.Timeline.previous newTimeline
+                    , Animator.Timeline.current newTimeline
+                    , case newTimeline of
+                        Timeline.Timeline details ->
+                            case details.events of
+                                Timeline.Timetable lines ->
+                                    List.length lines
                     )
         ]
 
 
+interruptedTimeline : Animator.Timeline.Timeline Bool
+interruptedTimeline =
+    Animator.Timeline.init False
+        |> Animator.Timeline.to (Animator.ms 5610) True
+        |> Animator.Timeline.update (Time.millisToPosix 1578168889621)
+        |> Animator.Timeline.update (Time.millisToPosix 1578168893838)
+        |> Animator.Timeline.to (Animator.ms 2000) False
+        |> Animator.Timeline.update (Time.millisToPosix 1578168893838)
+
+
 tailRecursion =
     describe "Tail recursion"
-        [ test "Enqueueing" <|
+        [ test "Enqueueing - Successfully enqueued 10,000 events" <|
             \_ ->
                 let
                     newTimeline =
@@ -820,8 +775,8 @@ tailRecursion =
                                 (List.map (Animator.Timeline.transitionTo (seconds 1)) (List.range 0 10000))
                             |> Timeline.update (Time.millisToPosix 5000)
                 in
-                Expect.true "Successfully enqueued 10,000 events" True
-        , test "Interrupting" <|
+                Expect.equal True (Animator.Timeline.upcoming 10000 newTimeline)
+        , test "Interrupting - Successfully interupt with 10,000 events" <|
             \_ ->
                 let
                     newTimeline =
@@ -831,8 +786,8 @@ tailRecursion =
                                 (List.map (Animator.Timeline.transitionTo (seconds 1)) (List.range 0 10000))
                             |> Timeline.update (Time.millisToPosix 5000)
                 in
-                Expect.true "Successfully interupt with 10,000 events" True
-        , test "Interpolating" <|
+                Expect.equal True (Animator.Timeline.upcoming 10000 newTimeline)
+        , test "Interpolating - Successfully interpolate with 10,000 events" <|
             \_ ->
                 let
                     newTimeline =
@@ -850,7 +805,12 @@ tailRecursion =
                             )
                             (\x -> Value.to (toFloat x))
                 in
-                Expect.true "Successfully interpolate with 10,000 events" True
+                Expect.all
+                    [ \motion -> Expect.greaterThan 0 motion.position
+                    , \motion -> Expect.lessThan 10000 motion.position
+                    , \motion -> Expect.equal False (isNaN motion.velocity || isInfinite motion.velocity)
+                    ]
+                    now
         ]
 
 
@@ -870,7 +830,7 @@ ordering =
                                     ( lastTime, orderPreserved ) =
                                         List.foldl isOrderPreserved ( 0, True ) lines
                                 in
-                                Expect.true "Line order is not preserved"
+                                Expect.equal True
                                     orderPreserved
         , test "Line order test case253" <|
             \_ ->
@@ -894,7 +854,7 @@ ordering =
                                     order =
                                         List.foldl isOrderPreserved ( 0, True ) lines
                                 in
-                                Expect.true "Line order is not preserved"
+                                Expect.equal True
                                     (Tuple.second order)
         , test "Line order test case 3" <|
             \_ ->
@@ -919,7 +879,7 @@ ordering =
                                     order =
                                         List.foldl isOrderPreserved ( 0, True ) lines
                                 in
-                                Expect.true "Line order is not preserved"
+                                Expect.equal True
                                     (Tuple.second order)
         , test "Line order test case 1" <|
             \_ ->
@@ -945,7 +905,7 @@ ordering =
                                     order =
                                         List.foldl isOrderPreserved ( 0, True ) lines
                                 in
-                                Expect.true "Line order is not preserved"
+                                Expect.equal True
                                     (Tuple.second order)
         , test "Line order test case 2" <|
             \_ ->
@@ -970,7 +930,7 @@ ordering =
                                     order =
                                         List.foldl isOrderPreserved ( 0, True ) lines
                                 in
-                                Expect.true "Line order is not preserved"
+                                Expect.equal True
                                     (Tuple.second order)
         , fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
             "Event order is always preserved"
@@ -984,7 +944,7 @@ ordering =
                                     preserved =
                                         List.all isEventOrderPreserved lines
                                 in
-                                Expect.true "Event order is preserved"
+                                Expect.equal True
                                     preserved
         , fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
             "GC doesn't affect order"
@@ -994,7 +954,7 @@ ordering =
                     Timeline.Timeline details ->
                         case details.events of
                             Timeline.Timetable lines ->
-                                Expect.true "Event order after GC is preserved"
+                                Expect.equal True
                                     (List.all isEventOrderPreserved lines)
         , fuzz (Fuzz.Timeline.timeline 0 6000 [ One, Two, Three, Four, Five ])
             "GC is idempotent"
@@ -1015,31 +975,73 @@ ordering =
           <|
             \timelineInstruction ->
                 let
-                    time =
-                        Time.millisToPosix 1400
-
                     actualTimeline =
                         Fuzz.Timeline.toTimeline { gc = False } timelineInstruction
 
                     timelineAt =
-                        Timeline.atTime time actualTimeline
-
-                    gcedTimeline =
-                        Timeline.gc timelineAt
+                        actualTimeline
+                            |> Timeline.updateWith False (Time.millisToPosix 1400)
                 in
                 Expect.all
-                    [ \tl ->
-                        Expect.within
-                            (Absolute 0.001)
-                            (.position (Value.movement tl toPosition))
-                            (.position (Value.movement (Timeline.gc tl) toPosition))
-                    , \tl ->
-                        Expect.within
-                            (Absolute 0.001)
-                            (.velocity (Value.movement tl toPosition))
-                            (.velocity (Value.movement (Timeline.gc tl) toPosition))
-                    ]
+                    (List.map
+                        (\offset tl ->
+                            let
+                                sampleAt =
+                                    Timeline.getCurrentTime tl
+                                        |> Time.advanceBy (Animator.ms offset)
+                                        |> Time.toPosix
+
+                                before =
+                                    Value.movement (Timeline.atTime sampleAt tl) toPosition
+
+                                after =
+                                    Value.movement (Timeline.atTime sampleAt (Timeline.gc tl)) toPosition
+                            in
+                            Expect.all
+                                [ .position >> Expect.within (Absolute 0.001) before.position
+                                , .velocity >> Expect.within (Absolute 0.001) before.velocity
+                                ]
+                                after
+                        )
+                        [ 0, 1, 250, 1000 ]
+                    )
                     timelineAt
+        , test "Canceled queued events cannot reappear after collection" <|
+            \_ ->
+                let
+                    instructions =
+                        Fuzz.Timeline.InstructionTimeline 0
+                            One
+                            [ Fuzz.Timeline.Interruption 0 [ ( 0, One ) ]
+                            , Fuzz.Timeline.Interruption 0 [ ( 1, Two ), ( 0, One ) ]
+                            , Fuzz.Timeline.Interruption 0 [ ( 0, One ) ]
+                            , Fuzz.Timeline.Interruption 1400 [ ( 1, One ) ]
+                            ]
+
+                    before =
+                        Fuzz.Timeline.toTimeline { gc = False } instructions
+                in
+                Expect.equal
+                    [ { position = 1, velocity = 0 }, { position = 1, velocity = 0 } ]
+                    (List.map (\tl -> Value.movement tl toPosition) [ before, Timeline.gc before ])
+        , test "GC preserves motion at an immediate interruption (shrunk fuzz regression)" <|
+            \_ ->
+                let
+                    instructions =
+                        Fuzz.Timeline.InstructionTimeline 0
+                            Two
+                            [ Fuzz.Timeline.Interruption 0 [ ( 1, One ) ]
+                            , Fuzz.Timeline.Interruption 0 [ ( 0, Two ) ]
+                            , Fuzz.Timeline.Interruption 1400 [ ( 0, One ) ]
+                            ]
+
+                    before =
+                        Fuzz.Timeline.toTimeline { gc = False } instructions
+                            |> Timeline.updateWith False (Time.millisToPosix 1400)
+                in
+                Expect.equal
+                    (Value.movement before toPosition)
+                    (Value.movement (Timeline.gc before) toPosition)
         , test "Harmless GC, test case 1" <|
             \_ ->
                 let
@@ -1098,11 +1100,15 @@ ordering =
                     movement =
                         Value.movement timelineAt toPosition
                 in
-                Expect.true "Is NaN"
+                Expect.equal True
                     (not (isNaN movement.position))
         , test "GC trims down a single line if necessary" <|
             \_ ->
                 let
+                    -- 10k events queued at 1second each
+                    -- Start everything at 1 second
+                    -- Then update 500 secods later
+                    -- We should be at roughly 9500 events
                     newTimeline =
                         Animator.Timeline.init 0
                             |> Timeline.update (Time.millisToPosix 0)
@@ -1111,8 +1117,8 @@ ordering =
                                     (Animator.Timeline.transitionTo (seconds 1))
                                     (List.range 0 10000)
                                 )
-                            |> Timeline.update (Time.millisToPosix 5000)
-                            |> Timeline.update (Time.millisToPosix (500 * 1000))
+                            |> Timeline.update (Time.millisToPosix 1000)
+                            |> Timeline.update (Time.millisToPosix (1000 + (500 * 1000)))
 
                     eventCount =
                         case newTimeline of
@@ -1126,12 +1132,11 @@ ordering =
                                             (Timeline.Line _ _ evs) :: _ ->
                                                 List.length evs
                 in
-                -- we are jsut testing that previous events are being removed
-                -- we don't really care how many.
-                -- but it should be ~500 in this case.
                 Expect.equal
                     eventCount
-                    9507
+                    -- Five seconds of lookback plus the reached anchor are
+                    -- retained; earlier events can still be discarded.
+                    9506
         ]
 
 

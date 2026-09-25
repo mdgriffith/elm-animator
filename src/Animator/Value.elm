@@ -1,28 +1,30 @@
 module Animator.Value exposing
     ( color
     , float, velocity, movement, Movement, to, xy, xyz
-    , withWobble
+    , withTransition
     )
 
-{-|
+{-| You may want to animate a value manually, without generating any CSS.
+
+This module is for you!
+
+You'll need to track a `Timeline` in your model and update it using `Browser.Events.onAnimationFrame`.
 
 @docs color
 
 @docs float, velocity, movement, Movement, to, xy, xyz
 
-
-# Transition personality
-
-@docs withWobble
+@docs withTransition
 
 -}
 
 import Animator.Timeline exposing (Timeline)
+import Animator.Transition
 import Color exposing (Color)
-import Internal.Move as Move
-import Internal.Time as Time
-import Internal.Timeline as Timeline
-import Quantity
+import InternalAnim.Move as Move
+import InternalAnim.Quantity as Quantity
+import InternalAnim.Time as Time
+import InternalAnim.Timeline as Timeline
 
 
 
@@ -37,28 +39,19 @@ type alias Movement =
 {-| -}
 color : Timeline state -> (state -> Color) -> Color
 color timeline lookup =
-    Timeline.foldpAll lookup
+    Timeline.foldpAll (Timeline.getCurrentTime timeline)
+        lookup
         identity
-        (\_ prev target now startTime endTime future state ->
-            let
-                isHappening =
-                    (Time.thisAfterOrEqualThat now startTime
-                        && Time.thisBeforeOrEqualThat now endTime
-                    )
-                        || List.isEmpty future
-                        && Time.thisAfterThat now endTime
-            in
-            if isHappening then
+        (\_ target now startTime endTime _ state ->
+            if Time.thisAfterOrEqualThat now startTime then
                 let
                     targetTime =
                         Timeline.startTime target
 
                     progress =
-                        Time.progress startTime targetTime now
+                        Time.progress startTime targetTime (sampleTime now endTime)
                 in
-                Move.color progress
-                    (lookup (Timeline.getEvent prev))
-                    (lookup (Timeline.getEvent target))
+                Move.lerpColor progress state (lookup (Timeline.getEvent target))
 
             else
                 state
@@ -79,39 +72,36 @@ float timeline lookup =
         |> .position
 
 
-{-| -}
+{-| Units per second: if your values are pixels, this returns pixels per second.
+-}
 velocity : Timeline state -> (state -> Movement) -> Float
 velocity timeline lookup =
     movement timeline lookup
         |> .velocity
 
 
+{-| The interpolated position and velocity (in value units per second).
+Completed transitions hold their destination with zero velocity. Interrupted
+transitions contribute their position and velocity at the interruption time.
+-}
 movement : Timeline state -> (state -> Movement) -> { position : Float, velocity : Float }
 movement timeline lookup =
-    Timeline.foldpAll lookup
+    Timeline.foldpAll (Timeline.getCurrentTime timeline)
+        lookup
         Move.init
-        (\_ prev target now startTransition interruptedOrEnd future state ->
-            let
-                arrived =
-                    Timeline.startTime target
-
-                isHappening =
-                    (Time.thisAfterOrEqualThat now startTransition
-                        && Time.thisBeforeOrEqualThat now arrived
-                    )
-                        || (List.isEmpty future
-                                && Time.thisAfterThat now interruptedOrEnd
-                           )
-            in
-            if isHappening then
+        (\_ target now startTransition interruptedOrEnd _ state ->
+            if Time.thisAfterOrEqualThat now startTransition then
                 let
+                    arrived =
+                        Timeline.startTime target
+
                     progress =
-                        Time.progress startTransition arrived now
+                        Time.progress startTransition arrived (sampleTime now interruptedOrEnd)
 
                     targetMovement =
                         lookup (Timeline.getEvent target)
                 in
-                Move.transitionTo progress
+                Move.at progress
                     startTransition
                     arrived
                     targetMovement
@@ -122,6 +112,15 @@ movement timeline lookup =
         )
         timeline
         |> unwrapUnits
+
+
+sampleTime : Time.Absolute -> Time.Absolute -> Time.Absolute
+sampleTime now end =
+    if Time.thisBeforeThat end now then
+        end
+
+    else
+        now
 
 
 {-| -}
@@ -159,7 +158,7 @@ xyz timeline lookup =
     { x =
         float timeline (lookup >> .x)
     , y =
-        float timeline (lookup >> .x)
+        float timeline (lookup >> .y)
     , z =
         float timeline (lookup >> .z)
     }
@@ -182,15 +181,10 @@ unwrapUnits state =
 {- PERSONALITY -}
 
 
-{-| This will make the transition use a spring!
-
-  - `withWobble 0` - absolutely no wobble
-  - `withWobble 1` - all the wobble
-
--}
-withWobble : Float -> Movement -> Movement
-withWobble =
-    Move.withWobble
+{-| -}
+withTransition : Animator.Transition.Transition -> Movement -> Movement
+withTransition =
+    Move.withTransition
 
 
 

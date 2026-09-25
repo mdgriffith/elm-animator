@@ -1,0 +1,61 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  elm:
+    name: Elm review, tests, and examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.3
+      - uses: actions/cache@v4
+        with:
+          path: ~/.elm
+          key: ${{ runner.os }}-elm-0.19.1-${{ hashFiles('elm.json', 'examples/elm.json', 'review/elm.json') }}
+      - run: bun install --frozen-lockfile
+      - run: bun run review
+      - run: bun run test --seed 67890 --fuzz 10000
+      - name: Compile examples
+        working-directory: examples
+        run: ../node_modules/.bin/elm make src/*.elm --output=/dev/null
+
+  browser:
+    name: Browser (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.3
+      - uses: actions/cache@v4
+        with:
+          path: ~/.elm
+          key: ${{ runner.os }}-elm-0.19.1-browser-${{ hashFiles('elm.json', 'browser-tests/elm.json') }}
+      - run: bun install --frozen-lockfile
+      - run: bunx --no-install playwright install --with-deps "${{ matrix.browser }}"
+      - run: bun run test:browser --project="${{ matrix.browser }}"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-results-${{ matrix.browser }}
+          path: test-results/
+          if-no-files-found: ignore

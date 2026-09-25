@@ -1,716 +1,444 @@
 module Animator exposing
-    ( Animation, delay, transition
+    ( Animation, transition
     , Attribute, opacity
-    , rotation, x, y, scale, scaleX, scaleY
+    , rotation, rotationAround
+    , x, y, z
+    , scale, scaleX, scaleY, scaleZ
     , color, px, int, float
-    , withWobble, withBezier, withImpulse
+    , withTransition, withStepTransition
     , Duration, ms
     , spinning, pulsing, bouncing, pinging
-    , keyframes, loop, loopFor
-    , set, wait, step
+    , Step, set, wait, step
+    , keyframes, loop, loopFor, sequence
     , onTimeline, onTimelineWith
     , div, node
-    , Css, css
-    , xAsSingleProp
+    , Css, css, toCss
     )
 
-{-|
+{-| CSS animation, with a single renderer for transitions, sequences, and timelines.
 
-@docs Animation, delay, transition
-
+@docs Animation, transition
 @docs Attribute, opacity
-
-@docs rotation, x, y, scale, scaleX, scaleY
-
+@docs rotation, rotationAround
+@docs x, y, z
+@docs scale, scaleX, scaleY, scaleZ
 @docs color, px, int, float
-
-@docs withWobble, withBezier, withImpulse
-
+@docs withTransition, withStepTransition
 @docs Duration, ms
 
 
 # Premade
 
-Here are some premade animations.
-
-There's nothing special about them, they're just convenient!
-
-Check out how they're defined if you want to make your own.
+These are ordinary keyframe sequences; inspect their definitions to make your own.
 
 @docs spinning, pulsing, bouncing, pinging
 
 
 # Sequences
 
-@docs keyframes, loop, loopFor
+    import Animator as Anim
+    import Html
 
-@docs set, wait, step
+    Anim.div
+        (Anim.keyframes
+            [ Anim.loop
+                [ Anim.set [ Anim.opacity 1 ]
+                , Anim.wait (Anim.ms 200)
+                , Anim.step (Anim.ms 200) [ Anim.opacity 0 ]
+                ]
+            ]
+        )
+        []
+        [ Html.text "Hello!" ]
+
+@docs Step, set, wait, step
+@docs keyframes, loop, loopFor, sequence
+
+
+# On a Timeline
 
 @docs onTimeline, onTimelineWith
-
-@docs delay
 
 
 # Rendering
 
 @docs div, node
-
-@docs Css, css
+@docs Css, css, toCss
 
 -}
 
 import Animator.Timeline exposing (Timeline)
+import Animator.Transition
 import Color
-import Duration
 import Html exposing (Html)
 import Html.Attributes as Attr
-import Internal.Css as Css
-import Internal.Css.Props
-import Internal.Move as Move
-import Internal.Time as Time
-import Internal.Timeline as Timeline
-import Quantity
-import Time
+import InternalAnim.Css.Props as Props
+import InternalAnim.Duration as Duration
+import InternalAnim.Move as Move
+import InternalAnim.Property exposing (Prop(..))
+import InternalAnim.Quantity as Quantity
+import InternalAnim.Render as Render
+import InternalAnim.Time as Time
 
 
-{-| -}
+{-| A CSS property and its target value and transition curve.
+-}
 type alias Attribute =
-    Css.Prop
+    Prop
 
 
 {-| -}
 opacity : Float -> Attribute
-opacity o =
-    Css.Prop
-        Internal.Css.Props.ids.opacity
-        "opacity"
-        (Move.to o)
-        Internal.Css.Props.float
+opacity value =
+    Prop Props.ids.opacity "opacity" (Move.to value) Props.float
 
 
-{-| -}
-xAsSingleProp : Float -> Attribute
-xAsSingleProp o =
-    Css.Prop
-        Internal.Css.Props.ids.opacity
-        "transform"
-        (Move.to o)
-        Internal.Css.Props.translateX
-
-
-{-| -}
+{-| Scale all three axes.
+-}
 scale : Float -> Attribute
-scale s =
-    Css.Prop
-        Internal.Css.Props.ids.scale
-        ""
-        (Move.to s)
-        Internal.Css.Props.float
+scale value =
+    Prop Props.ids.scale "scale" (Move.to value) Props.float
 
 
 {-| -}
 scaleX : Float -> Attribute
-scaleX s =
-    Css.Prop
-        Internal.Css.Props.ids.scaleX
-        ""
-        (Move.to s)
-        Internal.Css.Props.float
+scaleX value =
+    Prop Props.ids.scaleX "scale" (Move.to value) Props.float
 
 
 {-| -}
 scaleY : Float -> Attribute
-scaleY s =
-    Css.Prop
-        Internal.Css.Props.ids.scaleY
-        ""
-        (Move.to s)
-        Internal.Css.Props.float
+scaleY value =
+    Prop Props.ids.scaleY "scale" (Move.to value) Props.float
 
 
 {-| -}
+scaleZ : Float -> Attribute
+scaleZ value =
+    Prop Props.ids.scaleZ "scale" (Move.to value) Props.float
+
+
+{-| Rotation in turns around the Z axis.
+-}
 rotation : Float -> Attribute
-rotation n =
-    Css.Prop
-        Internal.Css.Props.ids.rotation
-        ""
-        (Move.to n)
-        Internal.Css.Props.float
+rotation =
+    rotationAround { x = 0, y = 0, z = 1 }
 
 
-{-| -}
+{-| Rotation in turns around the given axis.
+-}
+rotationAround : { x : Float, y : Float, z : Float } -> Float -> Attribute
+rotationAround axis value =
+    Prop Props.ids.rotation "rotate" (Move.to (1000 * value)) (Props.turns axis)
+
+
+{-| Translation in pixels.
+-}
 x : Float -> Attribute
-x n =
-    Css.Prop
-        Internal.Css.Props.ids.x
-        ""
-        (Move.to n)
-        Internal.Css.Props.float
+x value =
+    Prop Props.ids.x "translate" (Move.to value) Props.float
 
 
-{-| -}
+{-| Translation in pixels.
+-}
 y : Float -> Attribute
-y n =
-    Css.Prop
-        Internal.Css.Props.ids.y
-        ""
-        (Move.to n)
-        Internal.Css.Props.float
+y value =
+    Prop Props.ids.y "translate" (Move.to value) Props.float
 
 
-{-| -}
-withBezier : Float -> Float -> Float -> Float -> Attribute -> Attribute
-withBezier one two three four prop =
-    case prop of
-        Css.Prop id name move format ->
-            Css.Prop id name (Move.withBezier one two three four move) format
-
-        Css.ColorProp name move ->
-            Css.ColorProp name (Move.withBezier one two three four move)
+{-| Translation in pixels.
+-}
+z : Float -> Attribute
+z value =
+    Prop Props.ids.z "translate" (Move.to value) Props.float
 
 
-{-| -}
-withWobble : Float -> Attribute -> Attribute
-withWobble wob prop =
-    case prop of
-        Css.Prop id name move format ->
-            Css.Prop id name (Move.withWobble wob move) format
+{-| Attributes use `Animator.Transition.standard` by default.
+-}
+withTransition : Animator.Transition.Transition -> Attribute -> Attribute
+withTransition curve attribute =
+    case attribute of
+        Prop id name movement format ->
+            Prop id name (Move.withTransition curve movement) format
 
-        Css.ColorProp name move ->
-            Css.ColorProp name (Move.withWobble wob move)
+        ColorProp name movement ->
+            ColorProp name (Move.withTransition curve movement)
 
 
+{-| Apply a curve to all properties in a step, including nested sequences.
+-}
+withStepTransition : Animator.Transition.Transition -> Step -> Step
+withStepTransition curve animationStep =
+    case animationStep of
+        Render.Step duration attrs ->
+            Render.Step duration (List.map (withTransition curve) attrs)
+
+        Render.Repeat count steps ->
+            Render.Repeat count (List.map (withStepTransition curve) steps)
+
+
+{-| A duration. Start with a short duration and adjust for the size and distance
+of the movement.
+-}
 type alias Duration =
     Time.Duration
 
 
-{-| -}
+{-| A duration in milliseconds.
+-}
 ms : Float -> Duration
 ms =
     Duration.milliseconds
 
 
-{-| When transitioning to this state, start with a little extra velocity!
-
-**Values**
-0 -> No different from before
-1 ->
-
+{-| An animation ready to render as HTML or CSS.
 -}
-withImpulse : Float -> Attribute -> Attribute
-withImpulse impulse prop =
-    case prop of
-        Css.Prop id name move format ->
-            Css.Prop id name (Move.withVelocities impulse 0 move) format
-
-        Css.ColorProp name move ->
-            Css.ColorProp name (Move.withVelocities impulse 0 move)
-
-
-{-| -}
-delay : Duration -> Animation -> Animation
-delay dur (Animation now attrs) =
-    Animation (Time.rollbackBy dur now) attrs
-
-
 type Animation
-    = Animation Time.Absolute (List Css.RenderedProp)
+    = Animation Render.Css
 
 
-type Step
-    = Step Duration (List Attribute)
+{-| A step or nested sequence of steps.
+-}
+type alias Step =
+    Render.Step
 
 
+{-| Immediately set properties.
+-}
 set : List Attribute -> Step
-set attrs =
-    step Time.zeroDuration attrs
+set =
+    step Time.zeroDuration
 
 
+{-| Hold the current properties for a duration.
+-}
 wait : Duration -> Step
-wait dur =
-    step dur []
+wait duration =
+    step duration []
 
 
+{-| Move to these properties, preserving properties omitted from the step.
+-}
 step : Duration -> List Attribute -> Step
 step =
-    Step
+    Render.Step
 
 
-{-| -}
+{-| Render a sequence using CSS keyframe animations.
+-}
 keyframes : List Step -> Animation
 keyframes steps =
-    let
-        imminent =
-            Time.absolute (Time.millisToPosix 1)
-
-        ( ( afterFirst, firstOccurring ), remaining ) =
-            case steps of
-                [] ->
-                    ( ( imminent, Timeline.Occurring [] imminent imminent ), [] )
-
-                first :: r ->
-                    ( toOccurring imminent first, r )
-
-        timeline =
-            Timeline.Timeline
-                { initial = []
-                , now = imminent
-                , delay = Time.zeroDuration
-                , scale = 1
-                , events =
-                    Timeline.Timetable
-                        [ Timeline.Line
-                            imminent
-                            firstOccurring
-                            (List.foldl
-                                (\currentStep ( time, occurs ) ->
-                                    let
-                                        ( newTime, occur ) =
-                                            toOccurring time currentStep
-                                    in
-                                    ( newTime, occur :: occurs )
-                                )
-                                ( afterFirst, [] )
-                                remaining
-                                |> Tuple.second
-                            )
-                        ]
-                , queued = Nothing
-                , interruption = []
-                , running = True
-                }
-    in
-    Animation
-        (Timeline.getCurrentTime timeline)
-        (Css.propsToRenderedProps timeline identity)
+    Animation (Render.keyframes steps)
 
 
-toOccurring : Time.Absolute -> Step -> ( Time.Absolute, Timeline.Occurring (List Attribute) )
-toOccurring currentTime (Step dur props) =
-    let
-        time =
-            Time.advanceBy dur currentTime
-    in
-    ( time, Timeline.Occurring props time time )
+{-| Group steps into a sequence that runs once.
+-}
+sequence : List Step -> Step
+sequence =
+    loopFor 1
 
 
-{-| -}
+{-| Repeat indefinitely.
+-}
 loop : List Step -> Step
-loop steps =
-    -- abusing infinite here :/ don't look at me!
-    loopFor (1 // 0) steps
+loop =
+    loopFor -1
 
 
-{-| -}
+{-| Repeat a sequence. Zero skips it; a negative count repeats indefinitely.
+-}
 loopFor : Int -> List Step -> Step
-loopFor n steps =
-    let
-        initialProps =
-            getInitialProps Time.zeroDuration steps []
-    in
-    addSequence n
-        steps
-        initialProps
+loopFor =
+    Render.Repeat
 
 
-getInitialProps : Time.Duration -> List Step -> List Attribute -> List Attribute
-getInitialProps durationTillThisStep steps props =
-    case steps of
-        [] ->
-            props
-
-        (Step dur stepProps) :: remaining ->
-            let
-                newProps =
-                    addIfNew durationTillThisStep stepProps props
-            in
-            getInitialProps (Time.expand durationTillThisStep dur)
-                remaining
-                newProps
-
-
-addIfNew :
-    Time.Duration
-    -> List Attribute
-    -> List Attribute
-    -> List Attribute
-addIfNew durationTillThisStep stepProps props =
-    case props of
-        [] ->
-            stepProps
-
-        _ ->
-            case stepProps of
-                [] ->
-                    props
-
-                topStep :: remainingSteps ->
-                    if List.any (Css.match topStep) props then
-                        addIfNew durationTillThisStep remainingSteps props
-
-                    else
-                        addIfNew durationTillThisStep
-                            remainingSteps
-                            -- Note::  we aren't doing anything special for defaults here
-                            -- However, ultimately we could get clever and stub in a default from the node itself
-                            (topStep :: props)
-
-
-addSequence : Int -> List Step -> List Attribute -> Step
-addSequence n steps prop =
-    let
-        fullDuration =
-            sumStepDuration Time.zeroDuration steps
-    in
-    prop
-        |> List.map (addSequenceSteps n fullDuration steps)
-        |> Step fullDuration
-
-
-sumStepDuration : Time.Duration -> List Step -> Time.Duration
-sumStepDuration dur steps =
-    case steps of
-        [] ->
-            dur
-
-        (Step stepDur _) :: remain ->
-            sumStepDuration (Time.expand stepDur dur) remain
-
-
-addSequenceSteps : Int -> Time.Duration -> List Step -> Attribute -> Attribute
-addSequenceSteps n fullDuration steps prop =
-    case prop of
-        Css.Prop id name movement format ->
-            let
-                formattedSteps =
-                    formatSteps steps prop []
-            in
-            Css.Prop id
-                name
-                (Move.addSequence n fullDuration formattedSteps movement)
-                format
-
-        Css.ColorProp name movement ->
-            let
-                formattedSteps =
-                    formatColorSteps steps prop []
-            in
-            Css.ColorProp name
-                (Move.addSequence n fullDuration formattedSteps movement)
-
-
-formatColorSteps :
-    List Step
-    -> Attribute
-    -> List (Move.Step Color.Color)
-    -> List (Move.Step Color.Color)
-formatColorSteps steps prop pastSteps =
-    case steps of
-        [] ->
-            List.reverse pastSteps
-
-        (Step dur props) :: next ->
-            case firstMatch prop props of
-                Nothing ->
-                    List.reverse pastSteps
-
-                Just (Css.Prop id name _ format) ->
-                    formatColorSteps next
-                        prop
-                        pastSteps
-
-                Just (Css.ColorProp name (Move.Pos trans value _)) ->
-                    formatColorSteps next
-                        prop
-                        (Move.stepWith dur trans value :: pastSteps)
-
-
-formatSteps :
-    List Step
-    -> Attribute
-    -> List (Move.Step Float)
-    -> List (Move.Step Float)
-formatSteps steps prop pastSteps =
-    case steps of
-        [] ->
-            List.reverse pastSteps
-
-        (Step dur props) :: next ->
-            case firstMatch prop props of
-                Nothing ->
-                    List.reverse pastSteps
-
-                Just (Css.Prop id name (Move.Pos trans value _) format) ->
-                    formatSteps next
-                        prop
-                        (Move.stepWith dur trans value :: pastSteps)
-
-                Just (Css.ColorProp name movement) ->
-                    formatSteps next
-                        prop
-                        pastSteps
-
-
-firstMatch : Attribute -> List Attribute -> Maybe Attribute
-firstMatch prop props =
-    case props of
-        [] ->
-            Nothing
-
-        next :: remain ->
-            if Css.match prop next then
-                Just next
-
-            else
-                firstMatch prop remain
-
-
-{-| -}
+{-| A property measured in pixels.
+-}
 px : String -> Float -> Attribute
-px name n =
-    Css.Prop
-        Internal.Css.Props.noId
-        name
-        (Move.to n)
-        Internal.Css.Props.px
+px name value =
+    Prop Props.noId name (Move.to value) Props.px
 
 
-{-| -}
+{-| A property rendered as a rounded integer.
+-}
 int : String -> Float -> Attribute
-int name n =
-    Css.Prop
-        Internal.Css.Props.noId
-        name
-        (Move.to n)
-        Internal.Css.Props.int
+int name value =
+    Prop Props.noId name (Move.to value) Props.int
 
 
-{-| -}
+{-| A unitless numeric property.
+-}
 float : String -> Float -> Attribute
-float name n =
-    Css.Prop
-        Internal.Css.Props.noId
-        name
-        (Move.to n)
-        Internal.Css.Props.float
+float name value =
+    Prop Props.noId name (Move.to value) Props.float
+
+
+{-| A color property.
+-}
+color : String -> Color.Color -> Attribute
+color name value =
+    ColorProp name (Move.to value)
 
 
 {-| -}
-color : String -> Color.Color -> Attribute
-color name colorValue =
-    Css.ColorProp name
-        (Move.to colorValue)
-
-
 spinning : Duration -> Animation
-spinning dur =
+spinning duration =
     keyframes
         [ loop
-            [ set
-                [ rotation 0
-                ]
-            , step dur
-                [ rotation 1
-                ]
+            [ set [ rotation 0 ]
+            , step duration [ rotation 1 |> withTransition Animator.Transition.linear ]
             ]
         ]
 
 
+{-| -}
 pulsing : Duration -> Animation
-pulsing dur =
+pulsing duration =
+    let
+        half =
+            Quantity.divideBy 2 duration
+    in
     keyframes
         [ loop
-            [ set
-                [ opacity 1
-                ]
-            , step dur
-                [ opacity 0.5
-                ]
+            [ set [ opacity 1 ]
+            , step half [ opacity 0.4 ]
+            , step half [ opacity 1 ]
             ]
         ]
 
 
+{-| The duration covers a complete out-and-back bounce. Distance is in pixels:
+positive moves down, negative moves up.
+-}
 bouncing : Duration -> Float -> Animation
-bouncing dur distance =
-    if Time.isZeroDuration dur then
+bouncing duration distance =
+    if Time.isZeroDuration duration then
         keyframes []
 
     else
         let
             half =
-                dur |> Quantity.divideBy 2
+                Quantity.divideBy 2 duration
 
             startingY =
-                y 0
-                    |> withBezier 0.8 0 1 1
+                y 0 |> withTransition (Animator.Transition.bezier 0.8 0 1 1)
         in
         keyframes
             [ loop
-                [ set
-                    [ startingY ]
-                , step half
-                    [ y distance
-                        |> withBezier 0 0 0.2 1
-                    ]
-                , step half
-                    [ startingY
-                    ]
+                [ set [ startingY ]
+                , step half [ y distance |> withTransition (Animator.Transition.bezier 0 0 0.2 1) ]
+                , step half [ startingY ]
                 ]
             ]
 
 
+{-| -}
 pinging : Duration -> Animation
-pinging dur =
+pinging duration =
     keyframes
         [ loop
-            [ set
-                [ rotation 0
-                , opacity 1
-                ]
-            , step dur
-                [ rotation 1
-                , opacity 0
-                ]
+            [ set [ scale 1, opacity 1 ]
+            , step duration [ scale 1.2, opacity 0 ]
             ]
         ]
 
 
+{-| Animate on a timeline, allowing multiple elements to synchronize and handling
+interruptions from their sampled positions. Uses CSS keyframe animations.
+
+Omitted properties return to their defaults: translation and rotation to `0`,
+scale and opacity to `1`. In contrast, `step` keeps omitted properties as they are.
+
+-}
 onTimeline : Timeline state -> (state -> List Attribute) -> Animation
-onTimeline timeline toProps =
-    Animation
-        (Timeline.getCurrentTime timeline)
-        (Css.propsToRenderedProps timeline toProps)
+onTimeline timeline lookup =
+    onTimelineWith timeline (\state -> ( lookup state, [] ))
 
 
-onTimelineWith :
-    Timeline state
-    ->
-        (state
-         -> ( List Attribute, List Step )
+{-| Animate to a state's properties, then run its resting steps. The steps are
+interrupted when the next timeline transition begins.
+-}
+onTimelineWith : Timeline state -> (state -> ( List Attribute, List Step )) -> Animation
+onTimelineWith timeline lookup =
+    Animation (Render.onTimeline timeline lookup)
+
+
+{-| Animate a change to these properties using native CSS transitions where
+possible. Springs use native CSS `linear(...)` easing, which requires a browser
+with support for that timing function. Incompatible curves within a compound
+property use keyframes instead.
+
+Native springs follow CSS transition reversal rules. Use a timeline when spring
+interruptions need to preserve incoming velocity.
+
+    Animator.div
+        (Animator.transition (Animator.ms 200)
+            [ Animator.opacity
+                (if model.visible then
+                    1
+
+                 else
+                    0
+                )
+            ]
         )
-    -> Animation
-onTimelineWith timeline toPropsAndSteps =
-    let
-        toProps event =
-            let
-                ( props, steps ) =
-                    toPropsAndSteps event
+        []
+        [ Html.text "Hello!" ]
 
-                fullDuration =
-                    sumStepDuration Time.zeroDuration steps
-            in
-            getInitialProps Time.zeroDuration steps props
-                |> List.map (addSequenceSteps 1 fullDuration steps)
-    in
-    Animation
-        (Timeline.getCurrentTime timeline)
-        (Css.propsToRenderedProps timeline toProps)
+-}
+transition : Duration -> List Attribute -> Animation
+transition duration props =
+    Animation (Render.transition duration props)
+
+
+{-| Extract generated CSS for integration with a different view library.
+-}
+toCss : Animation -> Css
+toCss (Animation rendered) =
+    rendered
 
 
 {-| -}
-transition : Animator.Timeline.Duration -> List Attribute -> Animation
-transition transitionDuration props =
-    let
-        imminent =
-            Time.absolute (Time.millisToPosix 1)
-
-        startTime =
-            Time.advanceBy transitionDuration imminent
-
-        timeline =
-            Timeline.Timeline
-                { initial = []
-                , now = imminent
-                , delay = Time.zeroDuration
-                , scale = 1
-                , events =
-                    Timeline.Timetable
-                        [ Timeline.Line
-                            imminent
-                            (Timeline.Occurring props startTime startTime)
-                            []
-                        ]
-                , queued = Nothing
-                , interruption = []
-                , running = True
-                }
-    in
-    Animation (Timeline.getCurrentTime timeline)
-        (Css.propsToRenderedProps timeline identity)
-
-
-{--}
-div :
-    Animation
-    -> List (Html.Attribute msg)
-    -> List (Html msg)
-    -> Html msg
-div (Animation now renderedProps) attrs children =
+div : Animation -> List (Html.Attribute msg) -> List (Html msg) -> Html msg
+div animation attrs children =
     let
         rendered =
-            Css.toCss now renderedProps
-
-        styles =
-            List.map (\( propName, val ) -> Attr.style propName val)
-                (( "animation", rendered.animation ) :: rendered.props)
+            toCss animation
     in
     Html.div
-        (styles ++ attrs)
-        (stylesheet rendered.keyframes
-            :: children
-        )
+        (List.map (\( key, value ) -> Attr.style key value) rendered.props ++ attrs)
+        (stylesheet rendered.keyframes :: children)
 
 
 {-| -}
-node :
-    String
-    -> Animation
-    -> List (Html.Attribute msg)
-    -> List (Html msg)
-    -> Html msg
-node name (Animation now renderedProps) attrs children =
+node : String -> Animation -> List (Html.Attribute msg) -> List (Html msg) -> Html msg
+node name animation attrs children =
     let
         rendered =
-            Css.toCss now renderedProps
-
-        styles =
-            List.map (\( propName, val ) -> Attr.style propName val)
-                (( "animation", rendered.animation ) :: rendered.props)
+            toCss animation
     in
     Html.node name
-        (styles ++ attrs)
-        (stylesheet rendered.keyframes
-            :: children
-        )
+        (List.map (\( key, value ) -> Attr.style key value) rendered.props ++ attrs)
+        (stylesheet rendered.keyframes :: children)
 
 
-{-| -}
+{-| Generated keyframes, transitions, inline properties, and an identity hash.
+-}
 type alias Css =
-    { hash : String
-
-    -- use single prop encoding:
-    -- https://developer.mozilla.org/en-US/docs/Web/CSS/animation
-    , animation : String
-    , keyframes : String
-    , props : List ( String, String )
-    }
+    Render.Css
 
 
-{-| -}
-css : Timeline state -> (state -> List Attribute) -> Css
-css =
-    Css.cssFromProps
+{-| Equivalent to `onTimelineWith` followed by `toCss`.
+-}
+css : Timeline state -> (state -> ( List Attribute, List Step )) -> Css
+css timeline lookup =
+    onTimelineWith timeline lookup |> toCss
 
 
-{-| -}
 stylesheet : String -> Html msg
-stylesheet str =
-    case str of
-        "" ->
-            Html.text ""
+stylesheet source =
+    if source == "" then
+        Html.text ""
 
-        _ ->
-            Html.node "style"
-                []
-                [ Html.text str
-                ]
+    else
+        Html.node "style" [] [ Html.text source ]

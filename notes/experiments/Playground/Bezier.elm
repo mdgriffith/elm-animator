@@ -2,10 +2,10 @@ module Playground.Bezier exposing (main)
 
 import Animator
 import Html
-import Internal.Bezier as Bezier
-import Internal.Css
-import Internal.Interpolate as Interpolate
-import Internal.Transition as Transition
+import InternalAnim.Bezier as Bezier
+import InternalAnim.Css
+import InternalAnim.Interpolate as Interpolate
+import InternalAnim.Transition as Transition
 import Pixels
 import Svg
 import Svg.Attributes exposing (..)
@@ -18,88 +18,87 @@ main =
         , height "1200"
         , viewBox "-200 -200 1000 1000"
         ]
-        [ 
-            
-        --         viewSpline { x = 0, y = 0 } <|
-        --       Interpolate.createSpline
-        --           { start =
-        --               { x = 10
-        --               , y = 10
-        --               }
-        --           , startVelocity =
-        --               { x = 1
-        --               , y = 1
-        --               }
-        --           , departure =
-        --               Interpolate.standardDefault
-        --           , end =
-        --               { x = 90
-        --               , y = 90
-        --               }
-        --           , endVelocity =
-        --               { x = 1
-        --               , y = 0
-        --               }
-        --           , arrival =
-        --               Interpolate.standardDefault
-        --           }
-        --   , viewSpline { x = 120, y = 0 } <|
-        --       Interpolate.createSpline
-        --           { start =
-        --               { x = 10
-        --               , y = 10
-        --               }
-        --           , startVelocity =
-        --               { x = 1
-        --               , y = 0
-        --               }
-        --           , departure =
-        --               Interpolate.standardDefault
-        --           , end =
-        --               { x = 90
-        --               , y = 90
-        --               }
-        --           , endVelocity =
-        --               { x = 1
-        --               , y = 0
-        --               }
-        --           , arrival =
-        --               Interpolate.standardDefault
-        --           }
-          -- ,
-        --   viewTransition
-        --     { x = 0
-        --     , y = 120
-        --     }
-        --     { start =
-        --         { x = 10
-        --         , y = 10
-        --         }
-        --     , end =
-        --         { x = 90
-        --         , y = 90
-        --         }
-        --     }
-        --     1
-        --     1
-        --     Transition.standard
-        -- , viewTransition
-        --     { x = 120
-        --     , y = 120
-        --     }
-        --     { start =
-        --         { x = 10
-        --         , y = 10
-        --         }
-        --     , end =
-        --         { x = 90
-        --         , y = 90
-        --         }
-        --     }
-        --     0
-        --     0
-        --     Transition.standard
+        [--         viewSpline { x = 0, y = 0 } <|
+         --       Interpolate.createSpline
+         --           { start =
+         --               { x = 10
+         --               , y = 10
+         --               }
+         --           , startVelocity =
+         --               { x = 1
+         --               , y = 1
+         --               }
+         --           , departure =
+         --               Interpolate.standardDefault
+         --           , end =
+         --               { x = 90
+         --               , y = 90
+         --               }
+         --           , endVelocity =
+         --               { x = 1
+         --               , y = 0
+         --               }
+         --           , arrival =
+         --               Interpolate.standardDefault
+         --           }
+         --   , viewSpline { x = 120, y = 0 } <|
+         --       Interpolate.createSpline
+         --           { start =
+         --               { x = 10
+         --               , y = 10
+         --               }
+         --           , startVelocity =
+         --               { x = 1
+         --               , y = 0
+         --               }
+         --           , departure =
+         --               Interpolate.standardDefault
+         --           , end =
+         --               { x = 90
+         --               , y = 90
+         --               }
+         --           , endVelocity =
+         --               { x = 1
+         --               , y = 0
+         --               }
+         --           , arrival =
+         --               Interpolate.standardDefault
+         --           }
+         -- ,
+         --   viewTransition
+         --     { x = 0
+         --     , y = 120
+         --     }
+         --     { start =
+         --         { x = 10
+         --         , y = 10
+         --         }
+         --     , end =
+         --         { x = 90
+         --         , y = 90
+         --         }
+         --     }
+         --     1
+         --     1
+         --     Transition.standard
+         -- , viewTransition
+         --     { x = 120
+         --     , y = 120
+         --     }
+         --     { start =
+         --         { x = 10
+         --         , y = 10
+         --         }
+         --     , end =
+         --         { x = 90
+         --         , y = 90
+         --         }
+         --     }
+         --     0
+         --     0
+         --     Transition.standard
         ]
+
 
 
 -- viewTransition :

@@ -1,12 +1,12 @@
 module Animator.Timeline exposing
     ( Timeline, init
     , to
-    , Duration, ms
-    , update, isRunning
+    , update, isRunning, hasChanges
     , interrupt, queue
     , Step, wait, transitionTo
-    , scale, delay
+    , scale, delay, Duration
     , current, previous, upcoming, upcomingWith, arrived, arrivedAt, arrivedAtWith
+    , progress
     )
 
 {-|
@@ -14,7 +14,44 @@ module Animator.Timeline exposing
 
 # Getting started
 
-`elm-animator` is about taking pieces of your model, turning them into **Timelines** of values, and animate between their states
+Here's how to keep a timeline in your model and update it:
+
+    import Animator
+    import Animator.Timeline as Timeline
+    import Browser.Events
+    import Time
+
+    type alias Model =
+        { visible : Timeline.Timeline Bool }
+
+    init : Model
+    init =
+        { visible = Timeline.init False }
+
+    type Msg
+        = Tick Time.Posix
+        | Show
+
+    subscriptions : Model -> Sub Msg
+    subscriptions model =
+        if Timeline.isRunning model.visible then
+            Browser.Events.onAnimationFrame Tick
+
+        else
+            Sub.none
+
+    update : Msg -> Model -> ( Model, Cmd Msg )
+    update msg model =
+        case msg of
+            Tick now ->
+                ( { model | visible = Timeline.update now model.visible }
+                , Cmd.none
+                )
+
+            Show ->
+                ( { model | visible = Timeline.to (Animator.ms 300) True model.visible }
+                , Cmd.none
+                )
 
 @docs Timeline, init
 
@@ -30,9 +67,7 @@ In order to do that we need to specify both —
 
 @docs to
 
-@docs Duration, ms
-
-@docs update, isRunning
+@docs update, isRunning, hasChanges
 
 
 # Interruptions and Queueing
@@ -40,24 +75,25 @@ In order to do that we need to specify both —
 In some more **advanced** cases you might want to define a _series_ of states to animate through instead of just going to one directly.
 
     Timeline.interrupt
-        [ Timeline.wait (Timeline.millis 300)
+        [ Timeline.wait (Animator.ms 300)
 
         -- after waiting 300 milliseconds,
         -- start transitioning to a new state, Griffyndor
         -- Take 1 whole second to make the transition
-        , Timeline.transitionTo (Timeline.seconds 1) Griffyndor
+        , Timeline.transitionTo (Animator.ms 1000) Griffyndor
 
         -- Once we've arrived at Griffyndor,
         -- immediately start transitioning to Slytherin
         -- and take half a second to make the transition
-        , Timeline.transitionTo (Timeline.seconds 0.5) Slytherin
+        , Timeline.transitionTo (Animator.ms 500) Slytherin
         ]
+        timeline
 
 @docs interrupt, queue
 
 @docs Step, wait, transitionTo
 
-@docs scale, delay
+@docs scale, delay, Duration
 
 
 # Reading the timeline
@@ -68,12 +104,14 @@ Well, we can ask the `Timeline` all sorts of questions.
 
 @docs current, previous, upcoming, upcomingWith, arrived, arrivedAt, arrivedAtWith
 
+@docs progress
+
 -}
 
-import Duration
-import Internal.Time as Time
-import Internal.Timeline as Timeline
-import Quantity
+import InternalAnim.Duration as Duration
+import InternalAnim.Quantity as Quantity
+import InternalAnim.Time as Time
+import InternalAnim.Timeline as Timeline
 import Time
 
 
@@ -86,6 +124,12 @@ type alias Timeline state =
     Timeline.Timeline state
 
 
+{-| A duration shared with `Animator.Duration`. Construct one with `Animator.ms`.
+-}
+type alias Duration =
+    Time.Duration
+
+
 {-| Create a timeline with an initial `state`.
 
 So, if you previously had a `Bool` in your model:
@@ -95,19 +139,25 @@ So, if you previously had a `Bool` in your model:
     -- created via
     { checked = False }
 
-You could replace that with an `Animator.Timeline Bool`
+You could replace that with a `Timeline.Timeline Bool`:
 
-    type alias Model = { checked : Animator.Timeline Bool }
+    type alias Model = { checked : Timeline.Timeline Bool }
 
     -- created via
-    { checked = Animator.init False }
+    { checked = Timeline.init False }
 
 -}
 init : state -> Timeline state
 init first =
+    let
+        epoch =
+            Time.absolute (Time.millisToPosix 0)
+    in
     Timeline.Timeline
         { initial = first
-        , now = Time.absolute (Time.millisToPosix 0)
+        , initialStartedAt = Nothing
+        , now = epoch
+        , updatedAt = epoch
         , delay = Duration.milliseconds 0
         , scale = 1
         , events =
@@ -122,15 +172,16 @@ init first =
 
 This is generally used in your view function to add a bit of variety when animating multiple elements.
 
-        Animator.move (Animator.delay (Animator.millis 200) timeline) <|
+        Animator.Value.float (Animator.Timeline.delay (Animator.ms 200) timeline) <|
             \state ->
                 if state then
-                    Animator.at 0
+                    Animator.Value.to 0
 
                 else
-                    Animator.at 1
+                    Animator.Value.to 1
 
-This has a maximum value of 5 seconds.
+Delays add together, negative additions are ignored, and the total is capped at
+5 seconds.
 
 If you need a longer delay, it's likely you want to create a separate timeline.
 
@@ -138,24 +189,42 @@ If you need a longer delay, it's likely you want to create a separate timeline.
 delay : Duration -> Timeline state -> Timeline state
 delay dur (Timeline.Timeline details) =
     Timeline.Timeline
-        { details | delay = Time.maxDuration (Duration.milliseconds 5000) (Time.expand details.delay (Time.positiveDuration dur)) }
+        { details
+            | delay =
+                Duration.milliseconds
+                    (min (Duration.inMilliseconds Timeline.maxDelay)
+                        (Duration.inMilliseconds details.delay + max 0 (Duration.inMilliseconds dur))
+                    )
+        }
 
 
-{-| Speedup or slowdown a timeline.
+{-| Scale durations when pending steps are scheduled by the next `update`.
 
-    0.5 -> half speed
+    0.5 -> Animations take half as much time
     1.0 -> normal
-    2.0 -> twice as fast
+    2.0 -> Animations take twice as long
 
 **Note** - 0.1 is the lowest number allowed, and 5 is the highest.
 
-This is generally used in your view function to add a bit of variety when animating multiple elements.
+Set this on the model's timeline before calling `update`. It does not retime
+events that have already been scheduled, so applying it only in a view does not
+change their playback speed.
 
 -}
 scale : Float -> Timeline state -> Timeline state
 scale factor (Timeline.Timeline details) =
     Timeline.Timeline
         { details | scale = min 5 (max 0.1 factor) }
+
+
+{-| The proportion (number between 0 and 1) of progress between the last state and the new one.
+
+Once we arrive at a new state, this value will be 1 until we start another transition.
+
+-}
+progress : Timeline state -> Float
+progress =
+    Timeline.progress
 
 
 {-| Get the current `state` of the timeline.
@@ -178,7 +247,7 @@ current =
     Timeline.current
 
 
-{-| Subtley different than [`current`](#current), this will provide the new state as soon as the transition has _finished_.
+{-| Subtly different than [`current`](#current), this will provide the new state as soon as the transition has _finished_.
 
 ```ascii
           A---------B---------C
@@ -194,10 +263,12 @@ arrived =
 
 {-| Sometimes we want to know when we've arrived at a state so we can trigger some other work.
 
-You can use `arrivedAt` in the `Tick` branch of your update to see if you will arrive at an event on this tick.
+Use `arrivedAt` before updating the timeline to detect arrivals after its current
+time and at or before the new tick. An arrival is not reported again on the next
+tick. Destinations canceled by an interruption are not reported.
 
     Tick time ->
-        if Animator.arrivedAt MyState time model.timeline then
+        if Animator.Timeline.arrivedAt MyState time model.timeline then
             --...do something special
 
 -}
@@ -206,8 +277,7 @@ arrivedAt state =
     Timeline.arrivedAt ((==) state)
 
 
-{-| Again, sometimes you'll want to supply your own equality function!
--}
+{-| -}
 arrivedAtWith : (state -> Bool) -> Time.Posix -> Timeline state -> Bool
 arrivedAtWith =
     Timeline.arrivedAt
@@ -215,7 +285,7 @@ arrivedAtWith =
 
 {-| Get the previous `state` on this timeline.
 
-As you'll see in the [Loading example](https://github.com/mdgriffith/elm-animator/blob/master/examples/Loading.elm), it means we can use `previous` to refer to data that we've already "deleted" or set to `Nothing`.
+As you'll see in the [Loading example](https://github.com/mdgriffith/elm-animator/blob/v2/examples/src/Loading.elm), it means we can use `previous` to refer to data that we've already "deleted" or set to `Nothing`.
 
 How cool!
 
@@ -243,11 +313,7 @@ upcoming state =
     Timeline.upcoming ((==) state)
 
 
-{-| For complicated values it can be computationally expensive to use `==`.
-
-`upcomingWith` allows you to specify your own equality function, so you can be smarter in checking how two value are equal.
-
--}
+{-| -}
 upcomingWith : (state -> Bool) -> Timeline state -> Bool
 upcomingWith =
     Timeline.upcoming
@@ -257,31 +323,10 @@ upcomingWith =
 -- future : Timeline state -> List ( TIme.Posix, state )
 
 
-{-| Choosing a nice duration can depend on:
-
-  - The size of the thing moving
-  - The type of movement
-  - The distance it's traveling.
-
-So, start with a nice default and adjust it as you start to understand your specific needs.
-
-**Note** — Here's [a very good overview on animation durations and speeds](https://uxdesign.cc/the-ultimate-guide-to-proper-use-of-animation-in-ux-10bd98614fa9).
-
--}
-type alias Duration =
-    Time.Duration
-
-
-{-| -}
-ms : Float -> Duration
-ms =
-    Duration.milliseconds
-
-
 {-| -}
 type Step state
-    = Wait Duration
-    | TransitionTo Duration state
+    = Wait Time.Duration
+    | TransitionTo Time.Duration state
 
 
 {-| -}
@@ -290,13 +335,17 @@ transitionTo =
     TransitionTo
 
 
-{-| -}
+{-| A list containing only waits has no destination and does not create a schedule.
+-}
 wait : Duration -> Step state
 wait =
     Wait
 
 
 {-| Wait until the current timeline is **finished** and then continue with these new steps.
+
+Pending steps are scheduled on the next `update`.
+
 -}
 queue : List (Step state) -> Timeline state -> Timeline state
 queue steps (Timeline.Timeline tl) =
@@ -306,7 +355,9 @@ queue steps (Timeline.Timeline tl) =
             , queued =
                 case tl.queued of
                     Nothing ->
-                        case initializeSchedule (ms 0) steps of
+                        -- This consumes the first `wait` and adds it to the schedule as the initial delay
+                        -- It also consumes the first real event
+                        case initializeSchedule (Duration.milliseconds 0) steps of
                             Nothing ->
                                 tl.queued
 
@@ -318,17 +369,16 @@ queue steps (Timeline.Timeline tl) =
         }
 
 
-{-| Go to a new state!
-
-You'll need to specify a `Duration` as well. Try starting with `Animator.quickly` and adjust up or down as necessary.
-
+{-| Interrupt the existing schedule on the next `update`.
 -}
 to : Duration -> state -> Timeline state -> Timeline state
 to duration ev timeline =
     interrupt [ transitionTo duration ev ] timeline
 
 
-{-| Interrupt what's currently happening with a new list.
+{-| If several interruptions are requested before the next `update`, the latest
+nonempty schedule wins.
+An initial `wait` lets existing motion continue until the replacement begins.
 -}
 interrupt : List (Step state) -> Timeline state -> Timeline state
 interrupt steps (Timeline.Timeline tl) =
@@ -336,7 +386,7 @@ interrupt steps (Timeline.Timeline tl) =
         { tl
             | running = True
             , interruption =
-                case initializeSchedule (ms 0) steps of
+                case initializeSchedule (Duration.milliseconds 0) steps of
                     Nothing ->
                         tl.interruption
 
@@ -344,12 +394,11 @@ interrupt steps (Timeline.Timeline tl) =
                         -- **NOTE** - if we recieve a new interruption, we throw away the existing one!
                         -- This was leading to issues when the same event was added to the `interrupted` queue
                         -- multiple times in before being scheduled.
-                        -- So, I imagine it does make sense to dedup these
-                        -- But does it ALWAYS make sense to replace the currently scheduled interruption?
                         [ List.foldl stepsToEvents schedule otherSteps ]
         }
 
 
+{-| -}
 initializeSchedule : Time.Duration -> List (Step state) -> Maybe ( Schedule state, List (Step state) )
 initializeSchedule waiting steps =
     case steps of
@@ -388,14 +437,22 @@ stepsToEvents currentStep (Timeline.Schedule delayTime startEvent events) =
                     Timeline.Schedule
                         delayTime
                         startEvent
-                        (Timeline.Event durationTo recentEvent (Timeline.addToDwell dur maybeDwell) :: remaining)
+                        (Timeline.Event durationTo
+                            recentEvent
+                            (Timeline.addToDwell dur maybeDwell)
+                            :: remaining
+                        )
 
                 TransitionTo dur checkpoint ->
                     if checkpoint == recentEvent then
                         Timeline.Schedule
                             delayTime
                             startEvent
-                            (Timeline.Event durationTo recentEvent (Timeline.addToDwell dur maybeDwell) :: remaining)
+                            (Timeline.Event durationTo
+                                recentEvent
+                                (Timeline.addToDwell dur maybeDwell)
+                                :: remaining
+                            )
 
                     else
                         Timeline.Schedule
@@ -405,32 +462,36 @@ stepsToEvents currentStep (Timeline.Schedule delayTime startEvent events) =
 
 
 {-| -}
-type alias Event state =
-    Timeline.Event state
-
-
-{-| -}
 type alias Schedule state =
     Timeline.Schedule state
 
 
-{-| If you're creating something like a game, you might want to update your `Timelines` manually instead of using an `Animator`.
-
-This will allow you to do whatever calculations you need while updating each `Timeline`.
-
-**Note** — You'll have to take care of subscribing to `Browser.Events.onAnimationFrame`.
-
+{-| Call with the timestamp from `Browser.Events.onAnimationFrame` while
+`isRunning`, or from an existing game loop. Check `arrivedAt` before updating if
+you need to detect arrivals during this tick.
 -}
 update : Time.Posix -> Timeline state -> Timeline state
 update =
     Timeline.update
 
 
-{-| Does this timeline have upcoming events?
-
-**Note** this is only useful if you're not using a `Animator.Watcher`
-
+{-| Use this to control your animation-frame subscription. CSS resting loops can
+continue in the browser even when this returns `False`.
 -}
 isRunning : Timeline state -> Bool
 isRunning (Timeline.Timeline tl) =
     tl.running
+
+
+{-| `True` when scheduling requests are waiting for the next `update`. Becomes
+`False` once they are scheduled, even if the animation is still running.
+Use `isRunning` for animation-frame subscriptions.
+-}
+hasChanges : Timeline state -> Bool
+hasChanges (Timeline.Timeline tl) =
+    case tl.queued of
+        Nothing ->
+            not (List.isEmpty tl.interruption)
+
+        Just _ ->
+            True

@@ -5,11 +5,11 @@ module Playground.View.Timeline exposing (view, viewCss, viewCssProps, viewTimel
 import Animator
 import Html exposing (div)
 import Html.Attributes as Attr
-import Internal.Bezier as Bezier
-import Internal.Css as Css
-import Internal.Interpolate as Interpolate
-import Internal.Time as Time
-import Internal.Timeline as Timeline
+import InternalAnim.Bezier as Bezier
+import InternalAnim.Css as Css
+import InternalAnim.Interpolate as Interpolate
+import InternalAnim.Time as Time
+import InternalAnim.Timeline as Timeline
 import Pixels
 import Svg
 import Svg.Attributes as SvgA
@@ -121,7 +121,7 @@ capture style start finish toMotion interp timeline rendered =
             timeline
             (dot style
                 { x = toFloat start
-                , y = Pixels.inPixels at.position
+                , y = Units.inPixels at.position
                 }
                 :: rendered
             )
@@ -131,7 +131,7 @@ viewCssProps toProps timeline =
     let
         css =
             Css.cssFromProps
-                (Debug.log "TIMELINE" timeline)
+                timeline
                 toProps
     in
     div
@@ -207,7 +207,7 @@ captureNew style start finish toMotion interp timeline rendered =
             timeline
             (dot style
                 { x = toFloat start
-                , y = Pixels.inPixels at.position
+                , y = Units.inPixels at.position
                 }
                 :: rendered
             )

@@ -11,29 +11,46 @@ when inside the directory containing this file.
 
 -}
 
+import Docs.ReviewLinksAndSections
+import Docs.UpToDateReadmeLinks
+import NoConfusingPrefixOperator
 import NoDebug.Log
 import NoDebug.TodoOrToString
 import NoExposingEverything
 import NoImportingEverything
 import NoMissingTypeAnnotation
+import NoMissingTypeExpose
+import NoPrematureLetComputation
+import NoSimpleLetBody
+import NoUnused.CustomTypeConstructorArgs
 import NoUnused.CustomTypeConstructors
 import NoUnused.Dependencies
 import NoUnused.Exports
-import NoUnused.Modules
+import NoUnused.Patterns
 import NoUnused.Variables
-import Review.Rule exposing (Rule)
+import Review.Rule as Rule exposing (Rule)
+import Simplify
 
 
 config : List Rule
 config =
-    [ NoDebug.Log.rule
-    , NoDebug.TodoOrToString.rule
-    , NoExposingEverything.rule
-    , NoImportingEverything.rule []
-    , NoMissingTypeAnnotation.rule
-    , NoUnused.CustomTypeConstructors.rule []
-    , NoUnused.Dependencies.rule
-    , NoUnused.Exports.rule
-    , NoUnused.Modules.rule
-    , NoUnused.Variables.rule
-    ]
+    List.map (Rule.ignoreErrorsForDirectories [ "tests/" ])
+        [ Docs.ReviewLinksAndSections.rule
+        , Docs.UpToDateReadmeLinks.rule
+        , NoConfusingPrefixOperator.rule
+        , NoDebug.Log.rule
+        , NoDebug.TodoOrToString.rule
+        , NoExposingEverything.rule
+        , NoImportingEverything.rule []
+        , NoMissingTypeAnnotation.rule
+        , NoMissingTypeExpose.rule
+        , NoSimpleLetBody.rule
+        , NoPrematureLetComputation.rule
+        , NoUnused.CustomTypeConstructors.rule []
+        , NoUnused.CustomTypeConstructorArgs.rule
+        , NoUnused.Dependencies.rule
+        , NoUnused.Exports.rule
+        , NoUnused.Patterns.rule
+        , NoUnused.Variables.rule
+        , Simplify.rule Simplify.defaults
+        ]

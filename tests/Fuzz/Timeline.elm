@@ -33,8 +33,8 @@ Timeline Fuzzer:
 import Animator
 import Animator.Timeline
 import Fuzz exposing (Fuzzer, float, int, list, string)
-import Internal.Time as Time
-import Internal.Timeline as Timeline
+import InternalAnim.Time as Time
+import InternalAnim.Timeline as Timeline
 import Time
 
 
@@ -119,7 +119,7 @@ toTimeline { gc } (InstructionTimeline startTime startEvent instructions) =
 
 instructionToEvent : ( Int, b ) -> Animator.Timeline.Step b
 instructionToEvent ( i, event ) =
-    Animator.Timeline.transitionTo (Animator.Timeline.ms (toFloat i)) event
+    Animator.Timeline.transitionTo (Animator.ms (toFloat i)) event
 
 
 listOneToFive : Fuzzer a -> Fuzzer (List a)
