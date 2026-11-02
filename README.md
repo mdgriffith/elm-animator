@@ -51,7 +51,7 @@ The [V2 examples](https://github.com/mdgriffith/elm-animator/tree/master/example
 
 The second type is something I think of as _calm enrichment_.
 
-The floating city on the [Elm Japan Website](https://elmjapan.org/) —you will need to scroll down a little— is wonderful!
+The floating city on the [Elm Japan Website](https://web.archive.org/web/20210726010208/https://elmjapan.org/) (only accessible via the Internet Archive) —you will need to scroll down a little— is wonderful!
 
 It doesn't distract from what I'm trying to accomplish on the website, it simply sits there, calmly floating. It doesn't take anything away from my _budget of attention_ that I have when visiting the website. In fact it likely **increases** the amount of attention I'm willing to _pay_.
 
